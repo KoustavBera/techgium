@@ -1,3 +1,4 @@
+
 from typing import List
 from models.base import BaseRiskEngine
 
@@ -11,7 +12,7 @@ class NeuroFunctionalRiskEngine(BaseRiskEngine):
         gaze_instability: float,
         signal_quality: float = 1.0
     ):
-    	super().__init__(system_name="neurofunctional")
+        super().__init__(system_name="neurofunctional")
         """
         All input values are normalized between 0 and 1.
 
@@ -127,7 +128,7 @@ class NeuroFunctionalRiskEngine(BaseRiskEngine):
         self.risk_score = min(100, self.risk_score)
 
         return {
-				"system": self.system,
+            "system": self.system,
             "risk_score": self.risk_score,
             "risk_level": self.classify_risk(),
             "confidence": self.compute_confidence(),

@@ -1,5 +1,5 @@
 from typing import List
-from models.base import BaseRiskEngine
+from models.base import BaseRiskEngine # type: ignore
 
 class DermatologyRiskEngine(BaseRiskEngine):
     def __init__(
@@ -10,7 +10,7 @@ class DermatologyRiskEngine(BaseRiskEngine):
         lesion_count: int,
         image_quality: float = 1.0
     ):
-    	super().__init__(system_name="dermatology")
+        super().__init__(system_name="dermatology")
         self.lesion_detected = lesion_detected
         self.lesion_confidence = max(0.0, min(lesion_confidence, 1.0))
         self.lesion_area_ratio = max(0.0, min(lesion_area_ratio, 1.0))
@@ -123,6 +123,7 @@ class DermatologyRiskEngine(BaseRiskEngine):
         self.risk_score = min(100, self.risk_score)
 
         return {
+            "system": self.system,
             "risk_score": self.risk_score,
             "risk_level": self.classify_risk(),
             "confidence": self.compute_confidence(),
