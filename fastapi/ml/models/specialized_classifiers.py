@@ -472,3 +472,4 @@ if __name__ == "__main__":
     # Model info
     print("\n")
     get_model_info()
+    

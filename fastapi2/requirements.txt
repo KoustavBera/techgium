@@ -1,0 +1,44 @@
+# Core dependencies
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+
+# Computer vision
+opencv-python>=4.10.0
+mediapipe>=0.10.18
+
+# Data processing
+numpy>=2.0.0
+pandas>=2.2.3
+scipy>=1.14.0
+scikit-learn>=1.5.0
+
+# LLM integrations (Updated for Python 3.12)
+google-genai>=0.2.0  # New Google Gemini SDK
+langchain>=0.3.0  # LangChain core
+langchain-google-genai>=2.0.0  # LangChain Gemini integration
+huggingface-hub>=0.26.0  # HuggingFace InferenceClient
+transformers>=4.45.0
+torch>=2.5.0
+requests>=2.32.0  # For HuggingFace API calls
+
+# Report generation
+reportlab>=4.2.0
+jinja2>=3.1.4
+weasyprint>=62.0
+
+# API & Auth
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# Testing
+pytest>=8.3.0
+pytest-cov>=6.0.0
+pytest-asyncio>=0.24.0
+httpx>=0.28.0
+
+# Utilities
+python-dotenv>=1.0.1
+aiofiles>=24.1.0

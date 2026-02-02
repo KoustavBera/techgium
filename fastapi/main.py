@@ -6,6 +6,7 @@ from models.engine_derma import DermatologyRiskEngine # type: ignore
 from models.engine_neurofunctionalrisk import NeuroFunctionalRiskEngine # type: ignore
 from models.engine_posturerisk import PostureRiskEngine # type: ignore
 from models.engine_respiratory import RespiratoryRiskEngine # type: ignore
+from models.engine_ris_resonator import RISResonatorEngine # type: ignore
 from models.aggregator_hri import HealthRiskIndex # type: ignore
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -66,6 +67,14 @@ class PostureAssessment(BaseModel):
 	head_tilt: float
 	gait_instability: Optional[float] = None
 	signal_quality: float = 1.0
+
+class RISResonatorAssessment(BaseModel):
+    rf_backscatter_data: List[List[float]]  # 2D array as list of lists
+    ris_phase_config: List[float]           # RIS element phases
+    target_distance: float                  # Distance to subject (meters)
+    frequency_range: List[float] = [2.4e9, 2.5e9]  # RF frequency range
+    signal_quality: float = 1.0
+    calibration_data: Optional[dict] = None
     
 
 @app.get("/")
@@ -126,6 +135,43 @@ def assess_posture(data: PostureAssessment):
 		
 	except Exception as e:
 		return {"error": str(e)}
+
+@app.post("/assess/ris-resonator")
+def assess_ris_resonator(data: RISResonatorAssessment):
+    """
+    RIS-integrated passive resonator assessment endpoint
+    Processes RF backscatter data for non-contact vital sign monitoring
+    """
+    try:
+        import numpy as np
+        
+        # Convert lists to numpy arrays
+        rf_data = np.array(data.rf_backscatter_data)
+        ris_config = np.array(data.ris_phase_config)
+        
+        engine = RISResonatorEngine(
+            rf_backscatter_data=rf_data,
+            ris_phase_config=ris_config,
+            target_distance=data.target_distance,
+            frequency_range=tuple(data.frequency_range),
+            signal_quality=data.signal_quality,
+            calibration_data=data.calibration_data
+        )
+        
+        result = engine.run()
+        
+        # Add RIS-specific metadata
+        result["ris_metadata"] = {
+            "num_elements": len(ris_config),
+            "frequency_range_ghz": [f/1e9 for f in data.frequency_range],
+            "target_distance_m": data.target_distance,
+            "data_shape": rf_data.shape
+        }
+        
+        return result
+        
+    except Exception as e:
+        return {"error": str(e), "system": "RIS_Passive_Resonator"}
 # To run the server:
 # uvicorn main:app --reload
 
