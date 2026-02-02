@@ -392,6 +392,24 @@ class EnhancedPatientReportGenerator:
         low, high = normal_range
         return f"{low}-{high}"
     
+    def _abbreviate_unit(self, unit: str) -> str:
+        """Abbreviate long unit names to prevent table overlap."""
+        abbreviations = {
+            "power_spectral_density": "PSD",
+            "coefficient_of_variation": "CV",
+            "normalized_amplitude": "norm.",
+            "normalized_units_per_frame": "units/frame",
+            "breaths_per_min": "brpm",
+            "blinks_per_min": "bpm",
+            "saccades_per_sec": "sacc/s",
+            "score_0_100": "score",
+            "score_0_1": "score",
+            "variance_score": "var",
+            "normalized_intensity": "norm",
+            "normalized": "norm",
+        }
+        return abbreviations.get(unit, unit)
+    
     def _get_biomarker_explanation(self, biomarker_name: str, value: float, status: str) -> str:
         """Generate simple explanation for biomarker."""
         name = self._simplify_biomarker_name(biomarker_name)
@@ -554,15 +572,22 @@ Explain what this result means to the patient in 1-2 simple sentences. Be reassu
                 
                 for bm_name, bm_data in biomarkers.items():
                     friendly_name = self._simplify_biomarker_name(bm_name)
-                    value_str = f"{bm_data['value']} {bm_data.get('unit', '')}"
+                    # Round value to 2 decimal places
+                    value = bm_data['value']
+                    if isinstance(value, (int, float)):
+                        value = round(value, 2)
+                    # Abbreviate long unit names to prevent overlap
+                    unit = bm_data.get('unit', '')
+                    unit = self._abbreviate_unit(unit)
+                    value_str = f"{value} {unit}"
                     normal_range = self._format_normal_range(bm_data.get('normal_range'))
                     status = bm_data.get('status', 'not_assessed')
                     status_icon = self._get_biomarker_status_icon(status)
                     
                     table_data.append([friendly_name, value_str, normal_range, status_icon])
                 
-                # Create table with color coding
-                biomarker_table = Table(table_data, colWidths=[2.3*inch, 1.4*inch, 1.3*inch, 1.5*inch])
+                # Create table with adjusted column widths for better fit
+                biomarker_table = Table(table_data, colWidths=[2.0*inch, 1.5*inch, 1.2*inch, 1.8*inch])
                 
                 # Base style
                 table_style = [
