@@ -1,6 +1,6 @@
 # Virtual environment
 benv/
-venv/
+venv2/
 env/
 
 # Environment variables (contains API keys)

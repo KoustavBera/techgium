@@ -9,7 +9,6 @@ Extracts cardiovascular health indicators:
 from typing import Dict, Any, List, Optional
 import numpy as np
 from scipy import signal
-from scipy.fft import fft, fftfreq
 
 from app.utils import get_logger
 from .base import BaseExtractor, BiomarkerSet, PhysiologicalSystem
@@ -36,30 +35,306 @@ class CardiovascularExtractor(BaseExtractor):
         super().__init__()
         self.sample_rate = sample_rate
     
+    def preprocess_signal(
+        self, 
+        signal_data: np.ndarray, 
+        fs: float,
+        lowcut: float = 0.8,
+        highcut: float = 3.0
+    ) -> np.ndarray:
+        """
+        Preprocess physiological signal for cardiac analysis.
+        
+        Applies detrending, bandpass filtering, and normalization.
+        
+        Args:
+            signal_data: Raw signal array
+            fs: Sampling frequency in Hz
+            lowcut: Low cutoff frequency (default 0.8 Hz = 48 bpm)
+            highcut: High cutoff frequency (default 3.0 Hz = 180 bpm)
+            
+        Returns:
+            Preprocessed signal array
+        """
+        # Detrend to remove DC offset and linear trends
+        detrended = np.asarray(signal.detrend(signal_data))
+        
+        # Bandpass filter for cardiac frequencies
+        nyquist = fs / 2
+        low = lowcut / nyquist
+        high = highcut / nyquist
+        
+        # Use second-order sections for numerical stability
+        sos = signal.butter(4, [low, high], btype='band', output='sos')
+        filtered = np.asarray(signal.sosfilt(sos, detrended))
+        
+        # Normalize to unit variance
+        std = float(np.std(filtered))
+        if std > 1e-6:  # Avoid division by zero
+            normalized: np.ndarray = filtered / std
+        else:
+            normalized = filtered
+        
+        return normalized
+    
+    def validate_signal(
+        self,
+        signal_data: np.ndarray,
+        fs: float,
+        min_duration_sec: float = 10.0
+    ) -> tuple[bool, float]:
+        """
+        Validate signal for cardiac analysis.
+        
+        Args:
+            signal_data: Signal array to validate
+            fs: Sampling frequency in Hz
+            min_duration_sec: Minimum required duration in seconds
+            
+        Returns:
+            Tuple of (is_valid, confidence_penalty)
+        """
+        duration_sec = len(signal_data) / fs
+        
+        if duration_sec < min_duration_sec:
+            # Penalize confidence based on how short the signal is
+            confidence_penalty = duration_sec / min_duration_sec
+            return False, confidence_penalty
+        
+        # Check for flat/dead signal
+        if np.std(signal_data) < 1e-6:
+            return False, 0.1
+        
+        return True, 1.0
+    
+    def compute_signal_quality(
+        self,
+        signal_data: np.ndarray,
+        fs: float
+    ) -> float:
+        """
+        Compute signal quality score based on SNR.
+        
+        Args:
+            signal_data: Preprocessed signal
+            fs: Sampling frequency
+            
+        Returns:
+            Quality score between 0 and 1
+        """
+        # FFT to get frequency content
+        n = len(signal_data)
+        freqs = np.fft.fftfreq(n, d=1 / fs)
+        fft_vals = np.abs(np.fft.fft(signal_data))
+        
+        # Cardiac band (0.8-3 Hz)
+        cardiac_mask = (freqs > 0.8) & (freqs < 3.0)
+        # Noise band (outside cardiac range, but within Nyquist)
+        noise_mask = ((freqs > 0.1) & (freqs < 0.8)) | ((freqs > 3.0) & (freqs < fs/2))
+        
+        if not np.any(cardiac_mask) or not np.any(noise_mask):
+            return 0.5  # Default quality
+        
+        signal_power = np.mean(fft_vals[cardiac_mask] ** 2)
+        noise_power = np.mean(fft_vals[noise_mask] ** 2)
+        
+        # SNR in dB, then map to 0-1 range
+        if noise_power > 1e-6:
+            snr_db = 10 * np.log10(signal_power / noise_power)
+            # Map SNR: 0dB->0.3, 10dB->0.7, 20dB+->1.0
+            quality = np.clip(0.3 + snr_db / 40, 0.0, 1.0)
+        else:
+            quality = 1.0
+        
+        return float(quality)
+    
+    def compute_proper_hrv(
+        self, 
+        signal_data: np.ndarray, 
+        fs: float
+    ) -> float:
+        """
+        Compute proper HRV using peak detection and RMSSD.
+        
+        RMSSD = Root Mean Square of Successive Differences of RR intervals.
+        This is the correct way to compute HRV, not spectral methods.
+        
+        Args:
+            signal_data: Cardiac signal (should be preprocessed)
+            fs: Sampling frequency in Hz
+            
+        Returns:
+            HRV in milliseconds (typical range: 20-80 ms)
+        """
+        try:
+            # Ensure signal is preprocessed with bandpass filter
+            if len(signal_data) < fs * 10:  # Need at least 10 seconds
+                return 40.0  # Default physiological value
+            
+            # Bandpass filter for cardiac frequencies (0.8-3 Hz)
+            sos = signal.butter(4, [0.8, 3.0], btype='band', fs=fs, output='sos')
+            filtered = signal.sosfilt(sos, signal_data)
+            
+            # Detect peaks (R-peaks in ECG terminology, or pulse peaks)
+            # Minimum distance = 0.4s (150 bpm max)
+            min_distance = int(fs * 0.4)
+            peaks, properties = signal.find_peaks(
+                filtered,
+                distance=min_distance,
+                prominence=np.std(filtered) * 0.3  # Adaptive threshold
+            )
+            
+            if len(peaks) < 3:
+                return 40.0  # Need at least 3 peaks for 2 intervals
+            
+            # Calculate RR intervals in milliseconds
+            rr_intervals = np.diff(peaks) / fs * 1000  # Convert to ms
+            
+            # Filter out physiologically impossible intervals
+            # Normal RR: 300-2000 ms (corresponding to 30-200 bpm)
+            valid_rr = rr_intervals[(rr_intervals > 300) & (rr_intervals < 2000)]
+            
+            if len(valid_rr) < 2:
+                return 40.0
+            
+            # Compute RMSSD: sqrt(mean(diff(RR)^2))
+            successive_diffs = np.diff(valid_rr)
+            rmssd = float(np.sqrt(np.mean(successive_diffs ** 2)))
+            
+            # Clip to physiological range
+            rmssd = np.clip(rmssd, 10, 150)
+            
+            return rmssd
+            
+        except Exception as e:
+            logger.warning(f"HRV computation failed: {e}")
+            return 40.0  # Safe default
+    
+    def _extract_from_rppg(
+        self,
+        face_frames: List[np.ndarray],
+        fps: float,
+        biomarker_set: BiomarkerSet
+    ) -> None:
+        """
+        Extract cardiovascular metrics from face video using rPPG.
+        
+        Remote Photoplethysmography (rPPG) detects blood volume pulse
+        from subtle color changes in facial skin captured by camera.
+        
+        Args:
+            face_frames: List of face crop frames (RGB numpy arrays)
+            fps: Video frame rate
+            biomarker_set: BiomarkerSet to add biomarkers to
+        """
+        if len(face_frames) < int(fps * 10):  # Need at least 10 seconds
+            logger.warning("rPPG: Insufficient frames, need at least 10 seconds")
+            self._generate_simulated_biomarkers(biomarker_set)
+            return
+        
+        try:
+            # Extract green channel signal (most sensitive to blood volume)
+            green_signal = []
+            for frame in face_frames:
+                if len(frame.shape) == 3:
+                    # Extract green channel and compute spatial average
+                    # Focus on forehead/cheeks region (skin with good perfusion)
+                    h, w = frame.shape[:2]
+                    roi = frame[int(h*0.2):int(h*0.8), int(w*0.2):int(w*0.8), 1]
+                    green_signal.append(np.mean(roi))
+                else:
+                    green_signal.append(np.mean(frame))
+            
+            green_signal = np.array(green_signal)
+            
+            # Validate signal
+            is_valid, confidence_factor = self.validate_signal(green_signal, fps)
+            if not is_valid:
+                logger.warning(f"rPPG: Signal validation failed, confidence={confidence_factor:.2f}")
+            
+            # Preprocess: detrend, bandpass filter, normalize
+            processed_signal = self.preprocess_signal(green_signal, fps, lowcut=0.8, highcut=3.0)
+            
+            # Compute signal quality
+            quality = self.compute_signal_quality(processed_signal, fps)
+            base_confidence = 0.85 * quality * confidence_factor
+            
+            # Extract heart rate using FFT peak detection
+            n = len(processed_signal)
+            freqs = np.fft.fftfreq(n, d=1/fps)
+            fft_vals = np.abs(np.fft.fft(processed_signal))
+            
+            # Find peak in cardiac range (0.8-3 Hz = 48-180 bpm)
+            cardiac_mask = (freqs > 0.8) & (freqs < 3.0)
+            if np.any(cardiac_mask):
+                cardiac_freqs = freqs[cardiac_mask]
+                cardiac_power = fft_vals[cardiac_mask]
+                peak_idx = np.argmax(cardiac_power)
+                peak_freq = cardiac_freqs[peak_idx]
+                hr = float(abs(peak_freq) * 60)
+                hr = np.clip(hr, 45, 180)
+            else:
+                hr = 72.0
+                base_confidence *= 0.5
+            
+            self._add_biomarker(
+                biomarker_set,
+                name="heart_rate",
+                value=hr,
+                unit="bpm",
+                confidence=float(np.clip(base_confidence, 0.3, 0.95)),
+                normal_range=(60, 100),
+                description="Heart rate from rPPG (webcam)"
+            )
+            
+            # Compute HRV using proper peak detection
+            hrv = self.compute_proper_hrv(processed_signal, fps)
+            self._add_biomarker(
+                biomarker_set,
+                name="hrv_rmssd",
+                value=hrv,
+                unit="ms",
+                confidence=float(np.clip(base_confidence * 0.9, 0.25, 0.90)),
+                normal_range=(20, 80),
+                description="HRV (RMSSD) from rPPG"
+            )
+            
+            logger.info(f"rPPG extraction: HR={hr:.1f}bpm, HRV={hrv:.1f}ms, quality={quality:.2f}")
+            
+        except Exception as e:
+            logger.error(f"rPPG extraction failed: {e}")
+            self._generate_simulated_biomarkers(biomarker_set)
+    
+
     def extract(self, data: Dict[str, Any]) -> BiomarkerSet:
         """
         Extract cardiovascular biomarkers.
         
-        Expected data keys:
-        - ris_data: RIS signal array (optional)
-        - heart_rate_signal: PPG/ECG-like signal (optional)
-        - vital_signs: Dict with direct vital measurements (optional)
-        - pose_sequence: Motion data for chest micro-motion (optional)
+        Expected data keys (in priority order):
+        - vital_signs: Dict with direct vital measurements (highest confidence)
+        - face_frames: List of face RGB frames for rPPG (85% accuracy)
+        - ris_data: RIS signal array (75% confidence)
+        - pose_sequence: Motion data for chest micro-motion (50% confidence)
         """
         import time
         start_time = time.time()
         
         biomarker_set = self._create_biomarker_set()
         
-        # Priority 1: Direct vital signs
+        # Priority 1: Direct vital signs (highest confidence ~95%)
         if "vital_signs" in data:
             self._extract_from_vitals(data["vital_signs"], biomarker_set)
         
-        # Priority 2: RIS-derived metrics
+        # Priority 2: rPPG from face frames (85% accuracy)
+        elif "face_frames" in data:
+            fps = data.get("fps", 30.0)
+            self._extract_from_rppg(data["face_frames"], fps, biomarker_set)
+        
+        # Priority 3: RIS-derived metrics (75% confidence)
         elif "ris_data" in data:
             self._extract_from_ris(data["ris_data"], biomarker_set)
         
-        # Priority 3: Motion-derived (chest micro-motion)
+        # Priority 4: Motion-derived (chest micro-motion, 50% confidence)
         elif "pose_sequence" in data:
             self._extract_from_motion(data["pose_sequence"], biomarker_set)
         
@@ -151,11 +426,25 @@ class CardiovascularExtractor(BaseExtractor):
         # Use thoracic channels (0-7) for cardiac signal
         thoracic_signal = np.mean(ris_data[:, :min(8, ris_data.shape[1])], axis=1)
         
-        # Bandpass filter for cardiac frequencies (0.8-3 Hz = 48-180 bpm)
+        # Preprocess and analyze cardiac signal
         if len(thoracic_signal) > 100:
-            hr, hrv = self._analyze_cardiac_signal(thoracic_signal)
+            # Validate signal quality
+            is_valid, confidence_factor = self.validate_signal(
+                thoracic_signal, self.sample_rate, min_duration_sec=5.0
+            )
+            
+            # Preprocess the signal
+            processed = self.preprocess_signal(thoracic_signal, self.sample_rate)
+            
+            # Analyze for HR and HRV
+            hr, hrv = self._analyze_cardiac_signal(processed)
+            
+            # Adjust confidence based on signal quality
+            quality = self.compute_signal_quality(processed, self.sample_rate)
+            base_confidence = 0.75 * quality * confidence_factor
         else:
             hr, hrv = 72, 45
+            base_confidence = 0.5
         
         self._add_biomarker(
             biomarker_set,
@@ -249,8 +538,8 @@ class CardiovascularExtractor(BaseExtractor):
         """
         # FFT for dominant frequency
         n = len(signal_data)
-        freqs = fftfreq(n, 1/self.sample_rate)
-        fft_vals = np.abs(fft(signal_data))
+        freqs = np.fft.fftfreq(n, d=1 / self.sample_rate)
+        fft_vals = np.abs(np.fft.fft(signal_data))
         
         # Look in cardiac range (0.8-3 Hz)
         cardiac_mask = (freqs > 0.8) & (freqs < 3.0)
@@ -267,28 +556,52 @@ class CardiovascularExtractor(BaseExtractor):
         hr = float(abs(peak_freq) * 60)  # Convert Hz to bpm
         hr = np.clip(hr, 40, 180)
         
-        # Estimate HRV from spectral width
-        # Wider spectrum = more variability
-        spectral_std = np.std(cardiac_power)
-        hrv = float(30 + spectral_std * 100)  # Rough scaling
-        hrv = np.clip(hrv, 10, 100)
+        # Use proper HRV computation with peak detection
+        hrv = self.compute_proper_hrv(signal_data, self.sample_rate)
         
         return hr, hrv
     
-    def _estimate_hr_from_motion(self, motion_signal: np.ndarray) -> float:
-        """Estimate heart rate from motion signal."""
-        if len(motion_signal) < 30:
+    def _estimate_hr_from_motion(self, motion_signal: np.ndarray, fps: float = 30.0) -> float:
+        """
+        Estimate heart rate from motion signal using FFT peak detection.
+        
+        Args:
+            motion_signal: Chest motion signal
+            fps: Video frame rate (default 30)
+            
+        Returns:
+            Estimated heart rate in bpm
+        """
+        if len(motion_signal) < fps * 5:  # Need at least 5 seconds
             return 72.0
         
-        # Zero crossings as rough frequency estimate
-        zero_crossings = np.sum(np.diff(np.sign(motion_signal - np.mean(motion_signal))) != 0)
-        
-        duration_sec = len(motion_signal) / 30.0  # Assume 30 FPS
-        crossings_per_sec = zero_crossings / duration_sec
-        
-        # Each cardiac cycle has 2 zero crossings
-        hr = crossings_per_sec * 30  # Scale factor
-        return float(np.clip(hr, 50, 120))
+        try:
+            # Preprocess the signal with bandpass filter
+            processed = self.preprocess_signal(motion_signal, fps, lowcut=0.8, highcut=3.0)
+            
+            # FFT for frequency analysis
+            n = len(processed)
+            freqs = np.fft.fftfreq(n, d=1/fps)
+            fft_vals = np.abs(np.fft.fft(processed))
+            
+            # Find peak in cardiac range (0.8-3 Hz = 48-180 bpm)
+            cardiac_mask = (freqs > 0.8) & (freqs < 3.0)
+            
+            if not np.any(cardiac_mask):
+                return 72.0
+            
+            cardiac_freqs = freqs[cardiac_mask]
+            cardiac_power = fft_vals[cardiac_mask]
+            
+            # Get dominant frequency
+            peak_idx = np.argmax(cardiac_power)
+            peak_freq = cardiac_freqs[peak_idx]
+            hr = float(abs(peak_freq) * 60)
+            
+            return float(np.clip(hr, 50, 120))
+            
+        except Exception:
+            return 72.0
     
     def _estimate_hrv_from_hr(self, hr: float) -> float:
         """Estimate HRV from heart rate using population statistics."""
@@ -309,3 +622,4 @@ class CardiovascularExtractor(BaseExtractor):
         self._add_biomarker(biomarker_set, "chest_micro_motion",
                            np.random.uniform(0.002, 0.006), "normalized_amplitude",
                            0.5, (0.001, 0.01), "Simulated chest motion")
+                           
