@@ -80,68 +80,76 @@ SUMMARY OF CONNECTIONS:
 
 ### 1. Power Supply Design
 
+> [!NOTE]
+> **Using Your Laptop as the Brain:** Your laptop provides processing power and camera. You only need to power the ESP32 + sensors (via laptop USB or a small 5V supply).
+
+**Option A: Laptop-Powered Setup (Recommended for Hackathon)**
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    LAPTOP-POWERED CONFIGURATION (Simplest)                       │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   YOUR LAPTOP                                                                    │
+│   ├── USB Port 1 ──► Webcam (or built-in) ─── Draws ~500mA from laptop          │
+│   │                                                                              │
+│   └── USB Port 2 ──► ESP32 DevKit ─── Powers ESP32 + sensors via USB            │
+│                          │                                                       │
+│                          └── 5V USB power shared to:                             │
+│                              ├── ESP32 (3.3V onboard regulator)                  │
+│                              ├── MLX90640 (via 3.3V breakout)                    │
+│                              └── MAX30102 (via 3.3V)                             │
+│                                                                                  │
+│   Note: mmWave radar may need separate 5V/1A supply if power hungry             │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Option B: Standalone Power Supply (For Full Chamber Setup)**
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                           POWER DISTRIBUTION NETWORK                             │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
 │   AC MAINS                                                                       │
-│   220V/50Hz ──► [Wall Adapter 12V/5A] ──► DC 12V RAIL (Main Power)              │
+│   220V/50Hz ──► [Wall Adapter 12V/2A] ──► DC 12V RAIL                           │
 │                      │                                                           │
 │                      ▼                                                           │
-│   ┌──────────────────────────────────────────────────────────────┐              │
-│   │                    12V Rail (Main Power)                      │              │
-│   │                    Max Current: 5A                            │              │
-│   └──────────────────────┬─────────────────┬─────────────────────┘              │
-│                          │                 │                                     │
-│                          ▼                 ▼                                     │
+│   ┌─────────────────────────────┐  (Laptop has its own power adapter)           │
+│   │ Buck Converter              │                                                │
+│   │ LM2596 (12V→5V/2A)          │                                                │
+│   └─────────────┬───────────────┘                                                │
+│                 │                                                                │
+│                 ▼                                                                │
 │   ┌─────────────────────────────┐  ┌─────────────────────────────┐              │
-│   │ Buck Converter              │  │ Buck Converter              │              │
-│   │ LM2596 (12V→5V/3A)          │  │ LM2596 (12V→3.3V/3A)        │              │
-│   │                             │  │                             │              │
-│   │ Output: 5V ± 50mV ripple    │  │ Output: 3.3V ± 30mV ripple  │              │
-│   │ Efficiency: ~85%            │  │ Efficiency: ~80%            │              │
-│   └─────────────┬───────────────┘  └─────────────┬───────────────┘              │
-│                 │                                │                               │
-│                 ▼                                ▼                               │
-│   ┌─────────────────────────────┐  ┌─────────────────────────────┐              │
-│   │      5V Rail (USB Level)    │  │     3.3V Rail (Logic)       │              │
+│   │      5V Rail (Sensors)      │  │     3.3V Rail (Logic)       │              │
 │   │  ┌────────────────────────┐ │  │  ┌────────────────────────┐ │              │
-│   │  │ Raspberry Pi 4B   3.0A │ │  │  │ ESP32 Module     500mA │ │              │
-│   │  │ USB Hub           500mA│ │  │  │ MLX90640         80mA  │ │              │
-│   │  │ Logitech C270     500mA│ │  │  │ MAX30102         50mA  │ │              │
-│   │  │ ESP32 (USB)       500mA│ │  │  │ mmWave Radar*   depends│ │              │
-│   │  └────────────────────────┘ │  │  └────────────────────────┘ │              │
-│   │  Total: ~4.5A               │  │  Total: ~700mA + radar      │              │
-│   └─────────────────────────────┘  └─────────────────────────────┘              │
-│                                                                                  │
-│   * mmWave radar typically needs 5V/1A - check specific module datasheet        │
-│                                                                                  │
+│   │  │ mmWave Radar      1.0A │ │  │  │ ESP32 Module     500mA │ │              │
+│   │  │ ESP32 (if not USB) 0.5A│ │  │  │ MLX90640         80mA  │ │              │
+│   │  └────────────────────────┘ │  │  │ MAX30102         50mA  │ │              │
+│   │  Total: ~1.5A               │  │  └────────────────────────┘ │              │
+│   └─────────────────────────────┘  │  Total: ~700mA              │              │
+│                                    └─────────────────────────────┘              │
 │   DECOUPLING:                                                                    │
 │   • 10μF bulk cap at each regulator output                                      │
 │   • 100nF ceramic at each IC VCC pin                                            │
 │   • 10μF at ESP32 3.3V input                                                    │
-│   • Keep power traces wide (≥40 mil for 5V, ≥30 mil for 3.3V)                   │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Power Budget Estimation:**
+**Power Budget (ESP32 + Sensors Only):**
 
 | Component | Voltage | Current (typ) | Current (max) | Power |
 |-----------|---------|---------------|---------------|-------|
-| Raspberry Pi 4B | 5V | 2.5A | 3.0A | 15W |
 | ESP32-WROOM-32 | 3.3V | 80mA | 500mA | 1.65W |
-| Logitech C270 | 5V (USB) | 300mA | 500mA | 2.5W |
 | MLX90640 | 3.3V | 18mA | 80mA | 0.26W |
 | MAX30102 | 3.3V | 20mA | 50mA | 0.17W |
 | mmWave Radar | 5V | 700mA | 1A | 5W |
-| USB Hub | 5V | 100mA | 500mA | 2.5W |
 | LEDs/Misc | 3.3V | 50mA | 100mA | 0.33W |
-| **Total** | - | - | - | **~27W** |
+| **Total** | - | - | - | **~7.5W** |
 
 > [!TIP]
-> Use a 12V/5A (60W) power supply to allow 50% headroom for safety.
+> For hackathon: Just plug ESP32 into laptop USB. A 12V/1A adapter is sufficient for standalone sensor power if needed.
 
 ---
 
@@ -477,36 +485,36 @@ while True:
 
 ### 5. Bill of Materials (BOM)
 
+> [!IMPORTANT]
+> **Your laptop is the brain!** No Raspberry Pi needed. The BOM below is only for sensors + ESP32.
+
 | # | Component | Part Number | Qty | Unit Price (INR) | Total (INR) | Source |
 |---|-----------|-------------|-----|------------------|-------------|--------|
 | 1 | ESP32-WROOM-32D DevKit | ESP32-DevKitC-32D | 1 | ₹450 | ₹450 | Robu.in |
-| 2 | Raspberry Pi 4B 4GB | RPI4-MODBP-4GB | 1 | ₹5,500 | ₹5,500 | Robu.in |
-| 3 | Logitech C270 HD Webcam | C270 | 1 | ₹1,500 | ₹1,500 | Amazon.in |
-| 4 | MLX90640 Thermal Camera | MLX90640ESF-BAB | 1 | ₹3,500 | ₹3,500 | Robu.in |
-| 5 | MAX30102 Pulse Oximeter | MAX30102 Module | 1 | ₹250 | ₹250 | Robu.in |
-| 6 | 60GHz mmWave Radar | IWR6843ISK-ODS | 1 | ₹8,000 | ₹8,000 | TI Store* |
-| 7 | LM2596 Buck Converter | LM2596-ADJ | 2 | ₹100 | ₹200 | Robu.in |
-| 8 | BSS138 Level Shifter | BSS138 Module | 2 | ₹50 | ₹100 | Robu.in |
-| 9 | USB Hub 4-Port Powered | Generic USB2.0 Hub | 1 | ₹400 | ₹400 | Amazon.in |
-| 10 | 12V/5A Power Adapter | DC Adapter | 1 | ₹350 | ₹350 | Robu.in |
-| 11 | SSD1306 OLED 128×64 | 0.96" I2C OLED | 1 | ₹180 | ₹180 | Robu.in |
-| 12 | LEDs (Blue, Green) | 5mm LED | 4 | ₹5 | ₹20 | Local |
-| 13 | Resistors (10k, 4.7k, 330Ω) | Assorted | 20 | ₹2 | ₹40 | Local |
-| 14 | Capacitors (10μF, 100nF) | Ceramic/Electrolytic | 20 | ₹3 | ₹60 | Local |
-| 15 | Headers (Male/Female) | 2.54mm Pitch | 4 | ₹20 | ₹80 | Local |
-| 16 | Jumper Wires | Dupont Wires | 40 | ₹2 | ₹80 | Local |
-| 17 | Prototype PCB | 7×9cm Perf Board | 2 | ₹50 | ₹100 | Local |
-| 18 | USB Cables | Type-A to Micro | 3 | ₹80 | ₹240 | Amazon.in |
-| 19 | Enclosure/Mount | 3D Printed | 1 | ₹500 | ₹500 | Custom |
-| | | | | **Total** | **₹21,550** | |
+| 2 | Logitech C270 HD Webcam | C270 | 1 | ₹1,500 | ₹1,500 | Amazon.in |
+| 3 | MLX90640 Thermal Camera | MLX90640ESF-BAB | 1 | ₹3,500 | ₹3,500 | Robu.in |
+| 4 | MAX30102 Pulse Oximeter | MAX30102 Module | 1 | ₹250 | ₹250 | Robu.in |
+| 5 | 60GHz mmWave Radar | IWR6843ISK-ODS | 1 | ₹8,000 | ₹8,000 | TI Store* |
+| 6 | LM2596 Buck Converter | LM2596-ADJ | 1 | ₹100 | ₹100 | Robu.in |
+| 7 | BSS138 Level Shifter | BSS138 Module | 1 | ₹50 | ₹50 | Robu.in |
+| 8 | SSD1306 OLED 128×64 | 0.96" I2C OLED | 1 | ₹180 | ₹180 | Robu.in |
+| 9 | LEDs (Blue, Green) | 5mm LED | 4 | ₹5 | ₹20 | Local |
+| 10 | Resistors (10k, 4.7k, 330Ω) | Assorted | 20 | ₹2 | ₹40 | Local |
+| 11 | Capacitors (10μF, 100nF) | Ceramic/Electrolytic | 20 | ₹3 | ₹60 | Local |
+| 12 | Headers (Male/Female) | 2.54mm Pitch | 4 | ₹20 | ₹80 | Local |
+| 13 | Jumper Wires | Dupont Wires | 40 | ₹2 | ₹80 | Local |
+| 14 | Prototype PCB | 7×9cm Perf Board | 2 | ₹50 | ₹100 | Local |
+| 15 | USB Cables | Type-A to Micro | 2 | ₹80 | ₹160 | Amazon.in |
+| 16 | Enclosure/Mount | 3D Printed | 1 | ₹500 | ₹500 | Custom |
+| | | | | **Total** | **₹15,070** | |
 
 > [!NOTE]
-> *TI mmWave radar modules may require IndiaMART or direct TI order. Alternative: LD2410 radar module (~₹800) for simplified respiration detection with reduced accuracy.
+> *TI mmWave radar modules may require IndiaMART or direct TI order. Alternative: LD2410 radar module (~₹800) for simplified respiration detection.
 
-**Budget-Conscious Alternative (₹15,000):**
+**Budget-Conscious Alternative (₹7,000):**
 - Replace IWR6843 with LD2410 (₹800) - saves ₹7,200
-- Use basic USB webcam - saves ₹500
-- Total: ~₹14,350
+- Use laptop's built-in webcam - saves ₹1,500
+- Total: ~₹6,370
 
 ---
 
@@ -552,7 +560,7 @@ while True:
     │    │    ────────────── WALK PATH ────────────────       │   │
     │    │                                                    │   │
     │    │    [CONTROL STATION]                               │   │
-    │    │    ESP32 + RPi + Power + Display                   │   │
+    │    │    ESP32 + LAPTOP (on table) + Power               │   │
     │    │    Side-mounted, accessible for maintenance        │   │
     │    │                                                    │   │
     │    └────────────────────────────────────────────────────┘   │
@@ -617,8 +625,8 @@ Lighting Requirements:
 | Component | Why Chosen | Alternatives |
 |-----------|------------|--------------|
 | ESP32-WROOM-32 | WiFi/BT, dual-core, multiple UART, low cost | Arduino Mega (no WiFi), STM32 (complex) |
-| Raspberry Pi 4B | Runs MediaPipe/OpenCV, Python ecosystem | Intel NUC (expensive), Jetson Nano (overkill) |
-| Logitech C270 | 720p/30fps, good low-light, USB, cheap | Logitech C920 (overkill), Intel RealSense (expensive) |
+| Your Laptop | Runs MediaPipe/OpenCV/FastAPI, already have it | Raspberry Pi 4B (slower), Intel NUC (expensive) |
+| Logitech C270 / Laptop webcam | 720p/30fps, good low-light, USB, cheap | Logitech C920 (overkill), Intel RealSense (expensive) |
 | MLX90640 | 32×24 resolution, I2C, radiometric | AMG8833 (8×8, too low), FLIR Lepton (expensive) |
 | MAX30102 | Proven accuracy, I2C, low power | MAX30100 (older), pulse sensor (unreliable) |
 | IWR6843 | TI's 60GHz vital signs radar, SDK available | AWR1642 (similar), LD2410 (simpler but less data) |
@@ -798,10 +806,11 @@ void sendJsonData() {
 
 This design provides a **modular, hackathon-ready hardware architecture** that:
 
-- ✅ Uses readily available components (~₹21,550 total)
-- ✅ Interfaces all required sensors with ESP32 + Raspberry Pi
+- ✅ Uses your laptop as the brain (no Raspberry Pi needed!)
+- ✅ Camera connects directly to laptop via USB or built-in
+- ✅ ESP32 handles sensors: thermal, radar, pulse-ox
+- ✅ Low cost: ~₹15,000 for sensors + ESP32
 - ✅ Provides clear schematics, pin assignments, and BOM
-- ✅ Includes power supply design with proper decoupling
 - ✅ Supports the existing FastAPI software extractors
 - ✅ Prioritizes workability over sophistication
 
