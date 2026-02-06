@@ -55,6 +55,9 @@ class RiskResultResponse(BaseModel):
     risk_score: float
     confidence: float
     alerts: List[str]
+    is_trusted: bool = True
+    was_rejected: bool = False
+    caveats: List[str] = []
 
 
 class ScreeningResponse(BaseModel):
@@ -230,8 +233,9 @@ async def run_screening(request: ScreeningRequest):
     
     try:
         from app.core.extraction.base import BiomarkerSet, Biomarker
-        from app.core.inference.risk_engine import CompositeRiskCalculator
+        from app.core.inference.risk_engine import CompositeRiskCalculator, TrustedRiskResult
         
+        trusted_results: Dict[PhysiologicalSystem, TrustedRiskResult] = {}
         system_results: Dict[PhysiologicalSystem, SystemRiskResult] = {}
         response_results: List[RiskResultResponse] = []
         
@@ -257,22 +261,40 @@ async def run_screening(request: ScreeningRequest):
                 biomarkers=biomarkers
             )
             
-            # Run risk calculation using compute_risk
-            result = _risk_engine.compute_risk(biomarker_set)
+            # Run risk calculation with validation (uses TrustedRiskResult)
+            trusted_result = _risk_engine.compute_risk_with_validation(biomarker_set, plausibility=None)
+            trusted_results[system] = trusted_result
             
-            system_results[system] = result
-            
-            response_results.append(RiskResultResponse(
-                system=system.value,
-                risk_level=result.overall_risk.level.value,
-                risk_score=round(result.overall_risk.score, 1),
-                confidence=round(result.overall_risk.confidence, 2),
-                alerts=result.alerts
-            ))
+            # Build response based on trust status
+            if trusted_result.was_rejected:
+                response_results.append(RiskResultResponse(
+                    system=system.value,
+                    risk_level="unknown",
+                    risk_score=0.0,
+                    confidence=0.0,
+                    alerts=[trusted_result.rejection_reason] if trusted_result.rejection_reason else [],
+                    is_trusted=False,
+                    was_rejected=True,
+                    caveats=trusted_result.caveats
+                ))
+            elif trusted_result.risk_result is not None:
+                result = trusted_result.risk_result
+                system_results[system] = result
+                
+                response_results.append(RiskResultResponse(
+                    system=system.value,
+                    risk_level=result.overall_risk.level.value,
+                    risk_score=round(result.overall_risk.score, 1),
+                    confidence=round(trusted_result.trust_adjusted_confidence, 2),
+                    alerts=result.alerts,
+                    is_trusted=trusted_result.is_trusted,
+                    was_rejected=False,
+                    caveats=trusted_result.caveats
+                ))
         
-        # Calculate composite risk using CompositeRiskCalculator
+        # Calculate composite risk using trusted results
         composite_calc = CompositeRiskCalculator()
-        composite = composite_calc.compute_composite_risk(system_results)
+        composite, rejected_systems = composite_calc.compute_composite_risk_from_trusted(trusted_results)
         
         # Validation (if requested)
         validation_status = None
@@ -288,14 +310,16 @@ async def run_screening(request: ScreeningRequest):
                 agent_results={},
                 recommendation="Validation completed."
             )
-            validation_status = "plausible"
-            requires_review = consensus_result.requires_human_review
+            validation_status = "plausible" if not rejected_systems else "partial"
+            requires_review = consensus_result.requires_human_review or len(rejected_systems) > 0
         
-        # Store screening for report generation
+        # Store screening for report generation (include trusted results)
         _screenings[screening_id] = {
             "patient_id": request.patient_id,
             "system_results": system_results,
+            "trusted_results": trusted_results,
             "composite_risk": composite,
+            "rejected_systems": rejected_systems,
             "timestamp": datetime.now()
         }
         

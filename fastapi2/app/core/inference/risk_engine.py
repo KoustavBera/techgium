@@ -555,6 +555,22 @@ class CompositeRiskCalculator:
         composite_score = sum(weighted_scores) / total_weight
         composite_confidence = sum(weighted_confidences) / total_weight
         
+        # Critical override: if any system is CRITICAL, boost composite to at least HIGH
+        # If any system is HIGH, boost composite to at least MODERATE
+        max_level = RiskLevel.LOW
+        for result in system_results.values():
+            if result.overall_risk.level == RiskLevel.CRITICAL:
+                max_level = RiskLevel.CRITICAL
+                break
+            elif result.overall_risk.level == RiskLevel.HIGH and max_level != RiskLevel.CRITICAL:
+                max_level = RiskLevel.HIGH
+        
+        # Apply critical override boost
+        if max_level == RiskLevel.CRITICAL and composite_score < 75:
+            composite_score = 75.0  # Minimum HIGH risk when any system is CRITICAL
+        elif max_level == RiskLevel.HIGH and composite_score < 50:
+            composite_score = 50.0  # Minimum MODERATE risk when any system is HIGH
+        
         # Generate explanation
         level = RiskLevel.from_score(composite_score)
         if contributing:
@@ -601,3 +617,68 @@ class CompositeRiskCalculator:
                 composite.explanation += f" (Data quality: {trust_envelope.overall_reliability:.0%})"
         
         return composite
+    
+    def compute_composite_risk_from_trusted(
+        self,
+        trusted_results: Dict[PhysiologicalSystem, "TrustedRiskResult"]
+    ) -> Tuple[RiskScore, List[str]]:
+        """
+        Compute composite risk from TrustedRiskResults.
+        
+        Handles rejected results by excluding them from the score calculation
+        and noting them in the explanation.
+        
+        Args:
+            trusted_results: Dict of TrustedRiskResult per system
+            
+        Returns:
+            Tuple of (Composite RiskScore, list of rejected system names)
+        """
+        valid_results: Dict[PhysiologicalSystem, SystemRiskResult] = {}
+        rejected_systems: List[str] = []
+        rejection_reasons: List[str] = []
+        
+        for system, trusted in trusted_results.items():
+            if trusted.was_rejected:
+                rejected_systems.append(system.value)
+                if trusted.rejection_reason:
+                    rejection_reasons.append(f"{system.value}: {trusted.rejection_reason}")
+            elif trusted.risk_result is not None:
+                valid_results[system] = trusted.risk_result
+        
+        # Compute composite from valid results only
+        if not valid_results:
+            explanation = "No systems could be reliably assessed."
+            if rejected_systems:
+                explanation += f" Rejected: {', '.join(rejected_systems)}."
+            return RiskScore(
+                name="composite_health_risk",
+                score=50.0,
+                confidence=0.0,
+                explanation=explanation
+            ), rejected_systems
+        
+        composite = self.compute_composite_risk(valid_results)
+        
+        # Append rejection note to explanation
+        if rejected_systems:
+            composite.explanation += (
+                f" Note: {len(rejected_systems)} system(s) excluded due to data quality: "
+                f"{', '.join(rejected_systems)}."
+            )
+        
+        # Apply average trust penalty from valid results
+        trust_penalties = [
+            1.0 - tr.trust_adjusted_confidence
+            for tr in trusted_results.values()
+            if not tr.was_rejected and tr.risk_result is not None
+        ]
+        if trust_penalties:
+            avg_penalty = sum(trust_penalties) / len(trust_penalties)
+            composite.confidence = float(np.clip(
+                composite.confidence * (1.0 - avg_penalty * 0.5),
+                0.1, 0.99
+            ))
+        
+        return composite, rejected_systems
+

@@ -40,9 +40,10 @@ try:
     from reportlab.graphics.shapes import Drawing, Rect, Circle, String
     from reportlab.graphics.charts.piecharts import Pie
     REPORTLAB_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     REPORTLAB_AVAILABLE = False
-    logger.warning("reportlab not installed - PDF generation unavailable")
+    REPORTLAB_ERROR = str(e)
+    logger.warning(f"reportlab not installed - PDF generation unavailable. Error: {e}")
 
 
 # Risk level colors
@@ -267,17 +268,21 @@ class EnhancedPatientReportGenerator:
         composite_risk: RiskScore,
         interpretation: Optional[InterpretationResult] = None,
         trust_envelope: Optional[TrustEnvelope] = None,
-        patient_id: str = "ANONYMOUS"
+        patient_id: str = "ANONYMOUS",
+        trusted_results: Optional[Dict[PhysiologicalSystem, Any]] = None,
+        rejected_systems: Optional[List[str]] = None
     ) -> PatientReport:
         """
         Generate an enhanced patient PDF report.
         
         Args:
-            system_results: Risk results for each system
+            system_results: Risk results for each system (valid only)
             composite_risk: Overall composite risk score
             interpretation: Optional LLM interpretation
             trust_envelope: Optional trust envelope
             patient_id: Patient identifier (anonymized)
+            trusted_results: Optional dict of TrustedRiskResult per system
+            rejected_systems: Optional list of rejected system names
             
         Returns:
             PatientReport with PDF path
@@ -293,7 +298,7 @@ class EnhancedPatientReportGenerator:
             overall_confidence=composite_risk.confidence
         )
         
-        # Build system summaries WITH biomarker details
+        # Build system summaries WITH biomarker details for valid systems
         for system, result in system_results.items():
             report.system_summaries[system] = {
                 "risk_level": result.overall_risk.level,
@@ -301,8 +306,24 @@ class EnhancedPatientReportGenerator:
                 "status": self._get_simple_status(result.overall_risk.level),
                 "alerts": result.alerts,
                 "biomarkers": result.biomarker_summary,  # Include full biomarker data
-                "explanation": result.overall_risk.explanation
+                "explanation": result.overall_risk.explanation,
+                "was_rejected": False
             }
+        
+        # Add rejected systems to summaries with special status
+        if trusted_results:
+            for system, trusted in trusted_results.items():
+                if trusted.was_rejected and system not in report.system_summaries:
+                    report.system_summaries[system] = {
+                        "risk_level": RiskLevel.LOW,  # Default
+                        "risk_score": 0.0,
+                        "status": "⚠ Assessment Incomplete",
+                        "alerts": [trusted.rejection_reason] if trusted.rejection_reason else ["Data quality insufficient"],
+                        "biomarkers": {},
+                        "explanation": f"Assessment could not be completed: {trusted.rejection_reason}",
+                        "was_rejected": True,
+                        "caveats": trusted.caveats
+                    }
         
         # Add interpretation
         if interpretation:
@@ -317,13 +338,21 @@ class EnhancedPatientReportGenerator:
                 "Individual results may vary based on age, gender, and other factors."
             ]
         
+        # Add rejection note to caveats
+        if rejected_systems:
+            report.caveats.insert(0, 
+                f"Note: {len(rejected_systems)} system(s) could not be assessed due to data quality issues: "
+                f"{', '.join(rejected_systems)}."
+            )
+        
         # Generate PDF
         if REPORTLAB_AVAILABLE:
             pdf_path = self._generate_pdf(report, system_results, trust_envelope)
             report.pdf_path = pdf_path
         else:
-            logger.warning("PDF generation skipped - reportlab not available")
-            report.pdf_path = None
+            msg = f"PDF generation skipped - reportlab not available. Details: {REPORTLAB_ERROR}"
+            logger.warning(msg)
+            report.pdf_path = msg
         
         return report
     
