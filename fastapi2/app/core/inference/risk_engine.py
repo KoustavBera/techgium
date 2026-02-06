@@ -1,15 +1,21 @@
 """
-Risk Score Computation Engine
+Risk Engine Module
 
-Maps biomarker feature vectors to risk scores with interpretable outputs.
+Computes system-specific risk scores from biomarker values.
 """
+from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 from enum import Enum
 import numpy as np
 
 from app.core.extraction.base import BiomarkerSet, PhysiologicalSystem, Biomarker
 from app.utils import get_logger
+
+# Conditional imports to avoid circular dependency
+if TYPE_CHECKING:
+    from app.core.validation.biomarker_plausibility import PlausibilityResult
+    from app.core.validation.trust_envelope import TrustEnvelope
 
 logger = get_logger(__name__)
 
@@ -78,6 +84,33 @@ class SystemRiskResult:
             "biomarker_summary": self.biomarker_summary,
             "alerts": self.alerts,
         }
+
+
+@dataclass
+class TrustedRiskResult:
+    """
+    Risk result wrapped with trust metadata.
+    
+    This indicates whether the risk computation was gated by validation.
+    """
+    risk_result: Optional[SystemRiskResult] = None
+    is_trusted: bool = True
+    was_rejected: bool = False
+    rejection_reason: str = ""
+    trust_adjusted_confidence: float = 1.0
+    caveats: List[str] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        result = {
+            "is_trusted": self.is_trusted,
+            "was_rejected": self.was_rejected,
+            "rejection_reason": self.rejection_reason,
+            "trust_adjusted_confidence": round(self.trust_adjusted_confidence, 3),
+            "caveats": self.caveats,
+        }
+        if self.risk_result:
+            result["risk_result"] = self.risk_result.to_dict()
+        return result
 
 
 class RiskEngine:
@@ -259,6 +292,114 @@ class RiskEngine:
             results[bm_set.system] = self.compute_risk(bm_set)
         return results
     
+    def compute_risk_with_validation(
+        self,
+        biomarker_set: BiomarkerSet,
+        plausibility: Optional[PlausibilityResult] = None
+    ) -> TrustedRiskResult:
+        """
+        Compute risk with plausibility validation gating.
+        
+        If plausibility result indicates invalid data, the risk computation
+        is rejected and a gated result is returned.
+        
+        Args:
+            biomarker_set: BiomarkerSet from extraction module
+            plausibility: Optional PlausibilityResult from validation
+            
+        Returns:
+            TrustedRiskResult with risk and trust metadata
+        """
+        # Check if plausibility validation fails
+        if plausibility is not None and not plausibility.is_valid:
+            # Critical violations - reject the data
+            violation_msgs = [v.message for v in plausibility.violations if v.severity >= 0.8]
+            return TrustedRiskResult(
+                risk_result=None,
+                is_trusted=False,
+                was_rejected=True,
+                rejection_reason=f"Plausibility validation failed: {'; '.join(violation_msgs[:3])}",
+                trust_adjusted_confidence=0.0,
+                caveats=["Data rejected due to physiological implausibility"]
+            )
+        
+        # Compute risk normally
+        risk_result = self.compute_risk(biomarker_set)
+        
+        # Build caveats from any non-critical violations
+        caveats = []
+        adjusted_confidence = risk_result.overall_risk.confidence
+        
+        if plausibility is not None:
+            # Apply plausibility penalty to confidence
+            adjusted_confidence *= plausibility.overall_plausibility
+            
+            # Add warnings for moderate violations
+            for v in plausibility.violations:
+                if 0.4 <= v.severity < 0.8:
+                    caveats.append(f"{v.biomarker_name}: {v.message}")
+        
+        return TrustedRiskResult(
+            risk_result=risk_result,
+            is_trusted=plausibility is None or plausibility.overall_plausibility >= 0.7,
+            was_rejected=False,
+            trust_adjusted_confidence=float(np.clip(adjusted_confidence, 0.1, 0.99)),
+            caveats=caveats[:5]  # Limit caveats
+        )
+    
+    def compute_risk_with_trust(
+        self,
+        biomarker_set: BiomarkerSet,
+        trust_envelope: Optional[TrustEnvelope] = None
+    ) -> TrustedRiskResult:
+        """
+        Compute risk with full trust envelope integration.
+        
+        Uses TrustEnvelope to gate risk computation and adjust confidence.
+        
+        Args:
+            biomarker_set: BiomarkerSet from extraction module
+            trust_envelope: Optional TrustEnvelope from validation layer
+            
+        Returns:
+            TrustedRiskResult with risk and trust metadata
+        """
+        # Check trust envelope reliability
+        if trust_envelope is not None and not trust_envelope.is_reliable:
+            return TrustedRiskResult(
+                risk_result=None,
+                is_trusted=False,
+                was_rejected=True,
+                rejection_reason=trust_envelope.interpretation_guidance,
+                trust_adjusted_confidence=0.0,
+                caveats=trust_envelope.critical_issues[:3]
+            )
+        
+        # Compute risk normally
+        risk_result = self.compute_risk(biomarker_set)
+        
+        # Apply trust adjustments
+        caveats = []
+        adjusted_confidence = risk_result.overall_risk.confidence
+        is_trusted = True
+        
+        if trust_envelope is not None:
+            # Apply confidence penalty from trust envelope
+            adjusted_confidence = trust_envelope.get_adjusted_confidence(adjusted_confidence)
+            
+            # Check if caveats are required
+            if trust_envelope.requires_caveats:
+                is_trusted = False
+                caveats.extend(trust_envelope.warnings[:3])
+        
+        return TrustedRiskResult(
+            risk_result=risk_result,
+            is_trusted=is_trusted,
+            was_rejected=False,
+            trust_adjusted_confidence=float(np.clip(adjusted_confidence, 0.1, 0.99)),
+            caveats=caveats
+        )
+    
     def _calculate_biomarker_risk(self, biomarker: Biomarker) -> Tuple[float, Optional[str]]:
         """
         Calculate risk score for individual biomarker.
@@ -431,3 +572,32 @@ class CompositeRiskCalculator:
             contributing_biomarkers=contributing,
             explanation=explanation
         )
+    
+    def compute_composite_risk_with_trust(
+        self,
+        system_results: Dict[PhysiologicalSystem, SystemRiskResult],
+        trust_envelope: Optional[TrustEnvelope] = None
+    ) -> RiskScore:
+        """
+        Compute composite risk with trust envelope integration.
+        
+        Args:
+            system_results: Dict of system risk results
+            trust_envelope: Optional TrustEnvelope from validation layer
+            
+        Returns:
+            Composite RiskScore with trust-adjusted confidence
+        """
+        # Compute base composite risk
+        composite = self.compute_composite_risk(system_results)
+        
+        # Apply trust envelope adjustments
+        if trust_envelope is not None:
+            # Adjust confidence based on trust envelope
+            composite.confidence = trust_envelope.get_adjusted_confidence(composite.confidence)
+            
+            # Add trust context to explanation
+            if trust_envelope.requires_caveats:
+                composite.explanation += f" (Data quality: {trust_envelope.overall_reliability:.0%})"
+        
+        return composite

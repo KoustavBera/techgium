@@ -61,6 +61,7 @@ import json
 import time
 import threading
 import queue
+import struct
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
@@ -70,6 +71,14 @@ import argparse
 import numpy as np
 import cv2
 import requests
+
+# Core Extractors for unified logic
+from app.core.extraction.cardiovascular import CardiovascularExtractor
+from app.core.extraction.cns import CNSExtractor
+from app.core.extraction.skeletal import SkeletalExtractor
+from app.core.extraction.skin import SkinExtractor
+from app.core.extraction.pulmonary import PulmonaryExtractor
+from app.core.extraction.base import BiomarkerSet
 
 # Optional serial import (may not be available on all systems)
 try:
@@ -165,36 +174,80 @@ class BaseSerialReader:
             logger.info(f"Disconnected from {self.name}")
     
     def read_loop(self):
-        """Background thread to read serial data."""
+        """Background thread to read serial data (Binary)."""
         self.running = True
+        buffer = b""
+        
         while self.running and self.serial_conn and self.serial_conn.is_open:
             try:
-                line = self.serial_conn.readline().decode('utf-8').strip()
-                if line:
-                    data = self.parse_data(line)
-                    if data:
-                        data['received_at'] = time.time()
-                        self.last_data = data
+                # Read chunks
+                if self.serial_conn.in_waiting:
+                    chunk = self.serial_conn.read(self.serial_conn.in_waiting or 1)
+                    buffer += chunk
+                    
+                    # Try to find header 0x02 0x81
+                    while len(buffer) >= 12:  # Min length for our known frame
+                        # Check for header
+                        if buffer[0] == 0x02 and buffer[1] == 0x81:
+                             # We have a potential frame
+                             frame_data = buffer[:12]
+                             parsed = self.parse_radar_binary(frame_data)
+                             if parsed:
+                                 parsed['received_at'] = time.time()
+                                 self.last_data = parsed
+                                 # Queue manage
+                                 if self.data_queue.full():
+                                     self.data_queue.get()
+                                 self.data_queue.put(parsed)
+                                 
+                             # Remove processed frame
+                             buffer = buffer[12:]
+                        else:
+                            # Slide window (this is inefficient but simple for now)
+                            # Better: find index of next 0x02
+                            buffer = buffer[1:]
+                else:
+                    time.sleep(0.01)
                         
-                        # Add to queue (drop oldest if full)
-                        try:
-                            self.data_queue.put_nowait(data)
-                        except queue.Full:
-                            self.data_queue.get()
-                            self.data_queue.put_nowait(data)
-                        
-            except json.JSONDecodeError as e:
-                logger.debug(f"Invalid JSON from {self.name}: {e}")
             except Exception as e:
-                logger.error(f"Serial read error ({self.name}): {e}")
+                logger.error(f"Radar read error: {e}")
                 time.sleep(0.1)
-    
-    def parse_data(self, line: str) -> Optional[Dict[str, Any]]:
-        """Parse incoming data. Override in subclasses for custom formats."""
-        try:
-            return json.loads(line)
-        except json.JSONDecodeError:
+
+    def parse_radar_binary(self, raw_bytes: bytes) -> Optional[Dict]:
+        """Parse Seeed MR60BHA2 binary protocol."""
+        if len(raw_bytes) < 12:
             return None
+        
+        # Header check already done in loop, but good for sanity
+        if raw_bytes[0] != 0x02 or raw_bytes[1] != 0x81:
+            return None
+            
+        try:
+            # Protocol: Header(2) + Reserved(2) + Resp(4) + Heart(4) ... assume simple packing
+            # Note: User provided 'f' (float) unpacking at offsets 4 and 8
+            # This implies the frame structure matches exactly what was requested.
+            resp_rate = struct.unpack('f', raw_bytes[4:8])[0]
+            heart_rate = struct.unpack('f', raw_bytes[8:12])[0]
+            
+            # Simple validation filters
+            if resp_rate < 0 or resp_rate > 60: resp_rate = 0.0
+            if heart_rate < 0 or heart_rate > 200: heart_rate = 0.0
+            
+            return {
+                "timestamp": int(time.time()),
+                "radar": {
+                    "respiration_rate": round(float(resp_rate), 1),
+                    "heart_rate": int(heart_rate),
+                    "breathing_depth": 0.8,  # Placeholder/mock as it wasn't in binary
+                    "presence_detected": True
+                }
+            }
+        except struct.error:
+            return None
+
+    def parse_data(self, line: str) -> Optional[Dict[str, Any]]:
+        """Legacy JSON parser (kept for reference or alternate modes)."""
+        return None
     
     def start_reading(self):
         """Start background reading thread."""
@@ -350,94 +403,106 @@ class CameraCapture:
             self.cap.release()
             logger.info("Camera closed")
     
-    def capture_frames(self, duration_seconds: int) -> Tuple[List[np.ndarray], List[float]]:
-        """Capture frames for specified duration."""
-        frames = []
-        timestamps = []
+    def capture_and_process_frames(self, duration_seconds: int, process_func: Optional[callable] = None) -> Tuple[List[Any], int]:
+        """Capture frames and optionally process them on the fly to save memory."""
+        processed_data = []
         target_frames = duration_seconds * self.fps
+        frames_captured = 0
         
         start_time = time.time()
-        while len(frames) < target_frames:
+        while frames_captured < target_frames:
             ret, frame = self.cap.read()
             if ret:
-                frames.append(frame)
-                timestamps.append(time.time() - start_time)
+                frames_captured += 1
+                if process_func:
+                    # Process immediately and store result (e.g., small crop or landmarks)
+                    result = process_func(frame)
+                    if result is not None:
+                        processed_data.append(result)
+                else:
+                    # Store raw frame (legacy mode - risky for long durations)
+                    processed_data.append(frame)
             else:
                 break
                 
             # Maintain frame rate
             elapsed = time.time() - start_time
-            expected = len(frames) / self.fps
+            expected = frames_captured / self.fps
             if elapsed < expected:
                 time.sleep(expected - elapsed)
         
+        return processed_data, frames_captured
+    
+    def capture_frames(self, duration_seconds: int) -> Tuple[List[np.ndarray], List[float]]:
+        """Legacy capture wrapper."""
+        frames, _ = self.capture_and_process_frames(duration_seconds)
+        # Generate timestamps retroactively for legacy support
+        timestamps = [i/self.fps for i in range(len(frames))] 
         return frames, timestamps
     
-    def extract_face_frames(self, frames: List[np.ndarray]) -> List[np.ndarray]:
-        """Extract cropped face regions for rPPG."""
-        face_frames = []
-        
+    def extract_face_roi(self, frame: np.ndarray) -> np.ndarray:
+        """Extract face ROI from a single frame."""
         if not self.face_detector:
-            # Fallback: use center region
-            for frame in frames:
-                h, w = frame.shape[:2]
-                face_crop = frame[h//4:3*h//4, w//4:3*w//4]
-                face_frames.append(face_crop)
-            return face_frames
-        
-        for frame in frames:
-            try:
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-                result = self.face_detector.detect(mp_image)
+             # Fallback
+            fh, fw = frame.shape[:2]
+            return frame[fh//4:3*fh//4, fw//4:3*fw//4]
+            
+        try:
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+            result = self.face_detector.detect(mp_image)
+            
+            if result.detections:
+                bbox = result.detections[0].bounding_box
+                x, y, w, h = bbox.origin_x, bbox.origin_y, bbox.width, bbox.height
                 
-                if result.detections:
-                    bbox = result.detections[0].bounding_box
-                    x, y = bbox.origin_x, bbox.origin_y
-                    w, h = bbox.width, bbox.height
-                    
-                    # Add padding
-                    pad = int(max(w, h) * 0.2)
-                    x1 = max(0, x - pad)
-                    y1 = max(0, y - pad)
-                    x2 = min(frame.shape[1], x + w + pad)
-                    y2 = min(frame.shape[0], y + h + pad)
-                    
-                    face_crop = frame[y1:y2, x1:x2]
-                    face_frames.append(face_crop)
-                else:
-                    # Fallback to center
-                    fh, fw = frame.shape[:2]
-                    face_frames.append(frame[fh//4:3*fh//4, fw//4:3*fw//4])
-            except Exception as e:
-                logger.debug(f"Face detection error: {e}")
-                fh, fw = frame.shape[:2]
-                face_frames.append(frame[fh//4:3*fh//4, fw//4:3*fw//4])
-        
-        return face_frames
+                pad = int(max(w, h) * 0.2)
+                x1, y1 = max(0, x - pad), max(0, y - pad)
+                x2, y2 = min(frame.shape[1], x + w + pad), min(frame.shape[0], y + h + pad)
+                return frame[y1:y2, x1:x2]
+        except Exception:
+            pass
+            
+        fh, fw = frame.shape[:2]
+        return frame[fh//4:3*fh//4, fw//4:3*fw//4]
+
+    def extract_face_frames(self, frames: List[np.ndarray]) -> List[np.ndarray]:
+        """Batch extraction (legacy)."""
+        return [self.extract_face_roi(f) for f in frames]
     
-    def extract_pose_sequence(self, frames: List[np.ndarray]) -> List[np.ndarray]:
-        """Extract pose landmarks for gait/posture analysis."""
-        pose_sequence = []
-        
+    def extract_pose_from_frame(self, frame: np.ndarray) -> Optional[np.ndarray]:
+        """Extract pose landmarks from a single frame with validation."""
         if not self.pose_landmarker:
-            return pose_sequence
-        
-        for frame in frames:
-            try:
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-                result = self.pose_landmarker.detect(mp_image)
+            return None
+            
+        try:
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+            result = self.pose_landmarker.detect(mp_image)
+            
+            if result.pose_landmarks:
+                landmarks = result.pose_landmarks[0]
+                landmark_array = np.array([
+                    [lm.x, lm.y, lm.z, lm.visibility]
+                    for lm in landmarks
+                ])
                 
-                if result.pose_landmarks:
-                    landmarks = result.pose_landmarks[0]
-                    landmark_array = np.array([
-                        [lm.x, lm.y, lm.z, lm.visibility]
-                        for lm in landmarks
-                    ])
-                    pose_sequence.append(landmark_array)
-            except Exception as e:
-                logger.debug(f"Pose detection error: {e}")
-        
-        return pose_sequence
+                # VALIDATE SHAPE (33 landmarks x 4 values)
+                if landmark_array.shape == (33, 4):
+                    return landmark_array
+                else:
+                    logger.warning(f"Invalid pose shape: {landmark_array.shape}")
+        except Exception as e:
+            logger.debug(f"Pose detection error: {e}")
+        return None
+
+    def extract_pose_sequence(self, frames: List[np.ndarray]) -> List[np.ndarray]:
+        """Batch extraction (legacy)."""
+        # Note: This still iterates a list, but checks shape via extract_pose_from_frame
+        sequence = []
+        for frame in frames:
+            pose = self.extract_pose_from_frame(frame)
+            if pose is not None:
+                sequence.append(pose)
+        return sequence
 
 
 # ==============================================================================
@@ -445,235 +510,29 @@ class CameraCapture:
 # ==============================================================================
 
 class DataFusion:
-    """Fuses sensor data from multiple sources and sends to API."""
+    """Fuses sensor data from multiple sources using core extractors and sends to API."""
     
     def __init__(self, api_url: str):
         self.api_url = api_url
         self.screening_endpoint = f"{api_url}/api/v1/screening"
         self.report_endpoint = f"{api_url}/api/v1/reports/generate"
-    
-    def transform_radar_data(self, radar_data: Dict[str, Any]) -> List[Dict]:
-        """Transform Seeed Radar Kit data to API biomarker format."""
-        systems = []
         
-        if "radar" in radar_data:
-            radar = radar_data["radar"]
-            
-            # Respiratory biomarkers
-            resp_biomarkers = []
-            if radar.get("respiration_rate") is not None:
-                resp_biomarkers.append({
-                    "name": "respiration_rate",
-                    "value": float(radar["respiration_rate"]),
-                    "unit": "breaths/min",
-                    "normal_range": [12, 20]
-                })
-            if radar.get("breathing_depth") is not None:
-                resp_biomarkers.append({
-                    "name": "breathing_depth",
-                    "value": float(radar["breathing_depth"]),
-                    "unit": "normalized",
-                    "normal_range": [0.5, 1.0]
-                })
-            
-            if resp_biomarkers:
-                systems.append({
-                    "system": "pulmonary",
-                    "biomarkers": resp_biomarkers
-                })
-            
-            # Cardiovascular from radar (heart rate if available)
-            if radar.get("heart_rate") is not None:
-                systems.append({
-                    "system": "cardiovascular",
-                    "biomarkers": [{
-                        "name": "heart_rate_radar",
-                        "value": float(radar["heart_rate"]),
-                        "unit": "bpm",
-                        "normal_range": [60, 100]
-                    }]
-                })
+        # Initialize Core Extractors
+        # Using default sample rates (can be tuned if specialized hardware config used)
+        self.cv_extractor = CardiovascularExtractor()
+        self.cns_extractor = CNSExtractor()
+        self.skeletal_extractor = SkeletalExtractor()
+        self.skin_extractor = SkinExtractor()
+        self.pulmonary_extractor = PulmonaryExtractor()
+        logger.info("Core Extractors initialized in DataFusion")
         
-        return systems
-    
-    def transform_esp32_data(self, esp32_data: Dict[str, Any]) -> List[Dict]:
-        """Transform ESP32 thermal sensor data to API biomarker format."""
-        systems = []
-        
-        # Skin biomarkers from thermal camera
-        if "thermal" in esp32_data:
-            thermal = esp32_data["thermal"]
-            skin_biomarkers = []
-            
-            if thermal.get("skin_temp_avg") is not None:
-                skin_biomarkers.append({
-                    "name": "skin_temperature",
-                    "value": float(thermal["skin_temp_avg"]),
-                    "unit": "celsius",
-                    "normal_range": [35.5, 37.5]
-                })
-            if thermal.get("thermal_asymmetry") is not None:
-                skin_biomarkers.append({
-                    "name": "thermal_asymmetry",
-                    "value": float(thermal["thermal_asymmetry"]),
-                    "unit": "delta_celsius",
-                    "normal_range": [0, 0.5]
-                })
-            if thermal.get("skin_temp_max") is not None:
-                skin_biomarkers.append({
-                    "name": "skin_temperature_max",
-                    "value": float(thermal["skin_temp_max"]),
-                    "unit": "celsius",
-                    "normal_range": [36.0, 38.0]
-                })
-            
-            if skin_biomarkers:
-                systems.append({
-                    "system": "skin",
-                    "biomarkers": skin_biomarkers
-                })
-        
-        return systems
-    
-    def extract_rppg_biomarkers(
-        self, 
-        face_frames: List[np.ndarray], 
-        fps: float
-    ) -> List[Dict]:
-        """Extract cardiovascular biomarkers from face frames using rPPG."""
-        if len(face_frames) < fps * 5:  # Need at least 5 seconds
-            logger.warning("Insufficient face frames for rPPG")
-            return []
-        
-        try:
-            # Extract green channel signal
-            green_signal = []
-            for frame in face_frames:
-                if len(frame.shape) == 3:
-                    h, w = frame.shape[:2]
-                    roi = frame[int(h*0.2):int(h*0.8), int(w*0.2):int(w*0.8), 1]
-                    green_signal.append(np.mean(roi))
-                else:
-                    green_signal.append(np.mean(frame))
-            
-            green_signal = np.array(green_signal)
-            
-            # Detrend and filter
-            from scipy import signal as scipy_signal
-            
-            # Detrend
-            detrended = scipy_signal.detrend(green_signal)
-            
-            # Bandpass filter (0.8-3 Hz for heart rate)
-            nyquist = fps / 2
-            low = 0.8 / nyquist
-            high = min(3.0 / nyquist, 0.99)
-            sos = scipy_signal.butter(4, [low, high], btype='band', output='sos')
-            filtered = scipy_signal.sosfilt(sos, detrended)
-            
-            # FFT for heart rate
-            n = len(filtered)
-            freqs = np.fft.fftfreq(n, d=1/fps)
-            fft_vals = np.abs(np.fft.fft(filtered))
-            
-            # Find peak in cardiac range
-            cardiac_mask = (freqs > 0.8) & (freqs < 3.0)
-            if np.any(cardiac_mask):
-                cardiac_freqs = freqs[cardiac_mask]
-                cardiac_power = fft_vals[cardiac_mask]
-                peak_idx = np.argmax(cardiac_power)
-                peak_freq = cardiac_freqs[peak_idx]
-                hr = float(abs(peak_freq) * 60)
-                hr = np.clip(hr, 45, 180)
-            else:
-                hr = 72.0
-            
-            # Compute HRV (simplified)
-            peaks, _ = scipy_signal.find_peaks(filtered, distance=int(fps * 0.4))
-            if len(peaks) >= 3:
-                rr_intervals = np.diff(peaks) / fps * 1000  # ms
-                valid_rr = rr_intervals[(rr_intervals > 300) & (rr_intervals < 2000)]
-                if len(valid_rr) >= 2:
-                    hrv = float(np.sqrt(np.mean(np.diff(valid_rr)**2)))
-                    hrv = np.clip(hrv, 10, 150)
-                else:
-                    hrv = 40.0
-            else:
-                hrv = 40.0
-            
-            return [
-                {"name": "heart_rate", "value": hr, "unit": "bpm", "normal_range": [60, 100]},
-                {"name": "hrv_rmssd", "value": hrv, "unit": "ms", "normal_range": [20, 80]}
-            ]
-            
-        except Exception as e:
-            logger.error(f"rPPG extraction failed: {e}")
-            return []
-    
-    def extract_motion_biomarkers(
-        self, 
-        pose_sequence: List[np.ndarray]
-    ) -> Tuple[List[Dict], List[Dict]]:
-        """Extract CNS and skeletal biomarkers from pose data."""
-        cns_biomarkers = []
-        skeletal_biomarkers = []
-        
-        if len(pose_sequence) < 30:
-            return cns_biomarkers, skeletal_biomarkers
-        
-        try:
-            pose_array = np.array(pose_sequence)
-            
-            # Gait analysis (using hip landmarks 23, 24)
-            if pose_array.shape[1] >= 25:
-                left_hip = pose_array[:, 23, :2]
-                right_hip = pose_array[:, 24, :2]
-                hip_center = (left_hip + right_hip) / 2
-                
-                # Gait variability (vertical movement std)
-                vertical_motion = hip_center[:, 1]
-                gait_var = float(np.std(np.diff(vertical_motion)))
-                cns_biomarkers.append({
-                    "name": "gait_variability",
-                    "value": gait_var,
-                    "unit": "normalized",
-                    "normal_range": [0.001, 0.02]
-                })
-            
-            # Posture analysis (shoulder alignment)
-            if pose_array.shape[1] >= 13:
-                left_shoulder = pose_array[:, 11, :2]
-                right_shoulder = pose_array[:, 12, :2]
-                
-                # Shoulder tilt
-                shoulder_diff = np.mean(np.abs(left_shoulder[:, 1] - right_shoulder[:, 1]))
-                skeletal_biomarkers.append({
-                    "name": "shoulder_asymmetry",
-                    "value": float(shoulder_diff),
-                    "unit": "normalized",
-                    "normal_range": [0, 0.05]
-                })
-            
-            # Tremor analysis (hand movement)
-            if pose_array.shape[1] >= 22:
-                left_wrist = pose_array[:, 15, :2]
-                right_wrist = pose_array[:, 16, :2]
-                
-                # High-frequency motion as tremor proxy
-                wrist_motion = np.diff(left_wrist, axis=0)
-                tremor_power = float(np.std(wrist_motion))
-                cns_biomarkers.append({
-                    "name": "tremor_proxy",
-                    "value": tremor_power,
-                    "unit": "normalized",
-                    "normal_range": [0, 0.01]
-                })
-            
-        except Exception as e:
-            logger.error(f"Motion biomarker extraction failed: {e}")
-        
-        return cns_biomarkers, skeletal_biomarkers
-    
+    def _transform_biomarker_set(self, bm_set: BiomarkerSet) -> Dict[str, Any]:
+        """Convert BiomarkerSet to API-compatible system dictionary."""
+        return {
+            "system": bm_set.system.value,
+            "biomarkers": [bm.to_dict() for bm in bm_set.biomarkers]
+        }
+
     def build_screening_request(
         self,
         patient_id: str,
@@ -683,45 +542,65 @@ class DataFusion:
         pose_sequence: Optional[List[np.ndarray]] = None,
         fps: float = 30.0
     ) -> Dict[str, Any]:
-        """Build complete screening request from all data sources."""
+        """Build complete screening request using unified core extractors."""
         systems = []
         
-        # Add Seeed Radar Kit data (breathing, heart rate)
+        # Aggregate all raw data into a single context for extractors
+        # This allows cross-modality fusion if supported by extractors in future
+        raw_data_context = {
+            "fps": fps,
+            "patient_id": patient_id
+        }
+        
         if radar_data:
-            systems.extend(self.transform_radar_data(radar_data))
-        
-        # Add ESP32 thermal data
+            raw_data_context["radar_data"] = radar_data
         if esp32_data:
-            systems.extend(self.transform_esp32_data(esp32_data))
-        
-        # Add rPPG biomarkers from camera
-        if face_frames and len(face_frames) > 0:
-            rppg_biomarkers = self.extract_rppg_biomarkers(face_frames, fps)
-            if rppg_biomarkers:
-                # Merge with existing cardiovascular or create new
-                cv_system = next((s for s in systems if s["system"] == "cardiovascular"), None)
-                if cv_system:
-                    cv_system["biomarkers"].extend(rppg_biomarkers)
-                else:
-                    systems.append({
-                        "system": "cardiovascular",
-                        "biomarkers": rppg_biomarkers
-                    })
-        
-        # Add motion biomarkers from pose
-        if pose_sequence and len(pose_sequence) > 0:
-            cns_biomarkers, skeletal_biomarkers = self.extract_motion_biomarkers(pose_sequence)
+            raw_data_context["esp32_data"] = esp32_data
+        if face_frames:
+            raw_data_context["face_frames"] = face_frames
+        if pose_sequence:
+            raw_data_context["pose_sequence"] = pose_sequence
             
-            if cns_biomarkers:
-                systems.append({
-                    "system": "cns",
-                    "biomarkers": cns_biomarkers
-                })
-            if skeletal_biomarkers:
-                systems.append({
-                    "system": "skeletal",
-                    "biomarkers": skeletal_biomarkers
-                })
+        # 1. Pulmonary (Radar)
+        try:
+            pulmonary_set = self.pulmonary_extractor.extract(raw_data_context)
+            if pulmonary_set.biomarkers:
+                 systems.append(self._transform_biomarker_set(pulmonary_set))
+        except Exception as e:
+            logger.error(f"Pulmonary extraction failed: {e}")
+
+        # 2. Cardiovascular (Radar + rPPG)
+        try:
+            # Note: CardiovascularExtractor can use radar_data AND face_frames
+            cv_set = self.cv_extractor.extract(raw_data_context)
+            if cv_set.biomarkers:
+                systems.append(self._transform_biomarker_set(cv_set))
+        except Exception as e:
+            logger.error(f"Cardiovascular extraction failed: {e}")
+
+        # 3. Skin (Thermal)
+        try:
+            skin_set = self.skin_extractor.extract(raw_data_context)
+            if skin_set.biomarkers:
+                systems.append(self._transform_biomarker_set(skin_set))
+        except Exception as e:
+            logger.error(f"Skin extraction failed: {e}")
+
+        # 4. CNS (Motion/Gait)
+        try:
+            cns_set = self.cns_extractor.extract(raw_data_context)
+            if cns_set.biomarkers:
+                systems.append(self._transform_biomarker_set(cns_set))
+        except Exception as e:
+             logging.error(f"CNS extraction failed: {e}")
+
+        # 5. Skeletal (Pose)
+        try:
+            skeletal_set = self.skeletal_extractor.extract(raw_data_context)
+            if skeletal_set.biomarkers:
+                systems.append(self._transform_biomarker_set(skeletal_set))
+        except Exception as e:
+             logging.error(f"Skeletal extraction failed: {e}")
         
         return {
             "patient_id": patient_id,
@@ -811,7 +690,7 @@ class HardwareBridge:
         return success
     
     def run_single_screening(self, patient_id: str = "WALKTHROUGH_PATIENT") -> Optional[Dict]:
-        """Run a complete screening session with Split-USB architecture."""
+        """Run a complete screening session with Split-USB Architecture."""
         logger.info("=" * 60)
         logger.info("Starting health screening session (Split-USB Architecture)")
         logger.info("=" * 60)
@@ -819,7 +698,6 @@ class HardwareBridge:
         radar_data = None
         esp32_data = None
         face_frames = []
-        body_frames = []
         pose_sequence = []
         
         # Start Seeed Radar Kit data collection (COM_A)
@@ -837,18 +715,24 @@ class HardwareBridge:
             logger.info(f"\n📷 Phase 1: Face capture ({self.config.face_capture_seconds}s)")
             logger.info("Please look directly at the camera...")
             
-            face_frames, _ = self.camera.capture_frames(self.config.face_capture_seconds)
-            face_frames = self.camera.extract_face_frames(face_frames)
-            logger.info(f"Captured {len(face_frames)} face frames")
+            # Use on-the-fly extraction to save memory
+            face_frames, count = self.camera.capture_and_process_frames(
+                duration_seconds=self.config.face_capture_seconds,
+                process_func=self.camera.extract_face_roi
+            )
+            logger.info(f"Captured {len(face_frames)} face frames (from {count} raw)")
         
         # Phase 2: Body capture for gait/posture
         if self.camera:
             logger.info(f"\n🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
             logger.info("Please walk naturally or stand for posture analysis...")
             
-            body_frames, _ = self.camera.capture_frames(self.config.body_capture_seconds)
-            pose_sequence = self.camera.extract_pose_sequence(body_frames)
-            logger.info(f"Extracted {len(pose_sequence)} pose frames")
+            # Use on-the-fly pose extraction
+            pose_sequence, count = self.camera.capture_and_process_frames(
+                duration_seconds=self.config.body_capture_seconds,
+                process_func=self.camera.extract_pose_from_frame
+            )
+            logger.info(f"Extracted {len(pose_sequence)} pose frames (from {count} raw)")
         
         # Get Seeed Radar Kit data
         if self.radar_reader:
@@ -1000,7 +884,7 @@ Split-USB Architecture:
         print(f"  API URL:              {config.api_url}")
         
         if args.simulate:
-            print("\n⚠️  SIMULATION MODE - Using generated sensor data")
+            print("\n[SIMULATION MODE] - Using generated sensor data")
             
             # Create mock data for both sensors
             simulated_radar = generate_simulated_radar_data()
@@ -1029,7 +913,7 @@ Split-USB Architecture:
                 print(f"\n✅ Screening ID: {result.get('screening_id')}")
                 print(f"Risk Level: {result.get('overall_risk_level')}")
             else:
-                print("\n❌ Screening failed - Is the API server running?")
+                print("\n[X] Screening failed - Is the API server running?")
         else:
             bridge.initialize()
             bridge.run_single_screening(patient_id=args.patient_id)
@@ -1042,3 +926,4 @@ Split-USB Architecture:
 
 if __name__ == "__main__":
     main()
+    

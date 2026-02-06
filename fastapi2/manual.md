@@ -525,13 +525,16 @@ Collection of biomarkers for one physiological system.
 
 **Input Priority**:
 1. `vital_signs` dict (highest confidence)
-2. `ris_data` array (medium confidence)
-3. `pose_sequence` (lowest confidence)
+2. `radar_data` (60GHz Radar HR)
+3. `face_frames` (rPPG - fused with Radar)
+4. `ris_data` array (medium confidence)
+5. `pose_sequence` (lowest confidence)
 
 **Biomarkers Extracted**:
 | Name | Unit | Normal Range | Description |
 |------|------|--------------|-------------|
-| `heart_rate` | bpm | 60-100 | Beats per minute |
+| `heart_rate` | bpm | 60-100 | Primary HR (Radar/Fused) |
+| `heart_rate_rppg` | bpm | 60-100 | rPPG-only verification |
 | `hrv_rmssd` | ms | 20-80 | Heart rate variability |
 | `systolic_bp` | mmHg | 90-120 | Systolic blood pressure |
 | `diastolic_bp` | mmHg | 60-80 | Diastolic blood pressure |
@@ -542,6 +545,29 @@ Collection of biomarkers for one physiological system.
 1. **HR from RIS**: FFT peak detection in 0.8-3 Hz band
 2. **HRV estimation**: Spectral width analysis
 3. **Micro-motion**: Shoulder position variance
+
+
+---
+
+### [extraction/pulmonary.py](file:///c:/Users/KOUSTAV%20BERA/OneDrive/Desktop/chiranjeevi/fastapi2/app/core/extraction/pulmonary.py)
+
+**Purpose**: Respiratory system biomarkers from Radar and simulated data.
+
+**Input Priority**:
+1. `vital_signs` dict (Clinical)
+2. `radar_data` (Seeed 60GHz Radar)
+3. Simulated fallback
+
+**Biomarkers Extracted**:
+| Name | Unit | Normal Range | Description |
+|------|------|--------------|-------------|
+| `respiration_rate` | breaths/min | 12-20 | Breathing frequency from Radar |
+| `breathing_depth` | normalized | 0.5-1.5 | Depth of breath (Radar energy) |
+| `inspiration_ratio` | ratio | 0.35-0.5 | Inhale vs total cycle time |
+
+**Key Algorithms**:
+1. **Radar Processing**: Extracts breath waveforms from 60GHz mmWave data.
+2. **Simulation**: Gaussian random walks for realistic breathing patterns if offline.
 
 ---
 
@@ -604,14 +630,17 @@ Collection of biomarkers for one physiological system.
 
 ### [extraction/skin.py](file:///c:/Users/KOUSTAV%20BERA/OneDrive/Desktop/chiranjeevi/fastapi2/app/core/extraction/skin.py)
 
-**Purpose**: Dermatological indicators from video frames.
+**Purpose**: Dermatological indicators from thermal and visual data.
 
 **Input Requirements**:
-- `frames`: List of BGR images
+- `esp32_data`: Thermal data from MLX90640 (Priority)
+- `frames`: List of BGR images (Secondary)
 
 **Biomarkers Extracted**:
 | Name | Unit | Normal Range | Description |
 |------|------|--------------|-------------|
+| `skin_temperature` | celsius | 35.5-37.5 | Avg facial temp (Thermal) |
+| `thermal_asymmetry` | delta_celsius | 0.0-0.5 | L/R temp difference |
 | `texture_roughness` | variance_score | 5-25 | Surface texture |
 | `skin_redness` | normalized | 0.3-0.6 | Erythema level |
 | `skin_yellowness` | normalized | 0.2-0.5 | Jaundice proxy |

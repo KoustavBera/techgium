@@ -274,3 +274,4 @@ class SkeletalExtractor(BaseExtractor):
         self._add_biomarker(biomarker_set, "average_joint_rom",
                            np.random.uniform(0.4, 0.6), "radians",
                            0.5, (0.3, 0.8), "Simulated joint ROM")
+                           

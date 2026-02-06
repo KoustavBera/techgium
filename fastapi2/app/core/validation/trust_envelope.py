@@ -225,7 +225,7 @@ class TrustEnvelopeAggregator:
         envelope.confidence_penalty = float(np.clip(base_penalty + flag_penalty, 0, 0.5))
         
         # 6. Set safety flags and issues
-        envelope.safety_flags = list(safety_flags) if safety_flags else [SafetyFlag.NONE]
+        envelope.safety_flags = list(safety_flags)  # Empty = clean
         envelope.critical_issues = critical_issues
         envelope.warnings = warnings
         

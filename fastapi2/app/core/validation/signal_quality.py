@@ -11,7 +11,7 @@ import numpy as np
 from scipy import signal as scipy_signal
 from scipy import stats
 
-from app.core.ingestion.sync import DataPacket
+# from app.core.ingestion.sync import DataPacket
 from app.utils import get_logger
 
 logger = get_logger(__name__)
@@ -21,7 +21,8 @@ class Modality(str, Enum):
     """Sensing modalities."""
     CAMERA = "camera"
     MOTION = "motion"
-    RIS = "ris"
+    RADAR = "radar"      # Seeed MR60BHA2 mmWave
+    THERMAL = "thermal"  # MLX90640 thermal camera
     AUXILIARY = "auxiliary"
 
 
@@ -135,16 +136,16 @@ class SignalQualityAssessor:
         
         if noise_estimates:
             avg_noise = np.mean(noise_estimates)
-            # Normalize: high variance = good detail, but very high = noise
-            # Optimal range: 100-2000
-            if avg_noise < 10:
-                score.noise_level = 0.3  # Too flat/dark
-                issues.append("Low image variance - possibly underexposed")
-            elif avg_noise > 5000:
-                score.noise_level = 0.4  # Too noisy
-                issues.append("High image noise detected")
+            # Normalize: high variance = good detail, low variance = blurry
+            # Optimal range: 50-3000
+            if avg_noise < 50:
+                score.noise_level = 0.3  # Too blurry/flat
+                issues.append("Low image variance - possibly underexposed or blurry")
+            elif avg_noise > 3000:
+                score.noise_level = 0.6  # Excessive noise but still usable
+                issues.append("High image variance detected")
             else:
-                score.noise_level = float(np.clip(avg_noise / 2000, 0.5, 1.0))
+                score.noise_level = float(np.clip((avg_noise - 50) / 2950, 0.3, 1.0))
         else:
             score.noise_level = 0.5
         
@@ -158,14 +159,16 @@ class SignalQualityAssessor:
             
             if diffs:
                 mean_diff = np.mean(diffs)
-                # Low diff = stable signal, high diff = motion/noise
-                if mean_diff < 1:
-                    score.snr = 0.95
-                elif mean_diff > 50:
-                    score.snr = 0.4
-                    issues.append("High inter-frame variation")
+                # Low diff = frozen frames (bad), moderate = natural motion (good)
+                if mean_diff < 2:
+                    score.snr = 0.4  # Frozen frames
+                    issues.append("Very low inter-frame variation - possible frozen frames")
+                elif mean_diff > 80:
+                    score.snr = 0.5  # Too much motion
+                    issues.append("High inter-frame variation - excessive motion")
                 else:
-                    score.snr = float(np.clip(1.0 - mean_diff / 100, 0.4, 0.95))
+                    # Optimal around 20-40 diff
+                    score.snr = float(np.clip(1.0 - abs(mean_diff - 30) / 50, 0.5, 1.0))
         else:
             score.snr = 0.7
         
@@ -268,8 +271,10 @@ class SignalQualityAssessor:
         else:
             score.snr = 0.5
         
-        # Dropout rate: Same as continuity for motion
-        score.dropout_rate = score.continuity
+        # Dropout rate: count completely missing frames (None)
+        # Note: continuity handles invalid poses; dropout only handles None frames
+        missing_frames = sum(1 for p in poses if p is None)
+        score.dropout_rate = float(1.0 - missing_frames / n_poses) if n_poses > 0 else 0.0
         
         # Artifact level: Check for impossible landmark positions
         artifact_count = 0
@@ -290,117 +295,181 @@ class SignalQualityAssessor:
         
         return score
     
-    def assess_ris(self, ris_data: np.ndarray, sample_rate: int = 1000) -> ModalityQualityScore:
+    def assess_radar(self, radar_data: Dict[str, Any]) -> ModalityQualityScore:
         """
-        Assess RIS bioimpedance signal quality.
+        Assess Seeed MR60BHA2 mmWave radar data quality.
         
         Checks:
-        - Signal continuity (no gaps)
-        - Noise floor estimation
-        - Physiological frequency content (cardiac, respiratory)
-        - Saturation/clipping artifacts
+        - Presence detection status
+        - Heart rate plausibility (40-200 bpm)
+        - Respiration rate plausibility (5-40 rpm)
+        - Signal consistency
         
         Args:
-            ris_data: RIS signal array (samples x channels)
-            sample_rate: Sampling rate in Hz
+            radar_data: Dict with keys: heart_rate, respiration_rate, 
+                       presence_detected, breathing_depth (optional)
             
         Returns:
-            ModalityQualityScore for RIS
+            ModalityQualityScore for radar
         """
-        score = ModalityQualityScore(modality=Modality.RIS)
+        score = ModalityQualityScore(modality=Modality.RADAR)
         issues = []
         
-        if ris_data is None or ris_data.size == 0:
-            score.issues = ["No RIS data provided"]
+        if not radar_data:
+            score.issues = ["No radar data provided"]
             return score
         
-        # Ensure 2D
-        if len(ris_data.shape) == 1:
-            ris_data = ris_data.reshape(-1, 1)
-        
-        n_samples, n_channels = ris_data.shape
-        
-        # Continuity: Check for NaN/Inf values
-        valid_samples = np.sum(~np.isnan(ris_data) & ~np.isinf(ris_data))
-        total_samples = ris_data.size
-        score.continuity = float(valid_samples / total_samples) if total_samples > 0 else 0.0
-        if score.continuity < 0.99:
-            issues.append(f"Invalid RIS samples: {(1-score.continuity)*100:.2f}%")
-        
-        # Replace invalid for further analysis
-        ris_clean = np.nan_to_num(ris_data, nan=0.0, posinf=0.0, neginf=0.0)
-        
-        # Noise level: High-frequency noise estimation
-        noise_scores = []
-        for ch in range(n_channels):
-            channel = ris_clean[:, ch]
-            if len(channel) > 10:
-                # High-pass filter to extract noise
-                diff2 = np.diff(channel, n=2)
-                noise_power = np.var(diff2)
-                signal_power = np.var(channel) + 1e-10
-                # Lower noise ratio = better
-                noise_ratio = noise_power / signal_power
-                noise_scores.append(1.0 / (1.0 + noise_ratio))
-        
-        score.noise_level = float(np.mean(noise_scores)) if noise_scores else 0.5
-        
-        # SNR: Check for physiological frequency content
-        if n_samples >= sample_rate:  # At least 1 second
-            snr_scores = []
-            for ch in range(min(4, n_channels)):  # Check first 4 channels
-                channel = ris_clean[:, ch]
-                
-                # FFT analysis
-                freqs = np.fft.rfftfreq(len(channel), 1/sample_rate)
-                fft_mag = np.abs(np.fft.rfft(channel))
-                
-                # Cardiac band: 0.8-3 Hz (48-180 bpm)
-                cardiac_mask = (freqs >= 0.8) & (freqs <= 3.0)
-                cardiac_power = np.sum(fft_mag[cardiac_mask]**2) if np.any(cardiac_mask) else 0
-                
-                # Respiratory band: 0.1-0.5 Hz (6-30 breaths/min)
-                resp_mask = (freqs >= 0.1) & (freqs <= 0.5)
-                resp_power = np.sum(fft_mag[resp_mask]**2) if np.any(resp_mask) else 0
-                
-                # Total power
-                total_power = np.sum(fft_mag**2) + 1e-10
-                
-                # Good signal has strong cardiac + respiratory content
-                physio_ratio = (cardiac_power + resp_power) / total_power
-                snr_scores.append(physio_ratio)
-            
-            score.snr = float(np.clip(np.mean(snr_scores) * 5, 0.3, 1.0))  # Scale up
-            if score.snr < 0.5:
-                issues.append("Weak physiological signal content in RIS")
+        # Continuity: Check presence detection
+        presence = radar_data.get("presence_detected", False)
+        if not presence:
+            score.continuity = 0.3
+            issues.append("No presence detected by radar")
         else:
-            score.snr = 0.5
+            score.continuity = 1.0
         
-        # Dropout rate: Check for constant values (stuck sensor)
-        dropout_channels = 0
-        for ch in range(n_channels):
-            channel = ris_clean[:, ch]
-            if np.std(channel) < 1e-6:  # No variation
-                dropout_channels += 1
+        # Noise level: Check if values are within plausible ranges
+        hr = radar_data.get("heart_rate")
+        rr = radar_data.get("respiration_rate")
         
-        score.dropout_rate = float(1.0 - dropout_channels / n_channels) if n_channels > 0 else 0.0
-        if dropout_channels > 0:
-            issues.append(f"{dropout_channels} RIS channels showing no variation")
+        valid_count = 0
+        total_checks = 0
         
-        # Artifact level: Check for clipping/saturation
-        clip_count = 0
-        for ch in range(n_channels):
-            channel = ris_clean[:, ch]
-            ch_max, ch_min = np.max(channel), np.min(channel)
-            # Check if values cluster at extremes
-            at_max = np.sum(channel >= ch_max * 0.99) / len(channel)
-            at_min = np.sum(channel <= ch_min * 1.01 + 1e-6) / len(channel)
-            if at_max > 0.05 or at_min > 0.05:
-                clip_count += 1
+        if hr is not None:
+            total_checks += 1
+            if 40 <= hr <= 200:
+                valid_count += 1
+            else:
+                issues.append(f"Heart rate {hr:.0f} bpm outside plausible range [40, 200]")
         
-        score.artifact_level = float(1.0 - clip_count / n_channels) if n_channels > 0 else 0.0
-        if clip_count > 0:
-            issues.append(f"{clip_count} RIS channels showing clipping")
+        if rr is not None:
+            total_checks += 1
+            if 5 <= rr <= 40:
+                valid_count += 1
+            else:
+                issues.append(f"Respiration rate {rr:.1f} rpm outside plausible range [5, 40]")
+        
+        score.noise_level = float(valid_count / total_checks) if total_checks > 0 else 0.5
+        
+        # SNR: Based on breathing depth (signal strength proxy)
+        breathing_depth = radar_data.get("breathing_depth", 0.5)
+        if breathing_depth is not None:
+            score.snr = float(np.clip(breathing_depth, 0.0, 1.0))
+            if breathing_depth < 0.3:
+                issues.append("Weak breathing signal detected")
+        else:
+            score.snr = 0.7
+        
+        # Dropout rate: Based on presence
+        score.dropout_rate = 1.0 if presence else 0.3
+        
+        # Artifact level: Check for stuck/invalid readings
+        artifact_issues = 0
+        if hr is not None and (hr == 0 or np.isnan(hr)):
+            artifact_issues += 1
+        if rr is not None and (rr == 0 or np.isnan(rr)):
+            artifact_issues += 1
+        
+        score.artifact_level = float(1.0 - artifact_issues / 2) if total_checks > 0 else 0.5
+        
+        score.issues = issues
+        score.compute_overall()
+        self._assessment_count += 1
+        
+        return score
+    
+    def assess_thermal(self, thermal_data: Dict[str, Any]) -> ModalityQualityScore:
+        """
+        Assess MLX90640 thermal camera data quality.
+        
+        Checks:
+        - Temperature plausibility (skin: 30-42°C)
+        - Thermal map validity (no dead pixels)
+        - Thermal asymmetry reasonableness (< 2.0°C)
+        
+        Args:
+            thermal_data: Dict with keys: skin_temp_avg, skin_temp_max,
+                         thermal_asymmetry, thermal_map (optional 32x24 array)
+            
+        Returns:
+            ModalityQualityScore for thermal
+        """
+        score = ModalityQualityScore(modality=Modality.THERMAL)
+        issues = []
+        
+        if not thermal_data:
+            score.issues = ["No thermal data provided"]
+            return score
+        
+        # Continuity: Check if we have basic temperature readings
+        temp_avg = thermal_data.get("skin_temp_avg")
+        temp_max = thermal_data.get("skin_temp_max")
+        
+        if temp_avg is not None and temp_max is not None:
+            score.continuity = 1.0
+        elif temp_avg is not None or temp_max is not None:
+            score.continuity = 0.7
+        else:
+            score.continuity = 0.3
+            issues.append("Missing temperature readings")
+        
+        # Noise level: Check temperature plausibility
+        valid_temps = 0
+        total_temps = 0
+        
+        if temp_avg is not None:
+            total_temps += 1
+            if 30.0 <= temp_avg <= 42.0:
+                valid_temps += 1
+            else:
+                issues.append(f"Average skin temp {temp_avg:.1f}°C outside range [30, 42]")
+        
+        if temp_max is not None:
+            total_temps += 1
+            if 30.0 <= temp_max <= 45.0:
+                valid_temps += 1
+            else:
+                issues.append(f"Max skin temp {temp_max:.1f}°C outside range [30, 45]")
+        
+        score.noise_level = float(valid_temps / total_temps) if total_temps > 0 else 0.5
+        
+        # SNR: Based on thermal asymmetry (lower is better signal)
+        asymmetry = thermal_data.get("thermal_asymmetry", 0.5)
+        if asymmetry is not None:
+            # Smooth decay: 1.0 at 0°C, ~0.67 at 1°C, ~0.33 at 2°C, floor at 0.3
+            score.snr = float(np.clip(1.0 - asymmetry / 3.0, 0.3, 1.0))
+            
+            if asymmetry > 2.0:
+                issues.append(f"High thermal asymmetry ({asymmetry:.1f}°C) may indicate measurement error")
+        else:
+            score.snr = 0.7
+        
+        # Dropout rate: Check thermal map for dead pixels (if available)
+        thermal_map = thermal_data.get("thermal_map")
+        if thermal_map is not None:
+            try:
+                thermal_arr = np.array(thermal_map)
+                # Dead pixels are typically 0 or very low values
+                dead_pixels = np.sum(thermal_arr < 20.0)
+                total_pixels = thermal_arr.size
+                score.dropout_rate = float(1.0 - dead_pixels / total_pixels) if total_pixels > 0 else 0.5
+                if dead_pixels > total_pixels * 0.05:
+                    issues.append(f"{dead_pixels} dead pixels detected in thermal map")
+            except Exception:
+                score.dropout_rate = 0.5
+        else:
+            score.dropout_rate = 0.8  # Assume OK if no map provided
+        
+        # Artifact level: Check for sensor errors (all same value, extreme values)
+        artifact_issues = 0
+        if temp_avg is not None and temp_max is not None:
+            if temp_avg > temp_max:
+                artifact_issues += 1
+                issues.append("Average temp > Max temp (sensor error)")
+            if abs(temp_max - temp_avg) > 10:
+                artifact_issues += 1
+                issues.append("Large temp difference may indicate artifact")
+        
+        score.artifact_level = float(1.0 - artifact_issues / 2)
         
         score.issues = issues
         score.compute_overall()
@@ -484,7 +553,8 @@ class SignalQualityAssessor:
         if vitals.get("spo2", 100) < 50:
             artifact_issues += 1
         
-        score.artifact_level = float(1.0 - artifact_issues / 6)
+        max_artifact_checks = 2  # HR > 250, SpO2 < 50
+        score.artifact_level = float(1.0 - artifact_issues / max_artifact_checks)
         
         score.issues = issues
         score.compute_overall()
@@ -496,12 +566,21 @@ class SignalQualityAssessor:
         self,
         camera_frames: Optional[List[np.ndarray]] = None,
         motion_poses: Optional[List[np.ndarray]] = None,
-        ris_data: Optional[np.ndarray] = None,
+        radar_data: Optional[Dict[str, Any]] = None,
+        thermal_data: Optional[Dict[str, Any]] = None,
         vitals: Optional[Dict[str, Any]] = None,
         timestamps: Optional[Dict[str, List[float]]] = None
     ) -> Dict[Modality, ModalityQualityScore]:
         """
         Assess quality for all available modalities.
+        
+        Args:
+            camera_frames: List of video frames
+            motion_poses: List of pose landmarks
+            radar_data: Dict from Seeed MR60BHA2 radar
+            thermal_data: Dict from MLX90640 thermal camera
+            vitals: Dict of auxiliary vital signs
+            timestamps: Optional timestamps per modality
         
         Returns:
             Dict mapping modality to quality score
@@ -519,11 +598,15 @@ class SignalQualityAssessor:
                 motion_poses, ts.get("motion")
             )
         
-        if ris_data is not None:
-            results[Modality.RIS] = self.assess_ris(ris_data)
+        if radar_data is not None:
+            results[Modality.RADAR] = self.assess_radar(radar_data)
+        
+        if thermal_data is not None:
+            results[Modality.THERMAL] = self.assess_thermal(thermal_data)
         
         if vitals is not None:
             results[Modality.AUXILIARY] = self.assess_auxiliary(vitals)
         
         logger.debug(f"Assessed {len(results)} modalities")
         return results
+
