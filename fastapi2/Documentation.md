@@ -50,6 +50,13 @@ class DataPacket:
 - Fixed deprecation warning in logging
 - All 31 tests passed
 
+### 2026-02-05 08:XX
+- Integrated Hardware Extraction (Split-USB support)
+- Created `PulmonaryExtractor` for Radar (respiration, depth)
+- Updated `CardiovascularExtractor` to fuse Radar HR + rPPG
+- Updated `SkinExtractor` to support MLX90640 Thermal data
+- Verified with new unit tests ensuring hardware priority
+
 ---
 
 ## Module 2: Feature Extraction ✅
@@ -62,11 +69,12 @@ Extract clinically relevant biomarkers from multimodal sensor data for 9 physiol
 | System | File | Key Biomarkers |
 |--------|------|----------------|
 | CNS | `cns.py` | gait_variability, posture_entropy, tremor |
-| Cardiovascular | `cardiovascular.py` | heart_rate, hrv_rmssd, chest_micro_motion |
+| Cardiovascular | `cardiovascular.py` | heart_rate (radar+rPPG), hrv_rmssd, chest_micro_motion |
+| Pulmonary | `pulmonary.py` | respiration_rate (radar), breathing_depth |
 | Renal | `renal.py` | fluid_asymmetry, total_body_water, ecf_ratio |
 | GI | `gastrointestinal.py` | abdominal_rhythm, visceral_variance |
 | Skeletal | `skeletal.py` | gait_symmetry, stance_stability, joint_rom |
-| Skin | `skin.py` | texture_roughness, color_uniformity, lesions |
+| Skin | `skin.py` | skin_temperature (thermal), texture_roughness, lesions |
 | Eyes | `eyes.py` | blink_rate, gaze_stability, fixation |
 | Nasal | `nasal.py` | breathing_regularity, respiratory_rate |
 | Reproductive | `reproductive.py` | autonomic_imbalance, stress_proxy |

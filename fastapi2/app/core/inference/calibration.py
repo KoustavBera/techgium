@@ -3,12 +3,17 @@ Confidence Calibration Module
 
 Adjusts and calibrates confidence scores for risk predictions.
 """
+from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 import numpy as np
 
 from app.core.extraction.base import BiomarkerSet, PhysiologicalSystem
 from app.core.inference.risk_engine import SystemRiskResult, RiskScore
+
+if TYPE_CHECKING:
+    from app.core.validation.trust_envelope import TrustEnvelope
+
 from app.utils import get_logger
 
 logger = get_logger(__name__)
@@ -204,3 +209,40 @@ class ConfidenceCalibrator:
         upper = min(100, risk_score.score + margin)
         
         return (round(lower, 1), round(upper, 1))
+    
+    def calibrate_with_trust(
+        self,
+        risk_result: SystemRiskResult,
+        trust_envelope: Optional[TrustEnvelope] = None,
+        factors: Optional[CalibrationFactors] = None
+    ) -> SystemRiskResult:
+        """
+        Calibrate confidence with trust envelope integration.
+        
+        Applies both standard calibration and trust envelope penalties.
+        
+        Args:
+            risk_result: Original risk result
+            trust_envelope: Optional TrustEnvelope from validation layer
+            factors: Optional CalibrationFactors
+            
+        Returns:
+            SystemRiskResult with calibrated confidence values
+        """
+        # First apply standard calibration
+        calibrated = self.calibrate_risk_result(risk_result, factors)
+        
+        # Then apply trust envelope penalty if provided
+        if trust_envelope is not None:
+            # Apply trust envelope confidence adjustment
+            calibrated.overall_risk.confidence = trust_envelope.get_adjusted_confidence(
+                calibrated.overall_risk.confidence
+            )
+            
+            # Apply to sub-risks as well
+            for sub_risk in calibrated.sub_risks:
+                sub_risk.confidence = trust_envelope.get_adjusted_confidence(
+                    sub_risk.confidence
+                )
+        
+        return calibrated

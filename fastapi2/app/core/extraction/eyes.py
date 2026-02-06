@@ -8,9 +8,10 @@ Enhanced extraction using:
 - ISO 9241-3 gaze estimation standards
 - Clinical-grade validation thresholds
 """
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import time
+from scipy.ndimage import median_filter
 
 from app.utils import get_logger
 from .base import BaseExtractor, BiomarkerSet, PhysiologicalSystem
@@ -47,18 +48,26 @@ class EyeExtractor(BaseExtractor):
     LEFT_IRIS = [468, 469, 470, 471, 472]
     RIGHT_IRIS = [473, 474, 475, 476, 477]
     
-    # Pose eye indices (fallback)
-    POSE_LEFT_EYE = [1, 2, 3]
-    POSE_RIGHT_EYE = [4, 5, 6]
+    # Pose eye indices (fallback) - MediaPipe Pose landmarks
+    # Use all 3 points (inner, center, outer) for robust averaging
+    POSE_LEFT_EYE = [1, 2, 3]   # left_eye_inner, left_eye, left_eye_outer
+    POSE_RIGHT_EYE = [4, 5, 6]  # right_eye_inner, right_eye, right_eye_outer
     
-    def __init__(self, sample_rate: float = 30.0):
+    # Head pose reference landmarks (FaceMesh) for motion compensation
+    HEAD_POSE_INDICES = [1, 4, 152, 10, 151, 9]  # nose bridge + chin
+    
+    def __init__(self, sample_rate: float = 30.0, frame_width: int = 1280, frame_height: int = 720):
         """Initialize with clinical parameters.
         
         Args:
             sample_rate: Expected frames per second (default 30.0)
+            frame_width: Video frame width for denormalization (default 1280)
+            frame_height: Video frame height for denormalization (default 720)
         """
         super().__init__()
         self.sample_rate = sample_rate
+        self.frame_width = frame_width
+        self.frame_height = frame_height
         self.min_frames = int(5 * sample_rate)  # 5s minimum for reliability
         self.EAR_THRESHOLD = 0.2  # Adaptive threshold baseline
         self.BLINK_MIN_DURATION = 0.1  # 100ms minimum blink duration
@@ -137,7 +146,12 @@ class EyeExtractor(BaseExtractor):
         # Extract eye centers for gaze analysis
         left_eye_pos = self._extract_eye_center(landmarks_array, self.LEFT_EYE_INDICES)
         right_eye_pos = self._extract_eye_center(landmarks_array, self.RIGHT_EYE_INDICES)
-        gaze_center = (left_eye_pos + right_eye_pos) / 2
+        
+        # Apply head pose compensation (subtract head motion)
+        head_compensated_left, head_compensated_right = self._apply_head_compensation(
+            landmarks_array, left_eye_pos, right_eye_pos
+        )
+        gaze_center = (head_compensated_left + head_compensated_right) / 2
         
         # 2. Gaze stability (ISO 9241-3)
         gaze_stability = self._calculate_gaze_stability_v2(gaze_center, fps)
@@ -171,8 +185,12 @@ class EyeExtractor(BaseExtractor):
             description="Bilateral eye motion correlation"
         )
         
-        # 6. Pupil reactivity (if iris landmarks available)
-        if landmarks_array.shape[1] >= 478:
+        # Note: Pupil reactivity removed - iris landmarks don't track pupil size
+        # True pupilometry requires pupil center segmentation + lighting normalization
+        # Iris boundary variation only measures MediaPipe detection noise
+        
+        # 6. Legacy: Iris detection quality (NOT pupil reactivity)
+        if landmarks_array.shape[1] >= 478 and False:  # Disabled - scientifically invalid
             pupil_reactivity = self._estimate_pupil_reactivity(landmarks_array)
             self._add_biomarker_safe(
                 biomarker_set, "pupil_reactivity", pupil_reactivity, "score_0_100",
@@ -192,9 +210,9 @@ class EyeExtractor(BaseExtractor):
             self._generate_simulated_biomarkers(biomarker_set)
             return
         
-        # Eye landmarks from pose
-        left_eye = pose_array[:, 2, :2]   # left_eye
-        right_eye = pose_array[:, 5, :2]  # right_eye
+        # Eye landmarks from pose - use all 3 points per eye for robustness
+        left_eye = np.mean(pose_array[:, self.POSE_LEFT_EYE, :2], axis=1)   # Average of [1,2,3]
+        right_eye = np.mean(pose_array[:, self.POSE_RIGHT_EYE, :2], axis=1)  # Average of [4,5,6]
         
         # Fallback to basic pose-based extraction (lower confidence)
         blink_rate = self._estimate_blink_rate(pose_array, fps)
@@ -243,7 +261,9 @@ class EyeExtractor(BaseExtractor):
         """
         def compute_ear(eye_indices: List[int]) -> np.ndarray:
             """Compute Eye Aspect Ratio for each frame."""
-            eye_lm = landmarks[:, eye_indices, :2]  # (T, 6, 2)
+            eye_lm = landmarks[:, eye_indices, :2]  # (T, 6, 2) normalized [0,1]
+            # ✅ Denormalize to pixel coordinates for metric accuracy
+            eye_lm_pixels = eye_lm * np.array([self.frame_width, self.frame_height])
             
             # Clinical standard 6-point EAR
             # Indices: 0=outer, 1=upper1, 2=upper2, 3=inner, 4=lower2, 5=lower1
@@ -251,11 +271,11 @@ class EyeExtractor(BaseExtractor):
             p2, p6 = 1, 5  # Vertical pair 1
             p3, p5 = 2, 4  # Vertical pair 2
             
-            # Vertical distances
-            A = np.linalg.norm(eye_lm[:, p2] - eye_lm[:, p6], axis=1)
-            B = np.linalg.norm(eye_lm[:, p3] - eye_lm[:, p5], axis=1)
-            # Horizontal distance
-            C = np.linalg.norm(eye_lm[:, p1] - eye_lm[:, p4], axis=1)
+            # Vertical distances (in pixels)
+            A = np.linalg.norm(eye_lm_pixels[:, p2] - eye_lm_pixels[:, p6], axis=1)
+            B = np.linalg.norm(eye_lm_pixels[:, p3] - eye_lm_pixels[:, p5], axis=1)
+            # Horizontal distance (in pixels)
+            C = np.linalg.norm(eye_lm_pixels[:, p1] - eye_lm_pixels[:, p4], axis=1)
             
             # EAR formula: (A + B) / (2 * C)
             ear = (A + B) / (2.0 * C + 1e-6)
@@ -267,8 +287,9 @@ class EyeExtractor(BaseExtractor):
         # Conservative: use minimum of both eyes
         ears = np.minimum(left_ear, right_ear)
         
-        # Adaptive threshold: 5th percentile of EAR values (data-driven)
-        ear_threshold = max(np.percentile(ears, 5), 0.15)  # Minimum sensible threshold
+        # Robust threshold using rolling median (resistant to outliers)
+        # Prevents single squint from poisoning global percentile
+        ear_threshold = self._compute_robust_ear_threshold(ears)
         
         # Detect blinks with duration validation
         blink_events = []
@@ -293,20 +314,99 @@ class EyeExtractor(BaseExtractor):
         
         return float(np.clip(blink_rate, 5, 50))
     
+    def _compute_robust_ear_threshold(
+        self, ears: np.ndarray, window: int = 30
+    ) -> float:
+        """
+        Compute robust EAR threshold using rolling median + IQR.
+        
+        Resistant to outliers (squinting, partial closures) that poison
+        global percentile methods.
+        
+        Args:
+            ears: EAR time series
+            window: Rolling window size (default 30 frames = 1s at 30fps)
+            
+        Returns:
+            Robust threshold for blink detection
+        """
+        if len(ears) < window:
+            # Fallback for short sequences
+            return float(max(np.percentile(ears, 10), 0.15))
+        
+        try:
+            # Rolling median smoothing
+            rolling_median = median_filter(ears, size=window, mode='nearest')
+            
+            # Tukey outlier detection (1.5 * IQR below Q1)
+            q1 = np.percentile(rolling_median, 25)
+            q3 = np.percentile(rolling_median, 75)
+            iqr = q3 - q1
+            
+            threshold = q1 - 1.5 * iqr
+            
+            # Clamp to sensible range
+            return float(np.clip(threshold, 0.15, 0.25))
+            
+        except Exception:
+            # Fallback on error
+            return 0.18
+    
+    def _apply_head_compensation(
+        self,
+        landmarks: np.ndarray,
+        left_eye_pos: np.ndarray,
+        right_eye_pos: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Compensate for head movement to get gaze-in-head-frame.
+        
+        Based on Google MediaPipe Iris research - subtracts head motion
+        from eye positions for stable gaze tracking.
+        
+        Args:
+            landmarks: Full FaceMesh landmarks (T, 468+, 4)
+            left_eye_pos: Left eye center positions (T, 2)
+            right_eye_pos: Right eye center positions (T, 2)
+            
+        Returns:
+            Tuple of (head_compensated_left, head_compensated_right)
+        """
+        if landmarks.shape[1] < 468:
+            # No head compensation available for pose-only data
+            return left_eye_pos, right_eye_pos
+        
+        # Head reference: nose bridge + chin landmarks
+        head_lm = landmarks[:, self.HEAD_POSE_INDICES, :2]  # (T, 6, 2)
+        head_center = np.mean(head_lm, axis=1)  # (T, 2)
+        
+        # Subtract head motion (relative gaze)
+        left_compensated = left_eye_pos - head_center
+        right_compensated = right_eye_pos - head_center
+        
+        return left_compensated, right_compensated
+    
     def _extract_eye_center(
         self, landmarks: np.ndarray, indices: List[int]
     ) -> np.ndarray:
-        """Extract visibility-weighted eye center positions (T, 2)."""
+        """Extract visibility-weighted eye center with global confidence scaling."""
         eye_lm = landmarks[:, indices, :3]  # (T, N, 3)
         
-        # Use visibility weighting if available
+        # Use global visibility weighting for proper confidence
         if landmarks.shape[2] >= 4:
-            visibility = landmarks[:, indices, 3:4]  # (T, N, 1)
-            # Normalize visibility weights
-            vis_sum = np.sum(visibility, axis=1, keepdims=True) + 1e-6
-            weights = visibility / vis_sum
+            # Global visibility mean across ALL face landmarks
+            all_visibility = landmarks[:, :, 3]  # (T, all_landmarks)
+            global_vis_mean = np.mean(all_visibility, axis=1, keepdims=True)  # (T, 1)
+            
+            # Eye-specific visibility
+            eye_visibility = landmarks[:, indices, 3:4]  # (T, N, 1)
+            vis_sum = np.sum(eye_visibility, axis=1, keepdims=True) + 1e-6
+            weights = eye_visibility / vis_sum
             weighted = eye_lm[:, :, :2] * weights
-            return np.sum(weighted, axis=1)  # (T, 2)
+            eye_center = np.sum(weighted, axis=1)  # (T, 2)
+            
+            # Scale by global visibility (penalize when face poorly detected)
+            return eye_center * global_vis_mean
         else:
             return np.mean(eye_lm[:, :, :2], axis=1)  # (T, 2)
     
@@ -350,17 +450,19 @@ class EyeExtractor(BaseExtractor):
         self, gaze_center: np.ndarray, fps: float = 30.0
     ) -> float:
         """
-        Clinical fixation duration (150ms+ fixations only).
+        Clinical fixation duration with strict velocity threshold.
         
-        Uses bottom 20% velocity percentile for fixation detection.
+        Uses bottom 10% velocity percentile (stricter than 20%)
+        to avoid counting smooth pursuit as fixation.
         """
         if len(gaze_center) < 30:
             return 250.0
         
         velocity = np.linalg.norm(np.diff(gaze_center, axis=0), axis=1)
         
-        # Strict clinical thresholds: bottom 20% velocity = fixation
-        vel_threshold = np.percentile(velocity, 20)
+        # Stricter threshold: bottom 10% velocity = true fixation
+        # Clinical fixation requires <0.5 deg/sec
+        vel_threshold = np.percentile(velocity, 10)
         fixation_mask = velocity < vel_threshold
         
         # Minimum fixation duration: 150ms
@@ -392,9 +494,9 @@ class EyeExtractor(BaseExtractor):
         self, gaze_center: np.ndarray, fps: float = 30.0
     ) -> float:
         """
-        Bimodal peak velocity saccade detection (20-100 deg/s range).
+        Vectorized saccade detection using rising edge transitions.
         
-        Uses 90th percentile threshold to detect fast movements only.
+        Detects isolated fast movements (90th percentile velocity threshold).
         """
         if len(gaze_center) < 30:
             return 3.0
@@ -404,15 +506,11 @@ class EyeExtractor(BaseExtractor):
         # Bimodal threshold: top 10% velocity = saccades
         sacc_threshold = np.percentile(velocity, 90)
         
-        # Count isolated peaks (not sustained motion)
-        saccades = 0
-        in_saccade = False
-        for v in velocity > sacc_threshold:
-            if v and not in_saccade:
-                saccades += 1
-                in_saccade = True
-            elif not v:
-                in_saccade = False
+        # Vectorized rising edge detection (proper transition counting)
+        sacc_mask = velocity > sacc_threshold
+        # Pad and diff to find transitions
+        transitions = np.diff(np.pad(sacc_mask.astype(int), (1, 1), mode='constant'))
+        saccades = int(np.sum(transitions == 1))  # Count rising edges only
         
         duration_sec = len(gaze_center) / fps
         saccade_freq = saccades / max(duration_sec, 1)
@@ -440,10 +538,20 @@ class EyeExtractor(BaseExtractor):
     
     def _estimate_pupil_reactivity(self, landmarks: np.ndarray) -> float:
         """
-        Iris boundary variance as pupil response proxy.
+        DEPRECATED: Iris boundary variance (NOT true pupil reactivity).
         
-        Uses iris bounding box area variation over time.
+        WARNING: This measures MediaPipe iris detection noise, not physiological
+        pupil response. Iris landmarks track iris boundary, not pupil diameter.
+        
+        True pupilometry requires:
+        - Pupil center segmentation (not iris contour)
+        - Lighting condition normalization  
+        - Constriction velocity measurement
+        
+        This method kept for backward compatibility only.
         """
+        logger.warning("Pupil reactivity is scientifically invalid - iris ≠ pupil")
+        
         if landmarks.shape[1] < 478:
             return 70.0
         

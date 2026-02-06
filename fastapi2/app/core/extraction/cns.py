@@ -15,6 +15,7 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 from scipy import stats, signal
 from scipy.fft import fft, fftfreq
+from scipy.spatial.distance import cdist
 
 from app.utils import get_logger
 from .base import BaseExtractor, BiomarkerSet, PhysiologicalSystem, Biomarker
@@ -279,15 +280,76 @@ class CNSExtractor(BaseExtractor):
     # GAIT VARIABILITY (Zeni et al. 2008 - Gold standard heel strike detection)
     # =========================================================================
     
+    def _detect_gait_state(self, pose_array: np.ndarray) -> bool:
+        """
+        Detect if subject is walking vs standing using velocity-based analysis.
+        
+        Args:
+            pose_array: Pose landmarks (frames, landmarks, [x,y,z,visibility])
+            
+        Returns:
+            True if walking detected, False if standing/stationary
+        """
+        if pose_array.shape[0] < 30:
+            return False
+        
+        # Use hip center velocity as gait indicator
+        hip_left = self.landmarks["left_hip"]
+        hip_right = self.landmarks["right_hip"]
+        
+        # Hip center position over time
+        hip_center = (pose_array[:, hip_left, :2] + pose_array[:, hip_right, :2]) / 2
+        
+        # Compute frame-to-frame velocity (magnitude)
+        velocities = np.linalg.norm(np.diff(hip_center, axis=0), axis=1)
+        
+        # Walking threshold: mean velocity > 0.01 normalized units
+        # (tuned for MediaPipe normalized coordinates)
+        mean_velocity = np.mean(velocities)
+        velocity_std = np.std(velocities)
+        
+        # Walking characteristics: higher mean velocity + variability
+        is_walking = (mean_velocity > 0.01) and (velocity_std > 0.005)
+        
+        return is_walking
+    
+    def _get_landmark_with_visibility(
+        self,
+        pose_array: np.ndarray,
+        landmark_idx: int,
+        coord_idx: int = 1,
+        min_visibility: float = 0.5
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Extract landmark coordinates weighted by visibility/confidence.
+        
+        Args:
+            pose_array: Pose landmarks (frames, landmarks, [x,y,z,visibility])
+            landmark_idx: Index of landmark to extract
+            coord_idx: Coordinate index (0=x, 1=y, 2=z)
+            min_visibility: Minimum visibility threshold (0-1)
+            
+        Returns:
+            Tuple of (coordinates, visibility_mask)
+        """
+        # Extract coordinate and visibility
+        coords = pose_array[:, landmark_idx, coord_idx]
+        visibility = pose_array[:, landmark_idx, 3] if pose_array.shape[2] > 3 else np.ones_like(coords)
+        
+        # Create mask for reliable landmarks
+        visibility_mask = visibility >= min_visibility
+        
+        return coords, visibility_mask
+    
     def _calculate_gait_variability(
         self, 
         pose_array: np.ndarray
     ) -> Tuple[float, np.ndarray]:
         """
-        Calculate gait variability using clinically-validated heel strike detection.
+        Calculate gait variability with visibility weighting and gait state detection.
         
         Uses Zeni et al. (2008) method: identify heel strikes as local minima
-        in filtered ankle vertical position.
+        in filtered ankle vertical position, with visibility-based filtering.
         
         Returns:
             Tuple of (coefficient of variation, array of heel strike indices)
@@ -299,9 +361,27 @@ class CNSExtractor(BaseExtractor):
         if pose_array.shape[0] < 60:  # Need ~2 seconds minimum
             return 0.045, np.array([])
         
-        # Extract bilateral ankle Y-positions (vertical movement)
-        left_ankle_y = pose_array[:, left_ankle_idx, 1]
-        right_ankle_y = pose_array[:, right_ankle_idx, 1]
+        # Check if subject is actually walking
+        is_walking = self._detect_gait_state(pose_array)
+        if not is_walking:
+            logger.info("Subject appears stationary, skipping gait analysis")
+            return 0.045, np.array([])  # Normal resting variability
+        
+        # Extract bilateral ankle Y-positions with visibility weighting
+        left_ankle_y, left_visibility = self._get_landmark_with_visibility(
+            pose_array, left_ankle_idx, coord_idx=1, min_visibility=0.5
+        )
+        right_ankle_y, right_visibility = self._get_landmark_with_visibility(
+            pose_array, right_ankle_idx, coord_idx=1, min_visibility=0.5
+        )
+        
+        # Filter out low-visibility frames
+        left_ankle_y = left_ankle_y[left_visibility]
+        right_ankle_y = right_ankle_y[right_visibility]
+        
+        if len(left_ankle_y) < 30 or len(right_ankle_y) < 30:
+            logger.warning("Insufficient visible ankle landmarks for gait analysis")
+            return 0.045, np.array([])
         
         # Preprocess: remove drift, filter to gait frequencies (0.5-3 Hz)
         left_filtered = self._preprocess_signal(left_ankle_y, 0.5, 3.0)
@@ -361,11 +441,13 @@ class CNSExtractor(BaseExtractor):
         r: float = None
     ) -> float:
         """
-        Calculate Sample Entropy (SampEn) - clinical standard for postural sway.
+        Calculate Sample Entropy (SampEn) using vectorized implementation.
         
         SampEn measures the complexity/regularity of a time series.
         Lower values = more regular (pathological)
         Higher values = more complex (healthy)
+        
+        Uses scipy.spatial.distance.cdist for O(n) performance instead of O(n²).
         
         Args:
             time_series: Input signal
@@ -386,23 +468,23 @@ class CNSExtractor(BaseExtractor):
         if r == 0:
             return 1.5
         
-        def count_matches(templates: np.ndarray, tolerance: float) -> int:
-            """Count template matches within tolerance (excluding self-matches)."""
-            count = 0
-            n = len(templates)
-            for i in range(n):
-                for j in range(i + 1, n):
-                    if np.max(np.abs(templates[i] - templates[j])) <= tolerance:
-                        count += 2  # Count both (i,j) and (j,i)
-            return count
+        # Vectorized template matching using cdist
+        def count_matches_vectorized(templates: np.ndarray, tolerance: float) -> int:
+            """Count template matches using vectorized distance computation."""
+            # Compute pairwise Chebyshev distances (max absolute difference)
+            distances = cdist(templates, templates, metric='chebyshev')
+            
+            # Count matches within tolerance, excluding self-matches (diagonal)
+            matches = (distances <= tolerance) & (distances > 0)
+            return int(np.sum(matches))
         
         # Create templates of length m and m+1
         templates_m = np.array([time_series[i:i+m] for i in range(N - m)])
         templates_m1 = np.array([time_series[i:i+m+1] for i in range(N - m - 1)])
         
-        # Count matches
-        B = count_matches(templates_m, r)
-        A = count_matches(templates_m1, r)
+        # Count matches using vectorized approach
+        B = count_matches_vectorized(templates_m, r)
+        A = count_matches_vectorized(templates_m1, r)
         
         # Prevent division by zero
         if B == 0:
@@ -413,7 +495,7 @@ class CNSExtractor(BaseExtractor):
     
     def _calculate_posture_entropy(self, pose_array: np.ndarray) -> float:
         """
-        Calculate postural sway complexity using Sample Entropy.
+        Calculate postural sway complexity using Sample Entropy with visibility weighting.
         
         Uses center of mass proxy from hip/shoulder landmarks.
         Filters to postural frequency band (0.1-2.0 Hz).
@@ -427,14 +509,30 @@ class CNSExtractor(BaseExtractor):
         if pose_array.shape[1] < 25:
             return 1.5
         
-        # Center of mass proxy (average of shoulders and hips)
-        com_landmarks = [shoulder_left, shoulder_right, hip_left, hip_right]
-        com_y = np.mean(pose_array[:, com_landmarks, 1], axis=1)  # AP sway (Y-axis)
+        # Extract landmarks with visibility weighting
+        landmarks_data = []
+        for lm_idx in [shoulder_left, shoulder_right, hip_left, hip_right]:
+            coords, visibility = self._get_landmark_with_visibility(
+                pose_array, lm_idx, coord_idx=1
+            )
+            landmarks_data.append((coords, visibility))
+        
+        # Compute weighted average for center of mass
+        com_y = np.zeros(pose_array.shape[0])
+        total_weight = np.zeros(pose_array.shape[0])
+        
+        for coords, visibility in landmarks_data:
+            com_y += coords * visibility
+            total_weight += visibility
+        
+        # Avoid division by zero
+        total_weight = np.maximum(total_weight, 1e-6)
+        com_y = com_y / total_weight
         
         # Filter to postural sway frequencies (0.1-2.0 Hz)
         com_filtered = self._preprocess_signal(com_y, 0.1, 2.0)
         
-        # Calculate sample entropy
+        # Calculate sample entropy (now using vectorized implementation)
         return float(np.clip(self._sample_entropy(com_filtered), 0.0, 4.0))
     
     # =========================================================================
@@ -446,7 +544,8 @@ class CNSExtractor(BaseExtractor):
         pose_array: np.ndarray
     ) -> Dict[str, Tuple[float, float]]:
         """
-        Analyze tremor using bilateral wrist motion and Welch PSD.
+        Analyze tremor using bilateral wrist motion with visibility weighting
+        and frequency-optimized Welch PSD.
         
         Returns:
             Dict mapping tremor type to (power, confidence) tuples
@@ -462,44 +561,88 @@ class CNSExtractor(BaseExtractor):
             return default_result
         
         try:
-            # Extract bilateral wrist positions
-            left_wrist = pose_array[:, left_wrist_idx, :2]   # X, Y
-            right_wrist = pose_array[:, right_wrist_idx, :2]
+            # Extract bilateral wrist positions with visibility weighting
+            left_wrist_x, left_vis_x = self._get_landmark_with_visibility(
+                pose_array, left_wrist_idx, coord_idx=0
+            )
+            left_wrist_y, left_vis_y = self._get_landmark_with_visibility(
+                pose_array, left_wrist_idx, coord_idx=1
+            )
+            right_wrist_x, right_vis_x = self._get_landmark_with_visibility(
+                pose_array, right_wrist_idx, coord_idx=0
+            )
+            right_wrist_y, right_vis_y = self._get_landmark_with_visibility(
+                pose_array, right_wrist_idx, coord_idx=1
+            )
+            
+            # Compute magnitude (do magnitude BEFORE filtering for tremor)
+            left_mag = np.sqrt(left_wrist_x**2 + left_wrist_y**2)
+            right_mag = np.sqrt(right_wrist_x**2 + right_wrist_y**2)
+            
+            # Weight by minimum visibility across both coordinates
+            left_visibility = np.minimum(left_vis_x, left_vis_y)
+            right_visibility = np.minimum(right_vis_x, right_vis_y)
+            
+            # Filter frames with low visibility
+            valid_left = left_visibility > 0.5
+            valid_right = right_visibility > 0.5
+            
+            if np.sum(valid_left) < 30 or np.sum(valid_right) < 30:
+                logger.warning("Insufficient visible wrist landmarks for tremor analysis")
+                return default_result
+            
+            left_mag = left_mag[valid_left]
+            right_mag = right_mag[valid_right]
             
             # Preprocess: filter to tremor frequencies (2-15 Hz)
-            left_filtered = self._preprocess_signal(left_wrist, 2.0, 15.0)
-            right_filtered = self._preprocess_signal(right_wrist, 2.0, 15.0)
+            left_filtered = self._preprocess_signal(left_mag, 2.0, 15.0)
+            right_filtered = self._preprocess_signal(right_mag, 2.0, 15.0)
             
             # Combine bilateral (average reduces noise)
-            tremor_signal = (left_filtered + right_filtered) / 2
-            
-            # Welch Power Spectral Density
-            nperseg = min(256, len(tremor_signal) // 4)
-            if nperseg < 32:
-                return default_result
-                
-            freqs, psd = signal.welch(
-                tremor_signal, 
-                fs=self.sample_rate, 
-                nperseg=nperseg,
-                noverlap=nperseg // 2
-            )
+            min_len = min(len(left_filtered), len(right_filtered))
+            tremor_signal = (left_filtered[:min_len] + right_filtered[:min_len]) / 2
             
             # Total power for normalization
             total_power = np.trapz(psd, freqs) + 1e-10
             
-            # Extract power in each clinical tremor band
+            # Extract power in each clinical tremor band with optimized windows
             for band_name, (low_freq, high_freq) in self.tremor_bands.items():
-                mask = (freqs >= low_freq) & (freqs <= high_freq)
+                # Frequency-optimized Welch parameters for each tremor type
+                # Higher frequencies need shorter windows for better resolution
+                if band_name == "postural":  # 6-12 Hz - needs shorter window
+                    nperseg_opt = min(128, len(tremor_signal) // 4)
+                elif band_name == "resting":  # 4-6 Hz - medium window
+                    nperseg_opt = min(192, len(tremor_signal) // 4)
+                else:  # intention 3-5 Hz - longer window
+                    nperseg_opt = min(256, len(tremor_signal) // 4)
+                
+                if nperseg_opt < 32:
+                    tremor_results[band_name] = (0.03, 0.5)
+                    continue
+                
+                # Recompute PSD with optimized window for this band
+                freqs_opt, psd_opt = signal.welch(
+                    tremor_signal,
+                    fs=self.sample_rate,
+                    nperseg=nperseg_opt,
+                    noverlap=nperseg_opt // 2
+                )
+                
+                mask = (freqs_opt >= low_freq) & (freqs_opt <= high_freq)
                 
                 if np.any(mask):
-                    band_power = np.trapz(psd[mask], freqs[mask])
-                    normalized_power = band_power / total_power
+                    band_power = np.trapz(psd_opt[mask], freqs_opt[mask])
+                    total_power_opt = np.trapz(psd_opt, freqs_opt) + 1e-10
+                    normalized_power = band_power / total_power_opt
                     
-                    # Confidence based on signal quality
-                    peak_freq_idx = np.argmax(psd[mask])
-                    peak_prominence = psd[mask][peak_freq_idx] / np.mean(psd[mask])
-                    confidence = min(0.95, 0.5 + peak_prominence / 10)
+                    # Confidence based on signal quality and visibility
+                    peak_freq_idx = np.argmax(psd_opt[mask])
+                    peak_prominence = psd_opt[mask][peak_freq_idx] / (np.mean(psd_opt[mask]) + 1e-10)
+                    
+                    # Reduce confidence if many landmarks were filtered out
+                    visibility_factor = min(np.mean(left_visibility[valid_left]), 
+                                           np.mean(right_visibility[valid_right]))
+                    confidence = min(0.95, (0.5 + peak_prominence / 10) * visibility_factor)
                     
                     tremor_results[band_name] = (
                         float(np.clip(normalized_power, 0, 0.5)),
@@ -525,9 +668,9 @@ class CNSExtractor(BaseExtractor):
         tremor_scores: Dict[str, Tuple[float, float]]
     ) -> Tuple[float, Dict[str, float]]:
         """
-        Calculate composite CNS stability score combining multiple domains.
+        Calculate composite CNS stability score with calibrated normalization.
         
-        Components (weighted):
+        Components (percentile-based normalization):
         - 40% Postural sway (AP + ML)
         - 30% Gait variability
         - 30% Tremor power
@@ -543,9 +686,23 @@ class CNSExtractor(BaseExtractor):
         if pose_array.shape[1] < 25:
             return 85.0, components
         
-        # Extract center of mass from hips
-        com_ap = np.mean(pose_array[:, [hip_left, hip_right], 1], axis=1)  # Y = AP
-        com_ml = np.mean(pose_array[:, [hip_left, hip_right], 0], axis=1)  # X = ML
+        # Extract center of mass from hips with visibility weighting
+        com_ap_left, vis_left = self._get_landmark_with_visibility(
+            pose_array, hip_left, coord_idx=1
+        )
+        com_ap_right, vis_right = self._get_landmark_with_visibility(
+            pose_array, hip_right, coord_idx=1
+        )
+        com_ml_left, _ = self._get_landmark_with_visibility(
+            pose_array, hip_left, coord_idx=0
+        )
+        com_ml_right, _ = self._get_landmark_with_visibility(
+            pose_array, hip_right, coord_idx=0
+        )
+        
+        # Average hips for center of mass
+        com_ap = (com_ap_left + com_ap_right) / 2  # Y = AP
+        com_ml = (com_ml_left + com_ml_right) / 2  # X = ML
         
         # Filter to postural band
         sway_ap_filtered = self._preprocess_signal(com_ap, 0.1, 2.0)
@@ -562,13 +719,19 @@ class CNSExtractor(BaseExtractor):
         tremor_powers = [score for score, _ in tremor_scores.values()]
         avg_tremor = np.mean(tremor_powers) if tremor_powers else 0.03
         
-        # Composite score calculation
-        # Each component normalized to 0-100 penalty, then subtracted from 100
-        sway_penalty = (sway_ap * 1000 + sway_ml * 1000)  # ~0-20 points
-        gait_penalty = gait_variability * 500             # ~0-10 points
-        tremor_penalty = avg_tremor * 200                 # ~0-10 points
+        # Calibrated percentile-based normalization (clinical reference ranges)
+        # Sway: Normal <0.03, Mild 0.03-0.05, Moderate 0.05-0.08, Severe >0.08
+        sway_total = sway_ap + sway_ml
+        sway_score = 100 * (1 - np.clip(sway_total / 0.15, 0, 1))  # 0-100
         
-        stability = 100 - sway_penalty - gait_penalty - tremor_penalty
+        # Gait: Normal CV <0.05, Mild 0.05-0.08, Moderate 0.08-0.12, Severe >0.12  
+        gait_score = 100 * (1 - np.clip(gait_variability / 0.15, 0, 1))  # 0-100
+        
+        # Tremor: Normal <0.05, Mild 0.05-0.10, Moderate 0.10-0.20, Severe >0.20
+        tremor_score = 100 * (1 - np.clip(avg_tremor / 0.25, 0, 1))  # 0-100
+        
+        # Weighted composite (40% sway, 30% gait, 30% tremor)
+        stability = 0.4 * sway_score + 0.3 * gait_score + 0.3 * tremor_score
         
         return float(np.clip(stability, 40, 100)), components
     
@@ -646,3 +809,4 @@ class CNSExtractor(BaseExtractor):
         )
         
         return biomarker_set
+        

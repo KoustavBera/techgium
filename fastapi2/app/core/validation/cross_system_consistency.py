@@ -90,12 +90,12 @@ class CrossSystemConsistencyChecker:
                 "description": "High cardiac stress should correlate with CNS indicators",
                 "check_fn": self._check_cardio_cns_consistency
             },
-            # Fluid overload (renal) should affect thoracic impedance (cardio)
+            # Radar vs Camera HR/RR consistency
             {
-                "name": "renal_cardio_fluid",
-                "systems": (PhysiologicalSystem.RENAL, PhysiologicalSystem.CARDIOVASCULAR),
-                "description": "Fluid distribution should correlate with thoracic impedance",
-                "check_fn": self._check_renal_cardio_consistency
+                "name": "radar_camera_consistency",
+                "systems": (PhysiologicalSystem.CARDIOVASCULAR, PhysiologicalSystem.PULMONARY),
+                "description": "Radar and camera derived vitals should agree",
+                "check_fn": self._check_radar_camera_consistency
             },
             # Respiratory (nasal) should correlate with GI abdominal motion
             {
@@ -151,7 +151,7 @@ class CrossSystemConsistencyChecker:
         all_biomarkers = {}
         for system, bm_set in biomarker_sets.items():
             for bm in bm_set.biomarkers:
-                all_biomarkers[bm.name] = bm.value
+                all_biomarkers[f"{system.value}.{bm.name}"] = bm.value
         
         # Run all consistency rules
         for rule in self._rules:
@@ -179,7 +179,7 @@ class CrossSystemConsistencyChecker:
         if inconsistencies:
             severity_sum = sum(i.severity for i in inconsistencies)
             result.overall_consistency = float(np.clip(
-                1.0 - severity_sum / (checks_performed + 1), 0, 1
+                1.0 - severity_sum / max(len(self._rules), 1), 0, 1
             ))
         else:
             result.overall_consistency = 1.0
@@ -215,39 +215,55 @@ class CrossSystemConsistencyChecker:
         # Very low HRV (stress) should correlate with decreased motor control
         hrv = cardio_bm.get("hrv_rmssd")
         if hrv and gait_var:
-            if hrv < 15 and gait_var < 0.03:  # Low HRV + perfect gait
+            if hrv < 15 and gait_var > 0.15:  # Low HRV should cause unsteady gait
                 inconsistencies.append(CrossSystemInconsistency(
                     systems=(sys1.value, sys2.value),
                     inconsistency_type=InconsistencyType.MISSING_CORRELATION,
-                    message="Very low HRV typically correlates with increased gait variability",
+                    message="Very low HRV with high gait variability may indicate stress response",
                     severity=0.3,
                     biomarkers_involved=["hrv_rmssd", "gait_variability"]
                 ))
         
         return inconsistencies
     
-    def _check_renal_cardio_consistency(
+    def _check_radar_camera_consistency(
         self,
-        renal_bm: Dict[str, float],
         cardio_bm: Dict[str, float],
+        pulm_bm: Dict[str, float],
         sys1: PhysiologicalSystem,
         sys2: PhysiologicalSystem
     ) -> List[CrossSystemInconsistency]:
-        """Check renal vs cardiovascular consistency."""
+        """Check radar vs camera derived vitals consistency."""
         inconsistencies = []
         
-        fluid_overload = renal_bm.get("fluid_overload_index")
-        thoracic_imp = cardio_bm.get("thoracic_impedance")
+        # Compare heart rates from different sources
+        camera_hr = cardio_bm.get("heart_rate")
+        radar_hr = cardio_bm.get("radar_heart_rate")
         
-        # Fluid overload (positive) should decrease thoracic impedance
-        if fluid_overload is not None and thoracic_imp is not None:
-            if fluid_overload > 0.3 and thoracic_imp > 600:
+        if camera_hr and radar_hr:
+            hr_diff = abs(camera_hr - radar_hr)
+            if hr_diff > 15:  # More than 15 bpm difference is concerning
                 inconsistencies.append(CrossSystemInconsistency(
                     systems=(sys1.value, sys2.value),
-                    inconsistency_type=InconsistencyType.DIRECTIONAL_CONFLICT,
-                    message="Fluid overload should decrease thoracic impedance",
-                    severity=0.5,
-                    biomarkers_involved=["fluid_overload_index", "thoracic_impedance"]
+                    inconsistency_type=InconsistencyType.PHYSIOLOGICAL_MISMATCH,
+                    message=f"HR mismatch: camera={camera_hr:.0f}, radar={radar_hr:.0f} bpm (diff={hr_diff:.0f})",
+                    severity=min(hr_diff / 30, 0.8),
+                    biomarkers_involved=["heart_rate", "radar_heart_rate"]
+                ))
+        
+        # Compare respiration rates
+        camera_rr = pulm_bm.get("respiratory_rate")
+        radar_rr = cardio_bm.get("radar_respiration_rate")
+        
+        if camera_rr and radar_rr:
+            rr_diff = abs(camera_rr - radar_rr)
+            if rr_diff > 5:  # More than 5 breaths/min difference
+                inconsistencies.append(CrossSystemInconsistency(
+                    systems=(sys1.value, sys2.value),
+                    inconsistency_type=InconsistencyType.PHYSIOLOGICAL_MISMATCH,
+                    message=f"RR mismatch: camera={camera_rr:.1f}, radar={radar_rr:.1f} rpm (diff={rr_diff:.1f})",
+                    severity=min(rr_diff / 10, 0.7),
+                    biomarkers_involved=["respiratory_rate", "radar_respiration_rate"]
                 ))
         
         return inconsistencies
@@ -335,11 +351,11 @@ class CrossSystemConsistencyChecker:
         
         # High stress proxy should correlate with elevated HR
         if stress and hr:
-            if stress > 70 and hr < 60:  # High stress + low HR
+            if stress > 80 and hr < 50:  # Tighter thresholds for athletes/vasovagal
                 inconsistencies.append(CrossSystemInconsistency(
                     systems=(sys1.value, sys2.value),
                     inconsistency_type=InconsistencyType.DIRECTIONAL_CONFLICT,
-                    message="High autonomic stress typically elevates heart rate",
+                    message="Very high autonomic stress typically elevates heart rate",
                     severity=0.4,
                     biomarkers_involved=["stress_response_proxy", "heart_rate"]
                 ))
@@ -402,7 +418,7 @@ class CrossSystemConsistencyChecker:
             
             if cns == RiskLevel.CRITICAL and cardio == RiskLevel.LOW:
                 inconsistencies.append(CrossSystemInconsistency(
-                    systems=("central_nervous_system", "cardiovascular"),
+                    systems=(PhysiologicalSystem.CNS.value, PhysiologicalSystem.CARDIOVASCULAR.value),
                     inconsistency_type=InconsistencyType.RISK_LEVEL_CONFLICT,
                     message="Critical CNS risk with low cardiovascular risk is unusual",
                     severity=0.4,
