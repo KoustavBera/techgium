@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Chatbot Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 600px;
+            height: 80vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h2 {
+            font-size: 20px;
+        }
+
+        .mode-selector, .language-selector {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-end;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-bubble {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .message.assistant.emergency .message-bubble {
+            background: #ff4444;
+            color: white;
+            border: 2px solid #cc0000;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 18px;
+            width: 60px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .typing-indicator.active {
+            display: block;
+        }
+
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 2px;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-area input:focus {
+            border-color: #667eea;
+        }
+
+        .input-area button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+
+        .input-area button:hover {
+            transform: scale(1.05);
+        }
+
+        .input-area button:active {
+            transform: scale(0.95);
+        }
+
+        .alert {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff4444;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: none;
+            animation: slideIn 0.3s;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .status {
+            padding: 10px;
+            background: #e3f2fd;
+            color: #1976d2;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h2>🏥 Medical AI Assistant</h2>
+            <div>
+                <select class="mode-selector" id="modeSelector">
+                    <option value="standalone">Standalone</option>
+                    <option value="context-aware">Context-Aware</option>
+                </select>
+                <select class="language-selector" id="languageSelector">
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="status" id="status">Connecting...</div>
+
+        <div class="messages" id="messages">
+            <!-- Messages will appear here -->
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Ask me anything about your health..." />
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <div class="alert" id="alert"></div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const socket = io('http://localhost:5000');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const statusDiv = document.getElementById('status');
+        const alertDiv = document.getElementById('alert');
+        const modeSelector = document.getElementById('modeSelector');
+        const languageSelector = document.getElementById('languageSelector');
+
+        let currentMode = 'standalone';
+        let currentLanguage = 'en';
+
+        // Initialize session
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            socket.emit('init_session', {
+                mode: currentMode,
+                userId: 'test_user_123',
+                patientId: 'patient_456'
+            });
+        });
+
+        socket.on('session_initialized', (data) => {
+            statusDiv.textContent = data.message;
+            statusDiv.style.background = '#c8e6c9';
+            statusDiv.style.color = '#2e7d32';
+            addMessage('assistant', data.message);
+        });
+
+        socket.on('receive_message', (data) => {
+            addMessage('assistant', data.text, data.isEmergency);
+        });
+
+        socket.on('typing', (data) => {
+            if (data.isTyping) {
+                typingIndicator.classList.add('active');
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            } else {
+                typingIndicator.classList.remove('active');
+            }
+        });
+
+        socket.on('emergency_alert', (data) => {
+            showAlert(data.message);
+        });
+
+        socket.on('language_changed', (data) => {
+            statusDiv.textContent = data.message;
+        });
+
+        socket.on('mode_switched', (data) => {
+            statusDiv.textContent = data.message;
+            statusDiv.style.background = '#fff3cd';
+            statusDiv.style.color = '#856404';
+        });
+
+        socket.on('error', (data) => {
+            showAlert('Error: ' + data.message);
+        });
+
+        // Send message
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            addMessage('user', text);
+            socket.emit('send_message', {
+                text: text,
+                language: currentLanguage
+            });
+
+            messageInput.value = '';
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Mode selector
+        modeSelector.addEventListener('change', (e) => {
+            currentMode = e.target.value;
+            socket.emit('switch_mode', {
+                mode: currentMode,
+                patientId: currentMode === 'context-aware' ? 'patient_456' : null
+            });
+        });
+
+        // Language selector
+        languageSelector.addEventListener('change', (e) => {
+            currentLanguage = e.target.value;
+            socket.emit('change_language', {
+                language: currentLanguage
+            });
+        });
+
+        // Helper functions
+        function addMessage(sender, text, isEmergency = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            if (isEmergency) messageDiv.classList.add('emergency');
+
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = text;
+
+            messageDiv.appendChild(bubble);
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function showAlert(message) {
+            alertDiv.textContent = message;
+            alertDiv.classList.add('show');
+            setTimeout(() => {
+                alertDiv.classList.remove('show');
+            }, 5000);
+        }
+
+        // Test messages
+        console.log('Test the chatbot with these messages:');
+        console.log('English: "I have a headache and fever"');
+        console.log('Hindi: "Mujhe sar dard hai aur bukhar hai"');
+        console.log('Hinglish: "Mujhe chest pain ho raha hai"');
+    </script>
+</body>
+</html>
