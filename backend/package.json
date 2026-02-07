@@ -12,11 +12,15 @@
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
+		"@langchain/core": "^1.1.19",
+		"@langchain/openai": "^1.2.5",
 		"cloudinary": "^2.8.0",
 		"cors": "^2.8.5",
-		"dotenv": "^17.2.3",
+		"dotenv": "^17.2.4",
 		"express": "^5.2.1",
+		"langchain": "^1.2.18",
 		"mongoose": "^9.0.0",
-		"nodemon": "^3.1.11"
+		"nodemon": "^3.1.11",
+		"openai": "^6.18.0"
 	}
 }
