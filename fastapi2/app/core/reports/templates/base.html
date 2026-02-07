@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>{% block title %}Medical Report{% endblock %}</title>
+		<style>
+			@page {
+			    size: A4;
+			    margin: 20mm;
+			    @bottom-center {
+			        content: "Page " counter(page) " of " counter(pages);
+			        font-family: 'Helvetica', sans-serif;
+			        font-size: 9pt;
+			        color: #6B7280;
+			    }
+			}
+
+			:root {
+			    /* Medical Palette - Trustworthy & Calm */
+			    --color-primary: #0f172a;      /* Slate 900 */
+			    --color-secondary: #334155;    /* Slate 700 */
+			    --color-accent: #0ea5e9;       /* Sky 500 */
+
+			    /* Risk Colors */
+			    --risk-low-bg: #ecfdf5;        /* Emerald 50 */
+			    --risk-low-text: #047857;      /* Emerald 700 */
+			    --risk-moderate-bg: #fffbeb;   /* Amber 50 */
+			    --risk-moderate-text: #b45309; /* Amber 700 */
+			    --risk-high-bg: #fef2f2;       /* Red 50 */
+			    --risk-high-text: #b91c1c;     /* Red 700 */
+			    --risk-critical-bg: #450a0a;   /* Red 950 */
+			    --risk-critical-text: #fee2e2; /* Red 100 */
+
+			    /* Functional Colors */
+			    --text-body: #374151;          /* Gray 700 */
+			    --text-muted: #6b7280;         /* Gray 500 */
+			    --border-light: #e5e7eb;       /* Gray 200 */
+			    --bg-card: #ffffff;
+			    --bg-page: #ffffff;
+			}
+
+			* {
+			    box-sizing: border-box;
+			}
+
+			body {
+			    font-family: 'Helvetica', 'Arial', sans-serif;
+			    font-size: 10pt;
+			    line-height: 1.5;
+			    color: var(--text-body);
+			    margin: 0;
+			    background: var(--bg-page);
+			}
+
+			h1, h2, h3, h4, h5, h6 {
+			    font-family: 'Helvetica', 'Arial', sans-serif;
+			    font-weight: 700;
+			    color: var(--color-primary);
+			    margin-top: 0;
+			}
+
+			h1 { font-size: 24pt; margin-bottom: 0.5rem; }
+			h2 { font-size: 16pt; margin-bottom: 0.75rem; border-bottom: 2px solid var(--border-light); padding-bottom: 0.25rem; }
+			h3 { font-size: 13pt; margin-bottom: 0.5rem; color: var(--color-secondary); }
+
+			.header {
+			    display: flex;
+			    justify-content: space-between;
+			    align-items: flex-end;
+			    margin-bottom: 2rem;
+			    border-bottom: 3px solid var(--color-primary);
+			    padding-bottom: 1rem;
+			}
+
+			.header-logo {
+			    font-size: 20pt;
+			    font-weight: 500;
+			    color: var(--color-primary);
+			    letter-spacing: -0.5px;
+			}
+
+			.header-meta {
+			    text-align: right;
+			    font-size: 9pt;
+			    color: var(--text-muted);
+			}
+
+			.risk-badge {
+			    display: inline-block;
+			    padding: 4px 12px;
+			    border-radius: 9999px;
+			    font-weight: 700;
+			    font-size: 9pt;
+			    text-transform: uppercase;
+			}
+
+			.risk-low { background: var(--risk-low-bg); color: var(--risk-low-text); }
+			.risk-moderate { background: var(--risk-moderate-bg); color: var(--risk-moderate-text); }
+			.risk-high { background: var(--risk-high-bg); color: var(--risk-high-text); }
+			.risk-critical { background: var(--risk-critical-bg); color: var(--risk-critical-text); }
+
+			.section {
+			    margin-bottom: 2rem;
+			    break-inside: avoid;
+			}
+
+			.footer {
+			    margin-top: 3rem;
+			    padding-top: 1rem;
+			    border-top: 1px solid var(--border-light);
+			    font-size: 8pt;
+			    color: var(--text-muted);
+			    text-align: center;
+			}
+
+			/* Utility classes */
+			.text-right { text-align: right; }
+			.text-center { text-align: center; }
+			.font-bold { font-weight: 700; }
+			.mb-2 { margin-bottom: 0.5rem; }
+			.mt-4 { margin-top: 1rem; }
+
+			table {
+			    width: 100%;
+			    border-collapse: collapse;
+			    margin-bottom: 1rem;
+			}
+
+			th {
+			    text-align: left;
+			    font-weight: 700;
+			    color: var(--color-secondary);
+			    border-bottom: 2px solid var(--border-light);
+			    padding: 8px;
+			    font-size: 9pt;
+			}
+
+			td {
+			    padding: 8px;
+			    border-bottom: 1px solid var(--border-light);
+			    vertical-align: top;
+			}
+
+			/* Specific Medical Stylings */
+			.measurement-unit {
+			    font-size: 0.8em;
+			    color: var(--text-muted);
+			}
+
+			.normal-range {
+			    font-size: 8pt;
+			    color: var(--text-muted);
+			}
+
+			{% block extra_css %}{% endblock %}
+		</style>
+	</head>
+	<body>
+		<div class="header">
+			<div class="header-logo">
+				CHIRAN<span style="color: var(--color-accent)">JEEVI</span>
+			</div>
+			<div class="header-meta">
+				<div>Report ID: {{ report.report_id }}</div>
+				<div>Date: {{ report.generated_at.strftime('%Y-%m-%d') }}</div>
+				<div>Patient ID: {{ report.patient_id }}</div>
+			</div>
+		</div>
+
+		{% block content %}{% endblock %}
+
+		<div class="footer">
+			<p>
+				This report is for screening purposes only and does not constitute a
+				medical diagnosis. Please consult a qualified healthcare provider for
+				interpretation.
+			</p>
+			<p>&copy; {{ report.generated_at.year }} Chiranjeevi AI</p>
+		</div>
+	</body>
+</html>

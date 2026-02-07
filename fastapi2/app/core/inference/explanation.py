@@ -9,7 +9,8 @@ from enum import Enum
 
 from app.core.extraction.base import BiomarkerSet, PhysiologicalSystem, Biomarker
 from app.core.inference.risk_engine import (
-    SystemRiskResult, RiskScore, RiskLevel, CompositeRiskCalculator
+    SystemRiskResult, RiskScore, RiskLevel, CompositeRiskCalculator,
+    TrustedRiskResult
 )
 from app.utils import get_logger
 
@@ -273,6 +274,69 @@ class ExplanationGenerator:
             confidence_statement=confidence_stmt,
             caveats=caveats
         )
+    
+    def generate_trusted_explanation(
+        self,
+        trusted_result: TrustedRiskResult,
+        biomarker_set: Optional[BiomarkerSet] = None
+    ) -> RiskExplanation:
+        """
+        Generate explanation for a trusted/gated risk result.
+        
+        Handles rejected data and incorporates trust caveats.
+        
+        Args:
+            trusted_result: The trusted risk result
+            biomarker_set: Optional biomarker data
+            
+        Returns:
+            RiskExplanation with trust context
+        """
+        # Handle rejected data
+        if trusted_result.was_rejected:
+            # Determine system from biomarker set if available, otherwise unknown
+            system = biomarker_set.system if biomarker_set else PhysiologicalSystem.CNS
+            
+            return RiskExplanation(
+                system=system,
+                risk_level=RiskLevel.LOW,  # Default safe level
+                summary=(
+                    f"Assessment for {system.value.replace('_', ' ').title()} "
+                    "could not be completed due to data quality issues."
+                ),
+                detailed_findings=[
+                    f"Analysis Rejected: {trusted_result.rejection_reason}"
+                ],
+                recommendations=[
+                    "Repeat assessment ensuring proper sensor placement",
+                    "Check environmental conditions (lighting, stability)"
+                ],
+                confidence_statement="No Confidence - Assessment Rejected",
+                caveats=trusted_result.caveats or ["Results invalid due to failed validation"]
+            )
+        
+        # Handle valid data
+        if trusted_result.risk_result is None:
+            # Should not happen if was_rejected is False, but safe fallback
+            return self.generate_trusted_explanation(
+                TrustedRiskResult(was_rejected=True, rejection_reason="Internal error: Missing risk result")
+            )
+            
+        # Generate base explanation
+        explanation = self.generate_explanation(trusted_result.risk_result, biomarker_set)
+        
+        # Incorporate trust adjustments
+        if trusted_result.caveats:
+            explanation.caveats.extend(trusted_result.caveats)
+        
+        # Modify confidence statement if penalized
+        if trusted_result.trust_adjusted_confidence < trusted_result.risk_result.overall_risk.confidence:
+            explanation.confidence_statement += (
+                f" (Penalized from {trusted_result.risk_result.overall_risk.confidence:.0%} "
+                f"due to data quality)"
+            )
+            
+        return explanation
     
     def generate_composite_explanation(
         self,

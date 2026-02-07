@@ -94,12 +94,20 @@ class BiomarkerPlausibilityValidator:
             "cns_stability_score": {"hard": (0.0, 100.0), "physiological": (20.0, 100.0)},
             
             # Cardiovascular
-            "heart_rate": {"hard": (20.0, 300.0), "physiological": (40.0, 200.0)},
+            "heart_rate": {"hard": (25.0, 250.0), "physiological": (50.0, 180.0)},
             "hrv_rmssd": {"hard": (0.0, 500.0), "physiological": (5.0, 200.0)},
-            "systolic_bp": {"hard": (40.0, 300.0), "physiological": (70.0, 200.0)},
+            "systolic_bp": {"hard": (50.0, 260.0), "physiological": (90.0, 180.0)},
             "diastolic_bp": {"hard": (20.0, 200.0), "physiological": (40.0, 130.0)},
             "chest_micro_motion": {"hard": (0.0, 1.0), "physiological": (0.0001, 0.1)},
-            "thoracic_impedance": {"hard": (50.0, 2000.0), "physiological": (200.0, 800.0)},
+            
+            # Radar (Seeed MR60BHA2)
+            "radar_heart_rate": {"hard": (30.0, 220.0), "physiological": (40.0, 200.0)},
+            "radar_respiration_rate": {"hard": (4.0, 50.0), "physiological": (6.0, 40.0)},
+            
+            # Thermal (MLX90640)
+            "skin_temp_avg": {"hard": (25.0, 45.0), "physiological": (30.0, 40.0)},
+            "skin_temp_max": {"hard": (25.0, 50.0), "physiological": (32.0, 42.0)},
+            "thermal_asymmetry": {"hard": (0.0, 10.0), "physiological": (0.0, 2.0)},
             
             # Renal
             "fluid_asymmetry_index": {"hard": (0.0, 1.0), "physiological": (0.0, 0.5)},
@@ -135,7 +143,7 @@ class BiomarkerPlausibilityValidator:
             
             # Nasal/Respiratory
             "breathing_regularity": {"hard": (0.0, 1.0), "physiological": (0.2, 1.0)},
-            "respiratory_rate": {"hard": (2.0, 60.0), "physiological": (6.0, 40.0)},
+            "respiratory_rate": {"hard": (3.0, 70.0), "physiological": (12.0, 25.0)},
             "breath_depth_index": {"hard": (0.0, 10.0), "physiological": (0.1, 3.0)},
             "airflow_turbulence": {"hard": (0.0, 10.0), "physiological": (0.0, 1.0)},
             
@@ -159,6 +167,18 @@ class BiomarkerPlausibilityValidator:
             PhysiologicalSystem.NASAL: ["respiratory_rate"],
             PhysiologicalSystem.REPRODUCTIVE: ["autonomic_imbalance_index"],
         }
+    
+    def _get_biomarker_importance(self, name: str) -> float:
+        """Get importance weight for a biomarker (default 1.0)."""
+        # Critical biomarkers have higher weight for scoring
+        high_importance = {
+            "heart_rate": 2.0,
+            "systolic_bp": 2.0,
+            "respiratory_rate": 2.0,
+            "cns_stability_score": 2.0,
+            "fluid_overload_index": 1.5
+        }
+        return high_importance.get(name, 1.0)
     
     def validate(
         self,
@@ -211,10 +231,19 @@ class BiomarkerPlausibilityValidator:
         
         if violations:
             result.is_valid = not any(v.severity >= 0.8 for v in violations)
-            severity_sum = sum(v.severity for v in violations)
-            max_possible = len(biomarker_set.biomarkers) + len(required)
+            
+            # Weighted scoring
+            weighted_severity = sum(v.severity * self._get_biomarker_importance(v.biomarker_name) 
+                                 for v in violations)
+            total_weight = sum(self._get_biomarker_importance(bm.name) for bm in biomarker_set.biomarkers)
+            
+            # Add weight for missing required biomarkers (which aren't in biomarkers list)
+            # We treat missing required as having max severity on a critical item
+            missing_count = len([v for v in violations if v.violation_type == ViolationType.MISSING_REQUIRED])
+            total_weight += missing_count * 2.0 
+            
             result.overall_plausibility = float(np.clip(
-                1.0 - severity_sum / (max_possible + 1), 0, 1
+                1.0 - weighted_severity / max(total_weight, 1.0), 0, 1
             ))
         else:
             result.is_valid = True
@@ -226,6 +255,16 @@ class BiomarkerPlausibilityValidator:
     def _validate_single_biomarker(self, biomarker: Biomarker) -> List[PlausibilityViolation]:
         """Validate a single biomarker value."""
         violations = []
+        
+        # Handle NaN/Inf
+        if np.isnan(biomarker.value) or np.isinf(biomarker.value):
+            return [PlausibilityViolation(
+                biomarker_name=biomarker.name,
+                violation_type=ViolationType.IMPOSSIBLE_VALUE,
+                message=f"{biomarker.name} is NaN/Inf",
+                severity=0.9,
+                actual_value=0.0 # Placeholder
+            )]
         
         limits = self._limits.get(biomarker.name)
         if limits is None:
@@ -286,8 +325,14 @@ class BiomarkerPlausibilityValidator:
             "blink_rate": 5.0,
         }
         
-        # Get time delta (assume 1 second if unknown)
-        time_delta = 1.0
+        # Calculate actual time delta from extraction times (ms to s)
+        time_delta = abs(current.extraction_time_ms - previous.extraction_time_ms) / 1000.0
+        
+        if time_delta <= 0 or time_delta > 3600:
+             # Fallback if timestamps invalid or too far apart (start new session)
+             # If delta is 0, we can't calculate rate, so skip.
+             # If > 1 hour, rate check is meaningless.
+             return []
         
         current_map = {bm.name: bm.value for bm in current.biomarkers}
         previous_map = {bm.name: bm.value for bm in previous.biomarkers}
@@ -295,13 +340,13 @@ class BiomarkerPlausibilityValidator:
         for name, max_rate in max_rates.items():
             if name in current_map and name in previous_map:
                 delta = abs(current_map[name] - previous_map[name])
-                rate = delta / time_delta
+                rate = delta / max(time_delta, 1.0) # Avoid small delta explosion
                 
                 if rate > max_rate:
                     violations.append(PlausibilityViolation(
                         biomarker_name=name,
                         violation_type=ViolationType.SUDDEN_JUMP,
-                        message=f"{name} changed too quickly: {delta:.2f} in {time_delta}s",
+                        message=f"{name} changed too quickly: {delta:.2f} in {time_delta:.2f}s",
                         severity=min(rate / max_rate * 0.5, 0.9),
                         actual_value=delta
                     ))
@@ -317,7 +362,7 @@ class BiomarkerPlausibilityValidator:
         bm_map = {bm.name: bm.value for bm in biomarker_set.biomarkers}
         
         # Cardiovascular contradictions
-        if "systolic_bp" in bm_map and "diastolic_bp" in bm_map:
+        if  "systolic_bp" in bm_map and "diastolic_bp" in bm_map:
             if bm_map["systolic_bp"] <= bm_map["diastolic_bp"]:
                 violations.append(PlausibilityViolation(
                     biomarker_name="systolic_bp,diastolic_bp",
@@ -331,12 +376,14 @@ class BiomarkerPlausibilityValidator:
         if "heart_rate" in bm_map and "hrv_rmssd" in bm_map:
             hr = bm_map["heart_rate"]
             hrv = bm_map["hrv_rmssd"]
-            # Physiologically, HR > 150 with HRV > 100 is contradictory
-            if hr > 150 and hrv > 100:
+            # Physiological empirical limit: HRV shouldn't be massive during Tachycardia
+            # Fix: if hr > 140 and hrv > 50 and hr * 0.4 > hrv
+            
+            if hr > 140 and hrv > 50 and (0.4 * hr) > hrv: 
                 violations.append(PlausibilityViolation(
                     biomarker_name="heart_rate,hrv_rmssd",
                     violation_type=ViolationType.INTERNAL_CONTRADICTION,
-                    message=f"High HR ({hr:.0f}) with high HRV ({hrv:.0f}) is contradictory",
+                    message=f"High HR ({hr:.0f}) with High HRV ({hrv:.0f}) is contradictory",
                     severity=0.6
                 ))
         
@@ -371,3 +418,4 @@ class BiomarkerPlausibilityValidator:
             )
         
         return results
+        

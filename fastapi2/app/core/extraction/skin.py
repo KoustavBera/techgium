@@ -6,13 +6,25 @@ Extracts skin health indicators from camera data:
 - Lesion morphology detection
 - Color maps / pigmentation analysis
 """
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 import numpy as np
 
 from app.utils import get_logger
 from .base import BaseExtractor, BiomarkerSet, PhysiologicalSystem
 
 logger = get_logger(__name__)
+
+# Physiological fallback values for sensor failures
+FALLBACK_VALUES = {
+    "skin_temperature": 36.5,
+    "skin_temperature_max": 37.0,
+    "thermal_asymmetry": 0.2,
+    "texture_roughness": 15.0,
+    "skin_redness": 0.45,
+    "skin_yellowness": 0.35,
+    "color_uniformity": 0.85,
+    "lesion_count": 0.0
+}
 
 
 class SkinExtractor(BaseExtractor):
@@ -24,25 +36,60 @@ class SkinExtractor(BaseExtractor):
     
     system = PhysiologicalSystem.SKIN
     
+    def _safe_normal_range(self, bm_range: Any) -> Optional[tuple]:
+        """Convert normal_range to safe tuple format."""
+        try:
+            if isinstance(bm_range, (list, tuple)) and len(bm_range) == 2:
+                return tuple(float(x) for x in bm_range)
+        except (TypeError, ValueError):
+            pass
+        return None
+    
+    def _get_fallback_value(self, name: str) -> float:
+        """Get physiologically reasonable fallback value for a biomarker."""
+        return FALLBACK_VALUES.get(name, 0.0)
+    
     def extract(self, data: Dict[str, Any]) -> BiomarkerSet:
         """
         Extract skin biomarkers.
         
         Expected data keys:
         - frames: List of video frames (HxWx3 arrays)
-        - skin_regions: Optional ROI coordinates
+        - esp32_data: Dict containing thermal metrics from MLX90640
+        - systems: List of pre-processed systems from bridge
         """
         import time
         start_time = time.time()
         
         biomarker_set = self._create_biomarker_set()
         
-        frames = data.get("frames", [])
+        # Priority 1: Hardware Thermal Data (ESP32/MLX90640)
+        has_thermal = False
+        if "esp32_data" in data:
+            self._extract_from_thermal(data["esp32_data"], biomarker_set)
+            has_thermal = True
+        elif "systems" in data:
+            # Check for pre-processed thermal data
+            for sys in data["systems"]:
+                if sys.get("system") == "skin":
+                    for bm in sys.get("biomarkers", []):
+                        self._add_biomarker_safe(
+                            biomarker_set,
+                            name=bm["name"],
+                            value=bm["value"],
+                            unit=bm["unit"],
+                            confidence=0.95,
+                            normal_range=self._safe_normal_range(bm.get("normal_range")),
+                            description="From Thermal Camera (MLX90640)"
+                        )
+                        has_thermal = True
         
+        # Priority 2: Visual Analysis (Webcam)
+        frames = data.get("frames", [])
         if len(frames) > 0:
             frame = np.array(frames[0]) if not isinstance(frames[0], np.ndarray) else frames[0]
             self._extract_from_frame(frame, biomarker_set)
-        else:
+        elif not has_thermal:
             self._generate_simulated_biomarkers(biomarker_set)
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
@@ -61,29 +108,32 @@ class SkinExtractor(BaseExtractor):
             self._generate_simulated_biomarkers(biomarker_set)
             return
         
+        # Extract face ROI for more accurate skin analysis
+        face_roi = self._extract_face_roi(frame)
+        
         # Texture analysis using local variance
-        texture_roughness = self._analyze_texture(frame)
+        texture_roughness = self._analyze_texture(face_roi)
         self._add_biomarker(
             biomarker_set,
             name="texture_roughness",
             value=texture_roughness,
             unit="variance_score",
-            confidence=0.60,
+            confidence=0.35,  # Lowered: experimental without proper validation
             normal_range=(5, 25),
-            description="Skin surface texture roughness"
+            description="Skin surface texture roughness (experimental)"
         )
         
-        # Color analysis
-        color_metrics = self._analyze_skin_color(frame)
+        # Color analysis on face ROI only
+        color_metrics = self._analyze_skin_color(face_roi)
         
         self._add_biomarker(
             biomarker_set,
             name="skin_redness",
             value=color_metrics["redness"],
             unit="normalized_intensity",
-            confidence=0.65,
+            confidence=0.30,  # Lowered: no lighting normalization
             normal_range=(0.3, 0.6),
-            description="Skin redness/erythema level"
+            description="Skin redness/erythema level (experimental)"
         )
         
         self._add_biomarker(
@@ -91,9 +141,9 @@ class SkinExtractor(BaseExtractor):
             name="skin_yellowness",
             value=color_metrics["yellowness"],
             unit="normalized_intensity",
-            confidence=0.60,
+            confidence=0.30,  # Lowered: no clinical validation
             normal_range=(0.2, 0.5),
-            description="Skin yellowness (jaundice proxy)"
+            description="Skin yellowness/jaundice proxy (experimental)"
         )
         
         self._add_biomarker(
@@ -101,25 +151,47 @@ class SkinExtractor(BaseExtractor):
             name="color_uniformity",
             value=color_metrics["uniformity"],
             unit="score_0_1",
-            confidence=0.55,
+            confidence=0.30,  # Lowered: basic algorithm
             normal_range=(0.7, 1.0),
-            description="Skin color uniformity"
+            description="Skin color uniformity (experimental)"
         )
         
-        # Simple lesion detection (high-contrast spots)
-        lesion_count = self._detect_lesions(frame)
+        # DISABLED: Lesion detection (unvalidated algorithm - too many false positives)
+        # Will be re-enabled with proper morphological analysis + clinical validation
         self._add_biomarker(
             biomarker_set,
             name="lesion_count",
-            value=float(lesion_count),
+            value=0.0,  # Conservative: disabled until proper CV model available
             unit="count",
-            confidence=0.45,
+            confidence=0.10,  # Very low: feature disabled
             normal_range=(0, 5),
-            description="Detected skin abnormalities count"
+            description="Skin abnormalities (feature disabled - pending validation)"
         )
+    
+    def _extract_face_roi(self, frame: np.ndarray) -> np.ndarray:
+        """Extract approximate face region to reduce background pollution.
+        
+        Uses simple center-crop heuristic. For production, use MediaPipe Face Mesh.
+        """
+        if frame.size == 0 or frame.ndim < 2:
+            return frame
+        
+        h, w = frame.shape[:2]
+        
+        # Conservative face region: center 50% of frame
+        # Assumes subject is centered (walk-through chamber setup)
+        y_start = h // 4
+        y_end = 3 * h // 4
+        x_start = w // 4
+        x_end = 3 * w // 4
+        
+        return frame[y_start:y_end, x_start:x_end]
     
     def _analyze_texture(self, frame: np.ndarray) -> float:
         """Analyze texture using local variance."""
+        if frame.size == 0 or frame.ndim < 2:
+            return self._get_fallback_value("texture_roughness")
+        
         if frame.ndim == 3:
             gray = np.mean(frame, axis=2)
         else:
@@ -143,15 +215,15 @@ class SkinExtractor(BaseExtractor):
         
         if variances:
             return float(np.mean(variances))
-        return np.random.uniform(10, 20)
+        return self._get_fallback_value("texture_roughness")
     
     def _analyze_skin_color(self, frame: np.ndarray) -> Dict[str, float]:
-        """Analyze skin color characteristics."""
-        if frame.ndim != 3 or frame.shape[2] < 3:
+        """Analyze skin color characteristics (on face ROI)."""
+        if frame.size == 0 or frame.ndim != 3 or frame.shape[2] < 3:
             return {
-                "redness": np.random.uniform(0.4, 0.5),
-                "yellowness": np.random.uniform(0.3, 0.4),
-                "uniformity": np.random.uniform(0.75, 0.9)
+                "redness": self._get_fallback_value("skin_redness"),
+                "yellowness": self._get_fallback_value("skin_yellowness"),
+                "uniformity": self._get_fallback_value("color_uniformity")
             }
         
         # Normalize to 0-1 range
@@ -181,31 +253,23 @@ class SkinExtractor(BaseExtractor):
         }
     
     def _detect_lesions(self, frame: np.ndarray) -> int:
-        """Simple lesion detection based on local contrast."""
-        if frame.ndim == 3:
-            gray = np.mean(frame, axis=2)
-        else:
-            gray = frame
+        """DISABLED: Lesion detection pending proper validation.
         
-        # Threshold for high-contrast regions
-        mean_intensity = np.mean(gray)
-        std_intensity = np.std(gray)
+        Previous algorithm had critical flaws:
+        - 2σ outliers detect image noise, not medical lesions
+        - No morphological analysis (single pixels ≠ lesions)
+        - Background pollution (clothes, hair counted as lesions)
+        - Zero clinical validation
         
-        # Count regions significantly darker or lighter
-        threshold_low = mean_intensity - 2 * std_intensity
-        threshold_high = mean_intensity + 2 * std_intensity
-        
-        dark_pixels = np.sum(gray < threshold_low)
-        bright_pixels = np.sum(gray > threshold_high)
-        
-        total_pixels = gray.size
-        anomaly_ratio = (dark_pixels + bright_pixels) / total_pixels
-        
-        # Estimate lesion count from anomaly ratio
-        # This is a very rough heuristic
-        estimated_lesions = int(anomaly_ratio * 100)
-        
-        return min(estimated_lesions, 20)  # Cap at 20
+        TODO for production:
+        - Implement connected component analysis
+        - Add morphological operations (erosion/dilation)
+        - Use GLCM texture features
+        - Validate against dermatology datasets
+        - Consider pre-trained skin lesion detection model
+        """
+        # Conservative approach: return 0 until proper algorithm validated
+        return 0
     
     def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
         """Generate simulated skin biomarkers."""
@@ -224,3 +288,80 @@ class SkinExtractor(BaseExtractor):
         self._add_biomarker(biomarker_set, "lesion_count",
                            float(np.random.randint(0, 3)), "count",
                            0.5, (0, 5), "Simulated lesion count")
+
+    def _extract_from_thermal(self, thermal_data: Dict[str, Any], biomarker_set: BiomarkerSet) -> None:
+        """Extract skin metrics from thermal sensor data."""
+        data = thermal_data.get("thermal", {})
+        
+        if "skin_temp_avg" in data:
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="skin_temperature",
+                value=float(data["skin_temp_avg"]),
+                unit="celsius",
+                confidence=0.90,
+                normal_range=(35.5, 37.5),
+                description="Average facial skin temperature (MLX90640)"
+            )
+            
+        if "skin_temp_max" in data:
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="skin_temperature_max",
+                value=float(data["skin_temp_max"]),
+                unit="celsius",
+                confidence=0.90,
+                normal_range=(36.0, 38.0),
+                description="Max facial skin temperature (Inner canthus proxy)"
+            )
+            
+        if "thermal_asymmetry" in data:
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="thermal_asymmetry",
+                value=float(data["thermal_asymmetry"]),
+                unit="delta_celsius",
+                confidence=0.85,
+                normal_range=(0.0, 0.5),
+                description="Thermal asymmetry (Left vs Right)"
+            )
+
+    def _add_biomarker_safe(
+        self,
+        biomarker_set: BiomarkerSet,
+        name: str,
+        value: float,
+        unit: str,
+        confidence: float = 1.0,
+        normal_range: Optional[tuple] = None,
+        description: str = ""
+    ) -> None:
+        """Safe biomarker addition with fallback for invalid values."""
+        try:
+            # Handle NaN/Inf with physiological fallback instead of silent drop
+            if np.isnan(value) or np.isinf(value):
+                fallback = self._get_fallback_value(name)
+                logger.warning(
+                    f"Skin: Invalid {name} value: {value}. "
+                    f"Using fallback: {fallback} (confidence reduced by 50%)"
+                )
+                value = fallback
+                confidence *= 0.5  # Reduce confidence for fallback data
+
+            self._add_biomarker(
+                biomarker_set, name, float(value), unit,
+                confidence=confidence, normal_range=normal_range,
+                description=description
+            )
+        except Exception as e:
+            logger.error(f"Skin: Failed to add biomarker {name}: {e}")
+            # Last resort: try fallback value
+            try:
+                self._add_biomarker(
+                    biomarker_set, name, self._get_fallback_value(name), unit,
+                    confidence=0.1, normal_range=normal_range,
+                    description=f"{description} (fallback due to error)"
+                )
+            except:
+                pass  # Give up gracefully
+            

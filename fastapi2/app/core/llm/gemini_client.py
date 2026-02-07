@@ -45,6 +45,10 @@ class GeminiConfig:
     # Safety settings for medical content
     safety_threshold: str = "BLOCK_ONLY_HIGH"
     
+    # Structured Output
+    response_mime_type: Optional[str] = None
+    response_schema: Optional[Dict[str, Any]] = None
+    
     # Rate limiting
     max_requests_per_minute: int = 60
     request_timeout_seconds: int = 30
@@ -113,6 +117,20 @@ class GeminiClient:
             return
         
         try:
+            # Prepare generation config
+            gen_config = {
+                "temperature": self.config.temperature,
+                "top_p": self.config.top_p,
+                "top_k": self.config.top_k,
+                "max_output_tokens": self.config.max_output_tokens,
+            }
+            
+            # Add structured output config if provided
+            if self.config.response_mime_type:
+                gen_config["response_mime_type"] = self.config.response_mime_type
+            if self.config.response_schema:
+                gen_config["response_schema"] = self.config.response_schema
+
             # Initialize LangChain ChatGoogleGenerativeAI
             self._llm = ChatGoogleGenerativeAI(
                 model=self.config.model.value,
@@ -120,7 +138,8 @@ class GeminiClient:
                 max_tokens=self.config.max_output_tokens,
                 timeout=self.config.request_timeout_seconds,
                 max_retries=2,
-                google_api_key=self.config.api_key
+                google_api_key=self.config.api_key,
+                generation_config=gen_config
             )
             
             self._initialized = True

@@ -9,13 +9,17 @@ from typing import Dict, Any, List
 
 from app.core.extraction.base import BiomarkerSet, Biomarker, PhysiologicalSystem
 from app.core.inference import (
-    RiskEngine, RiskScore, SystemRiskResult,
+    RiskEngine, RiskScore, SystemRiskResult, TrustedRiskResult,
     ConfidenceCalibrator,
     ExplanationGenerator, RiskExplanation
 )
 from app.core.inference.risk_engine import RiskLevel, CompositeRiskCalculator
 from app.core.inference.calibration import CalibrationFactors
 from app.core.inference.explanation import ExplanationType
+from app.core.validation.biomarker_plausibility import (
+    BiomarkerPlausibilityValidator, PlausibilityResult, PlausibilityViolation, ViolationType
+)
+from app.core.validation.trust_envelope import TrustEnvelope, SafetyFlag
 
 
 # Fixtures
@@ -160,6 +164,54 @@ class TestRiskEngine:
         assert "overall_risk" in d
         assert "sub_risks" in d
         assert "biomarker_summary" in d
+    
+    def test_compute_risk_with_invalid_plausibility(self):
+        """Test risk is rejected when plausibility validation fails."""
+        engine = RiskEngine()
+        
+        # Create biomarker set with impossible value
+        bms = BiomarkerSet(system=PhysiologicalSystem.CARDIOVASCULAR)
+        bms.add(Biomarker("heart_rate", 300, "bpm", 0.90, (60, 100)))  # Impossible
+        
+        # Create invalid plausibility result
+        plausibility = PlausibilityResult(
+            system=PhysiologicalSystem.CARDIOVASCULAR,
+            is_valid=False,
+            overall_plausibility=0.2,
+            violations=[PlausibilityViolation(
+                biomarker_name="heart_rate",
+                violation_type=ViolationType.IMPOSSIBLE_VALUE,
+                message="heart_rate=300 is physically impossible",
+                severity=1.0
+            )]
+        )
+        
+        result = engine.compute_risk_with_validation(bms, plausibility)
+        
+        assert result.was_rejected
+        assert not result.is_trusted
+        assert result.risk_result is None
+        assert "Plausibility validation failed" in result.rejection_reason
+    
+    def test_compute_risk_with_trust_envelope(self, sample_cns_biomarkers):
+        """Test confidence is penalized when trust envelope has issues."""
+        engine = RiskEngine()
+        
+        # Create trust envelope with low reliability
+        trust_envelope = TrustEnvelope(
+            overall_reliability=0.6,
+            confidence_penalty=0.3,
+            safety_flags=[SafetyFlag.LOW_CONFIDENCE, SafetyFlag.DATA_QUALITY_ISSUE],
+            warnings=["Low signal quality", "Motion artifacts detected"]
+        )
+        
+        result = engine.compute_risk_with_trust(sample_cns_biomarkers, trust_envelope)
+        
+        assert not result.was_rejected
+        assert not result.is_trusted  # Because requires_caveats is True
+        assert result.risk_result is not None
+        assert result.trust_adjusted_confidence < 0.9  # Penalized
+        assert len(result.caveats) > 0
 
 
 class TestCompositeRiskCalculator:
@@ -185,6 +237,25 @@ class TestCompositeRiskCalculator:
         
         assert composite.score == 50.0
         assert composite.confidence == 0.0
+    
+    def test_composite_risk_with_trust(self, sample_biomarker_sets):
+        """Test composite risk with trust envelope integration."""
+        engine = RiskEngine()
+        results = engine.compute_all_risks(sample_biomarker_sets)
+        
+        # Create trust envelope with penalty
+        trust_envelope = TrustEnvelope(
+            overall_reliability=0.7,
+            confidence_penalty=0.25
+        )
+        
+        calculator = CompositeRiskCalculator()
+        composite = calculator.compute_composite_risk_with_trust(results, trust_envelope)
+        
+        assert composite.name == "composite_health_risk"
+        assert 0 <= composite.score <= 100
+        # Confidence should be penalized
+        assert composite.confidence < 0.9
 
 
 class TestCalibrationFactors:
@@ -319,6 +390,48 @@ class TestExplanationGenerator:
         
         assert "COMPREHENSIVE HEALTH SCREENING SUMMARY" in text
         assert "Overall Health Risk" in text
+
+    def test_generate_trusted_explanation_rejected(self):
+        """Test explanation for rejected risk result."""
+        generator = ExplanationGenerator()
+        
+        # Create rejected result
+        trusted = TrustedRiskResult(
+            risk_result=None,
+            is_trusted=False,
+            was_rejected=True,
+            rejection_reason="Signal quality too low",
+            caveats=["Sensor disconnected"]
+        )
+        
+        explanation = generator.generate_trusted_explanation(trusted)
+        
+        assert explanation.risk_level == RiskLevel.LOW
+        assert "could not be completed" in explanation.summary
+        assert "Analysis Rejected" in explanation.detailed_findings[0]
+        assert "No Confidence" in explanation.confidence_statement
+        assert "Sensor disconnected" in explanation.caveats
+    
+    def test_generate_trusted_explanation_accepted(self, sample_cns_biomarkers):
+        """Test explanation for trusted risk result with caveats."""
+        engine = RiskEngine()
+        result = engine.compute_risk(sample_cns_biomarkers)
+        
+        # Create accepted result with penalties
+        trusted = TrustedRiskResult(
+            risk_result=result,
+            is_trusted=True,
+            was_rejected=False,
+            trust_adjusted_confidence=0.5,  # Lower than original
+            caveats=["Minor motion artifacts"]
+        )
+        
+        generator = ExplanationGenerator()
+        explanation = generator.generate_trusted_explanation(trusted, sample_cns_biomarkers)
+        
+        assert explanation.system == PhysiologicalSystem.CNS
+        assert "Minor motion artifacts" in explanation.caveats
+        assert "Penalized" in explanation.confidence_statement
 
 
 class TestIntegration:

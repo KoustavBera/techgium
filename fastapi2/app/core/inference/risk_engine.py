@@ -1,15 +1,21 @@
 """
-Risk Score Computation Engine
+Risk Engine Module
 
-Maps biomarker feature vectors to risk scores with interpretable outputs.
+Computes system-specific risk scores from biomarker values.
 """
+from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 from enum import Enum
 import numpy as np
 
 from app.core.extraction.base import BiomarkerSet, PhysiologicalSystem, Biomarker
 from app.utils import get_logger
+
+# Conditional imports to avoid circular dependency
+if TYPE_CHECKING:
+    from app.core.validation.biomarker_plausibility import PlausibilityResult
+    from app.core.validation.trust_envelope import TrustEnvelope
 
 logger = get_logger(__name__)
 
@@ -78,6 +84,33 @@ class SystemRiskResult:
             "biomarker_summary": self.biomarker_summary,
             "alerts": self.alerts,
         }
+
+
+@dataclass
+class TrustedRiskResult:
+    """
+    Risk result wrapped with trust metadata.
+    
+    This indicates whether the risk computation was gated by validation.
+    """
+    risk_result: Optional[SystemRiskResult] = None
+    is_trusted: bool = True
+    was_rejected: bool = False
+    rejection_reason: str = ""
+    trust_adjusted_confidence: float = 1.0
+    caveats: List[str] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        result = {
+            "is_trusted": self.is_trusted,
+            "was_rejected": self.was_rejected,
+            "rejection_reason": self.rejection_reason,
+            "trust_adjusted_confidence": round(self.trust_adjusted_confidence, 3),
+            "caveats": self.caveats,
+        }
+        if self.risk_result:
+            result["risk_result"] = self.risk_result.to_dict()
+        return result
 
 
 class RiskEngine:
@@ -179,11 +212,13 @@ class RiskEngine:
         weights = self._risk_weights.get(system, {})
         weighted_scores = []
         confidences = []
+        actual_weights = []  # Track actual weights for proper normalization
         
         for biomarker in biomarker_set.biomarkers:
             bm_risk, bm_alert = self._calculate_biomarker_risk(biomarker)
             
             weight = weights.get(biomarker.name, 0.1)
+            actual_weights.append(weight)
             weighted_scores.append(bm_risk * weight)
             confidences.append(biomarker.confidence * weight)
             
@@ -199,9 +234,9 @@ class RiskEngine:
                 explanation=self._generate_biomarker_explanation(biomarker, bm_risk)
             ))
         
-        # Compute overall risk
+        # Compute overall risk with proper weight normalization
         if weighted_scores:
-            total_weight = sum(weights.get(bm.name, 0.1) for bm in biomarker_set.biomarkers)
+            total_weight = sum(actual_weights)
             overall_score = sum(weighted_scores) / total_weight if total_weight > 0 else 50.0
             overall_confidence = sum(confidences) / total_weight if total_weight > 0 else 0.5
         else:
@@ -259,6 +294,114 @@ class RiskEngine:
             results[bm_set.system] = self.compute_risk(bm_set)
         return results
     
+    def compute_risk_with_validation(
+        self,
+        biomarker_set: BiomarkerSet,
+        plausibility: Optional[PlausibilityResult] = None
+    ) -> TrustedRiskResult:
+        """
+        Compute risk with plausibility validation gating.
+        
+        If plausibility result indicates invalid data, the risk computation
+        is rejected and a gated result is returned.
+        
+        Args:
+            biomarker_set: BiomarkerSet from extraction module
+            plausibility: Optional PlausibilityResult from validation
+            
+        Returns:
+            TrustedRiskResult with risk and trust metadata
+        """
+        # Check if plausibility validation fails
+        if plausibility is not None and not plausibility.is_valid:
+            # Critical violations - reject the data
+            violation_msgs = [v.message for v in plausibility.violations if v.severity >= 0.8]
+            return TrustedRiskResult(
+                risk_result=None,
+                is_trusted=False,
+                was_rejected=True,
+                rejection_reason=f"Plausibility validation failed: {'; '.join(violation_msgs[:3])}",
+                trust_adjusted_confidence=0.0,
+                caveats=["Data rejected due to physiological implausibility"]
+            )
+        
+        # Compute risk normally
+        risk_result = self.compute_risk(biomarker_set)
+        
+        # Build caveats from any non-critical violations
+        caveats = []
+        adjusted_confidence = risk_result.overall_risk.confidence
+        
+        if plausibility is not None:
+            # Apply plausibility penalty to confidence
+            adjusted_confidence *= plausibility.overall_plausibility
+            
+            # Add warnings for moderate violations
+            for v in plausibility.violations:
+                if 0.4 <= v.severity < 0.8:
+                    caveats.append(f"{v.biomarker_name}: {v.message}")
+        
+        return TrustedRiskResult(
+            risk_result=risk_result,
+            is_trusted=plausibility is None or plausibility.overall_plausibility >= 0.7,
+            was_rejected=False,
+            trust_adjusted_confidence=float(np.clip(adjusted_confidence, 0.1, 0.99)),
+            caveats=caveats[:5]  # Limit caveats
+        )
+    
+    def compute_risk_with_trust(
+        self,
+        biomarker_set: BiomarkerSet,
+        trust_envelope: Optional[TrustEnvelope] = None
+    ) -> TrustedRiskResult:
+        """
+        Compute risk with full trust envelope integration.
+        
+        Uses TrustEnvelope to gate risk computation and adjust confidence.
+        
+        Args:
+            biomarker_set: BiomarkerSet from extraction module
+            trust_envelope: Optional TrustEnvelope from validation layer
+            
+        Returns:
+            TrustedRiskResult with risk and trust metadata
+        """
+        # Check trust envelope reliability
+        if trust_envelope is not None and not trust_envelope.is_reliable:
+            return TrustedRiskResult(
+                risk_result=None,
+                is_trusted=False,
+                was_rejected=True,
+                rejection_reason=trust_envelope.interpretation_guidance,
+                trust_adjusted_confidence=0.0,
+                caveats=trust_envelope.critical_issues[:3]
+            )
+        
+        # Compute risk normally
+        risk_result = self.compute_risk(biomarker_set)
+        
+        # Apply trust adjustments
+        caveats = []
+        adjusted_confidence = risk_result.overall_risk.confidence
+        is_trusted = True
+        
+        if trust_envelope is not None:
+            # Apply confidence penalty from trust envelope
+            adjusted_confidence = trust_envelope.get_adjusted_confidence(adjusted_confidence)
+            
+            # Check if caveats are required
+            if trust_envelope.requires_caveats:
+                is_trusted = False
+                caveats.extend(trust_envelope.warnings[:3])
+        
+        return TrustedRiskResult(
+            risk_result=risk_result,
+            is_trusted=is_trusted,
+            was_rejected=False,
+            trust_adjusted_confidence=float(np.clip(adjusted_confidence, 0.1, 0.99)),
+            caveats=caveats
+        )
+    
     def _calculate_biomarker_risk(self, biomarker: Biomarker) -> Tuple[float, Optional[str]]:
         """
         Calculate risk score for individual biomarker.
@@ -273,24 +416,27 @@ class RiskEngine:
         low, high = biomarker.normal_range
         value = biomarker.value
         
+        # Use range width for consistent deviation calculation
+        range_width = (high - low) if high != low else 1.0
+        
         # Calculate deviation from normal range
         if low <= value <= high:
             # Within normal range
             # Score based on closeness to center
             center = (low + high) / 2
-            range_half = (high - low) / 2
+            range_half = range_width / 2
             deviation = abs(value - center) / (range_half + 1e-6)
             risk = 20 * deviation  # 0-20 within normal
             return risk, None
         elif value < low:
-            # Below normal
-            deviation = (low - value) / (low + 1e-6)
+            # Below normal - deviation relative to range width
+            deviation = (low - value) / range_width
             risk = 25 + min(deviation * 75, 75)  # 25-100
             severity = "significantly " if deviation > 0.3 else ""
             return risk, f"{biomarker.name} is {severity}below normal range"
         else:
-            # Above normal
-            deviation = (value - high) / (high + 1e-6)
+            # Above normal - deviation relative to range width
+            deviation = (value - high) / range_width
             risk = 25 + min(deviation * 75, 75)  # 25-100
             severity = "significantly " if deviation > 0.3 else ""
             return risk, f"{biomarker.name} is {severity}above normal range"
@@ -414,6 +560,22 @@ class CompositeRiskCalculator:
         composite_score = sum(weighted_scores) / total_weight
         composite_confidence = sum(weighted_confidences) / total_weight
         
+        # Critical override: if any system is CRITICAL, boost composite to at least HIGH
+        # If any system is HIGH, boost composite to at least MODERATE
+        max_level = RiskLevel.LOW
+        for result in system_results.values():
+            if result.overall_risk.level == RiskLevel.CRITICAL:
+                max_level = RiskLevel.CRITICAL
+                break
+            elif result.overall_risk.level == RiskLevel.HIGH and max_level != RiskLevel.CRITICAL:
+                max_level = RiskLevel.HIGH
+        
+        # Apply critical override boost (escalate composite to match worst system)
+        if max_level == RiskLevel.CRITICAL and composite_score < 75:
+            composite_score = 75.0  # Boost to CRITICAL threshold when any system is CRITICAL
+        elif max_level == RiskLevel.HIGH and composite_score < 50:
+            composite_score = 50.0  # Boost to HIGH threshold when any system is HIGH
+        
         # Generate explanation
         level = RiskLevel.from_score(composite_score)
         if contributing:
@@ -431,3 +593,98 @@ class CompositeRiskCalculator:
             contributing_biomarkers=contributing,
             explanation=explanation
         )
+    
+    def compute_composite_risk_with_trust(
+        self,
+        system_results: Dict[PhysiologicalSystem, SystemRiskResult],
+        trust_envelope: Optional[TrustEnvelope] = None
+    ) -> RiskScore:
+        """
+        Compute composite risk with trust envelope integration.
+        
+        Args:
+            system_results: Dict of system risk results
+            trust_envelope: Optional TrustEnvelope from validation layer
+            
+        Returns:
+            Composite RiskScore with trust-adjusted confidence
+        """
+        # Compute base composite risk
+        composite = self.compute_composite_risk(system_results)
+        
+        # Apply trust envelope adjustments
+        if trust_envelope is not None:
+            # Adjust confidence based on trust envelope
+            composite.confidence = trust_envelope.get_adjusted_confidence(composite.confidence)
+            
+            # Add trust context to explanation
+            if trust_envelope.requires_caveats:
+                composite.explanation += f" (Data quality: {trust_envelope.overall_reliability:.0%})"
+        
+        return composite
+    
+    def compute_composite_risk_from_trusted(
+        self,
+        trusted_results: Dict[PhysiologicalSystem, "TrustedRiskResult"]
+    ) -> Tuple[RiskScore, List[str]]:
+        """
+        Compute composite risk from TrustedRiskResults.
+        
+        Handles rejected results by excluding them from the score calculation
+        and noting them in the explanation.
+        
+        Args:
+            trusted_results: Dict of TrustedRiskResult per system
+            
+        Returns:
+            Tuple of (Composite RiskScore, list of rejected system names)
+        """
+        valid_results: Dict[PhysiologicalSystem, SystemRiskResult] = {}
+        rejected_systems: List[str] = []
+        rejection_reasons: List[str] = []
+        
+        for system, trusted in trusted_results.items():
+            if trusted.was_rejected:
+                rejected_systems.append(system.value)
+                if trusted.rejection_reason:
+                    rejection_reasons.append(f"{system.value}: {trusted.rejection_reason}")
+            elif trusted.risk_result is not None:
+                valid_results[system] = trusted.risk_result
+        
+        # Compute composite from valid results only
+        if not valid_results:
+            explanation = "No systems could be reliably assessed."
+            if rejected_systems:
+                explanation += f" Rejected: {', '.join(rejected_systems)}."
+            return RiskScore(
+                name="composite_health_risk",
+                score=50.0,
+                confidence=0.0,
+                explanation=explanation
+            ), rejected_systems
+        
+        composite = self.compute_composite_risk(valid_results)
+        
+        # Append rejection note to explanation
+        if rejected_systems:
+            composite.explanation += (
+                f" Note: {len(rejected_systems)} system(s) excluded due to data quality: "
+                f"{', '.join(rejected_systems)}."
+            )
+        
+        # Apply trust adjustment using pre-adjusted confidences (avoid double-penalty)
+        trust_confidences = [
+            tr.trust_adjusted_confidence
+            for tr in trusted_results.values()
+            if not tr.was_rejected and tr.risk_result is not None
+        ]
+        if trust_confidences:
+            avg_trust = sum(trust_confidences) / len(trust_confidences)
+            # Scale composite confidence by average trust factor
+            composite.confidence = float(np.clip(
+                composite.confidence * avg_trust,
+                0.1, 0.99
+            ))
+        
+        return composite, rejected_systems
+

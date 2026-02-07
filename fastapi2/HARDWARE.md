@@ -2,24 +2,30 @@
 
 > **Target:** Hackathon prototype system for walk-through health screening chamber  
 > **Budget:** 20-30k INR (~$250-350 USD)  
-> **Goal:** 70-90% accuracy match with software algorithms
-
-## User Review Required
-
-> [!IMPORTANT]
-> **Sensor Selection Decision:** The design uses mmWave radar (60 GHz) as the primary respiratory sensor. This replaces RIS (Radar Impedance Spectroscopy) which is unavailable. Please confirm this substitution is acceptable.
-
-> [!IMPORTANT]
-> **Thermal Camera Option:** MLX90640 (32×24 pixels, ~₹3,500) vs AMG8833 (8×8 pixels, ~₹1,800). MLX90640 recommended for better thermal mapping. Confirm preference.
+> **Goal:** 70-90% accuracy match with software algorithms  
+> **Architecture:** Split-USB Topology (Modular, Safe, Hackathon-Ready)
 
 ---
 
-## Proposed Design
+## System Overview
 
-### System Block Diagram
+This design uses a **Split-USB Architecture** where all sensors connect to the laptop via a single USB hub. This eliminates complex UART wiring between components and provides a safer, more modular setup.
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| USB Hub as central connection | Single laptop USB port, easy cable management |
+| Seeed Radar Kit (standalone USB) | Built-in MCU, no UART wiring to ESP32 needed |
+| ESP32 NodeMCU for thermal only | Simplified role, just I2C → USB serial bridge |
+| MLX90640 55° FOV | Narrow FOV for face-focused thermal imaging |
+
+---
+
+## System Block Diagram
 
 > [!IMPORTANT]
-> **Camera Connection:** The webcam connects DIRECTLY to your laptop/PC via USB, NOT to the ESP32. The ESP32 only handles the other sensors (thermal, radar, pulse-ox).
+> **Split-USB Architecture:** All devices connect through a USB Hub. The laptop runs `bridge.py` which reads from **two separate COM ports** (Radar and ESP32).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -27,512 +33,349 @@
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
 │   ┌──────────────────────────────────────────────────────────────────────────┐  │
-│   │                  YOUR LAPTOP / PC (HOST)                                  │  │
-│   │  ┌─────────────────────────────────────────────────────────────────────┐ │  │
-│   │  │                                                                      │ │  │
-│   │  │   ┌─────────────────┐      ┌────────────────────────────────────┐   │ │  │
-│   │  │   │ Logitech C270   │      │           bridge.py                │   │ │  │
-│   │  │   │ / Laptop Webcam │─USB─►│  • CameraCapture (OpenCV)          │   │ │  │
-│   │  │   │ 1080p/30fps     │      │  • ESP32Reader (serial)            │   │ │  │
-│   │  │   └─────────────────┘      │  • DataFusion → FastAPI            │   │ │  │
-│   │  │                            └───────────────┬────────────────────┘   │ │  │
-│   │  │   ┌─────────────────┐                      │                        │ │  │
-│   │  │   │ ESP32 DevKit    │──────USB Serial──────┘                        │ │  │
-│   │  │   │ (via USB cable) │      @ 115200 baud                            │ │  │
-│   │  │   └─────────────────┘                                               │ │  │
-│   │  │                                                                      │ │  │
-│   │  └─────────────────────────────────────────────────────────────────────┘ │  │
-│   └──────────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                           │
-│                                      │ USB (long cable if needed)                │
-│                                      ▼                                           │
-│   ┌──────────────────────────────────────────────────────────────────────────┐  │
-│   │                     ESP32 + SENSORS (Separate Station)                    │  │
+│   │                     YOUR LAPTOP / PC (HOST)                               │  │
 │   │                                                                           │  │
-│   │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐          │  │
-│   │   │ MLX90640        │  │ 60GHz mmWave    │  │ MAX30102        │          │  │
-│   │   │ Thermal Camera  │  │ Radar           │  │ Pulse Oximeter  │          │  │
-│   │   │ (I2C @ 0x33)    │  │ (UART2)         │  │ (I2C @ 0x57)    │          │  │
-│   │   └────────┬────────┘  └────────┬────────┘  └────────┬────────┘          │  │
-│   │            │                    │                    │                    │  │
-│   │            └────────────────────┼────────────────────┘                    │  │
-│   │                                 ▼                                         │  │
-│   │                    ┌────────────────────────┐                             │  │
-│   │                    │   ESP32-WROOM-32D      │                             │  │
-│   │                    │   (Sensor Hub)         │                             │  │
-│   │                    │   Sends JSON @ 20 Hz   │                             │  │
-│   │                    └────────────────────────┘                             │  │
-│   └──────────────────────────────────────────────────────────────────────────┘  │
+│   │   ┌─────────────────────────────────────────────────────────────────┐    │  │
+│   │   │                      bridge.py                                   │    │  │
+│   │   │                                                                  │    │  │
+│   │   │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │    │  │
+│   │   │  │ CameraCapture│  │ RadarReader  │  │ ESP32Reader  │           │    │  │
+│   │   │  │ (OpenCV)     │  │ (Serial)     │  │ (Serial)     │           │    │  │
+│   │   │  │ Webcam       │  │ COM_A        │  │ COM_B        │           │    │  │
+│   │   │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘           │    │  │
+│   │   │         │                 │                 │                    │    │  │
+│   │   │         └─────────────────┴─────────────────┘                    │    │  │
+│   │   │                           │                                      │    │  │
+│   │   │                    DataFusion                                    │    │  │
+│   │   │                           │                                      │    │  │
+│   │   │                           ▼                                      │    │  │
+│   │   │               POST /api/v1/screening                             │    │  │
+│   │   └─────────────────────────────────────────────────────────────────┘    │  │
+│   │                                      ▲                                    │  │
+│   │                                      │ USB                                │  │
+│   │   ┌──────────────────────────────────┴────────────────────────────────┐  │  │
+│   │   │                    4-PORT USB 2.0 HUB                              │  │  │
+│   │   │               (Powered from Laptop USB Port)                       │  │  │
+│   │   └───┬─────────────────────┬─────────────────────┬───────────────────┘  │  │
+│   │       │                     │                     │                       │  │
+│   └───────┼─────────────────────┼─────────────────────┼───────────────────────┘  │
+│           │                     │                     │                          │
+│           ▼                     ▼                     ▼                          │
+│   ┌───────────────┐     ┌───────────────┐     ┌───────────────┐                  │
+│   │    WEBCAM     │     │  SEEED RADAR  │     │ ESP32 NodeMCU │                  │
+│   │  Logitech C270│     │  MR60BHA2 Kit │     │  (30-Pin)     │                  │
+│   │   or Laptop   │     │               │     │  CP2102 USB   │                  │
+│   │   built-in    │     │ Built-in XIAO │     │               │                  │
+│   │               │     │ ESP32C6 MCU   │     │      ┌────┐   │                  │
+│   │  ┌─────────┐  │     │               │     │      │I2C │   │                  │
+│   │  │ Video   │  │     │ ┌───────────┐ │     │      └──┬─┘   │                  │
+│   │  │ Frames  │  │     │ │ Breathing │ │     │         │     │                  │
+│   │  │ @30fps  │  │     │ │ Heartbeat │ │     │         ▼     │                  │
+│   │  └─────────┘  │     │ │ Data      │ │     │  ┌──────────┐ │                  │
+│   │               │     │ └───────────┘ │     │  │ MLX90640 │ │                  │
+│   │               │     │               │     │  │ Thermal  │ │                  │
+│   │               │     │ Serial/COM_A  │     │  │ 55° FOV  │ │                  │
+│   │               │     │ @115200 baud  │     │  └──────────┘ │                  │
+│   └───────────────┘     └───────────────┘     │               │                  │
+│                                               │ Serial/COM_B  │                  │
+│                                               │ @115200 baud  │                  │
+│                                               └───────────────┘                  │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 SUMMARY OF CONNECTIONS:
 ═══════════════════════
-✓ Webcam/Camera    → USB      → Laptop (OpenCV reads directly)
-✓ ESP32            → USB      → Laptop (Serial JSON data)
-✓ Thermal Camera   → I2C      → ESP32
-✓ mmWave Radar     → UART     → ESP32
-✓ Pulse Oximeter   → I2C      → ESP32
+✓ USB Hub         → USB      → Laptop (single port from laptop)
+✓ Webcam          → USB      → Hub Port 1 → Video to OpenCV
+✓ Seeed Radar Kit → USB      → Hub Port 2 → Serial/COM_A (Breathing/Heartbeat)
+✓ ESP32 NodeMCU   → USB      → Hub Port 3 → Serial/COM_B (Thermal JSON)
+✓ MLX90640        → I2C      → ESP32 NodeMCU (D21 SDA, D22 SCL)
 ```
-
 
 ---
 
-### 1. Power Supply Design
+## 1. Power Supply Design
 
 > [!NOTE]
-> **Using Your Laptop as the Brain:** Your laptop provides processing power and camera. You only need to power the ESP32 + sensors (via laptop USB or a small 5V supply).
+> **USB Hub Powers Everything:** The laptop USB port powers the hub, which distributes power to all connected devices. No separate power supply needed for the hackathon prototype.
 
-**Option A: Laptop-Powered Setup (Recommended for Hackathon)**
+### USB Hub Powered Configuration (Recommended)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    LAPTOP-POWERED CONFIGURATION (Simplest)                       │
+│                    USB HUB POWERED CONFIGURATION (Simplest)                      │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
 │   YOUR LAPTOP                                                                    │
-│   ├── USB Port 1 ──► Webcam (or built-in) ─── Draws ~500mA from laptop          │
-│   │                                                                              │
-│   └── USB Port 2 ──► ESP32 DevKit ─── Powers ESP32 + sensors via USB            │
-│                          │                                                       │
-│                          └── 5V USB power shared to:                             │
-│                              ├── ESP32 (3.3V onboard regulator)                  │
-│                              ├── MLX90640 (via 3.3V breakout)                    │
-│                              └── MAX30102 (via 3.3V)                             │
+│   └── USB 3.0 Port ──► 4-Port USB 2.0 Hub (draws up to 500mA per port)          │
+│                            │                                                     │
+│                            ├── Port 1 ──► Webcam ─────────────── ~100mA         │
+│                            │                                                     │
+│                            ├── Port 2 ──► Seeed Radar Kit ────── ~300mA         │
+│                            │              (Built-in XIAO ESP32C6)                │
+│                            │                                                     │
+│                            └── Port 3 ──► ESP32 NodeMCU ────────── ~150mA       │
+│                                           │                                      │
+│                                           └── 3.3V ──► MLX90640 ─── ~25mA       │
 │                                                                                  │
-│   Note: mmWave radar may need separate 5V/1A supply if power hungry             │
+│   Total Power Draw: ~575mA (well within USB 3.0 900mA limit)                    │
 │                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Option B: Standalone Power Supply (For Full Chamber Setup)**
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           POWER DISTRIBUTION NETWORK                             │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   AC MAINS                                                                       │
-│   220V/50Hz ──► [Wall Adapter 12V/2A] ──► DC 12V RAIL                           │
-│                      │                                                           │
-│                      ▼                                                           │
-│   ┌─────────────────────────────┐  (Laptop has its own power adapter)           │
-│   │ Buck Converter              │                                                │
-│   │ LM2596 (12V→5V/2A)          │                                                │
-│   └─────────────┬───────────────┘                                                │
-│                 │                                                                │
-│                 ▼                                                                │
-│   ┌─────────────────────────────┐  ┌─────────────────────────────┐              │
-│   │      5V Rail (Sensors)      │  │     3.3V Rail (Logic)       │              │
-│   │  ┌────────────────────────┐ │  │  ┌────────────────────────┐ │              │
-│   │  │ mmWave Radar      1.0A │ │  │  │ ESP32 Module     500mA │ │              │
-│   │  │ ESP32 (if not USB) 0.5A│ │  │  │ MLX90640         80mA  │ │              │
-│   │  └────────────────────────┘ │  │  │ MAX30102         50mA  │ │              │
-│   │  Total: ~1.5A               │  │  └────────────────────────┘ │              │
-│   └─────────────────────────────┘  │  Total: ~700mA              │              │
-│                                    └─────────────────────────────┘              │
-│   DECOUPLING:                                                                    │
-│   • 10μF bulk cap at each regulator output                                      │
-│   • 100nF ceramic at each IC VCC pin                                            │
-│   • 10μF at ESP32 3.3V input                                                    │
+│   If using USB 2.0 port (500mA limit), use a POWERED USB hub instead           │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Power Budget (ESP32 + Sensors Only):**
+### Power Budget
 
-| Component | Voltage | Current (typ) | Current (max) | Power |
-|-----------|---------|---------------|---------------|-------|
-| ESP32-WROOM-32 | 3.3V | 80mA | 500mA | 1.65W |
-| MLX90640 | 3.3V | 18mA | 80mA | 0.26W |
-| MAX30102 | 3.3V | 20mA | 50mA | 0.17W |
-| mmWave Radar | 5V | 700mA | 1A | 5W |
-| LEDs/Misc | 3.3V | 50mA | 100mA | 0.33W |
-| **Total** | - | - | - | **~7.5W** |
+| Device | Voltage | Current (typ) | Current (max) | Power |
+|--------|---------|---------------|---------------|-------|
+| Webcam (Logitech C270) | 5V USB | 100mA | 200mA | 1.0W |
+| Seeed Radar Kit MR60BHA2 | 5V USB | 200mA | 350mA | 1.75W |
+| ESP32 NodeMCU (30-Pin) | 5V USB | 80mA | 150mA | 0.75W |
+| MLX90640 (via ESP32 3.3V) | 3.3V | 18mA | 25mA | 0.08W |
+| **Total** | - | ~400mA | ~725mA | **~3.6W** |
 
 > [!TIP]
-> For hackathon: Just plug ESP32 into laptop USB. A 12V/1A adapter is sufficient for standalone sensor power if needed.
+> For reliable operation, use a **powered USB hub** if your laptop has weak USB power delivery. Look for hubs with external 5V/2A power adapters.
 
 ---
 
-### 2. Circuit Schematic - Sensor Connections
+## 2. Circuit Schematic - Sensor Connections
 
-#### 2.1 ESP32 Core Circuit
+### 2.1 ESP32 NodeMCU (Thermal Only)
+
+The ESP32 NodeMCU's sole purpose is to read the MLX90640 thermal camera via I2C and send JSON data over USB serial.
 
 ```
-                                ESP32-WROOM-32D
+                          ESP32 NodeMCU 30-Pin (CP2102)
                           ┌──────────────────────────┐
-                    EN ───┤1   EN               GND  ├─── GND
-              GPIO36/VP ───┤2   VP               3V3  ├─── 3.3V        
-              GPIO39/VN ───┤3   VN          GPIO23   ├─── NC
-              GPIO34/A6 ───┤4   34          GPIO22   ├─── I2C SCL ──►
-              GPIO35/A7 ───┤5   35          GPIO01/TX├─── UART0 TX (Debug/Host)
-              GPIO32/A4 ───┤6   32          GPIO03/RX├─── UART0 RX (Debug/Host)
-              GPIO33/A5 ───┤7   33          GPIO21   ├─── I2C SDA ──►
-              GPIO25/A18───┤8   25          GPIO19   ├─── Test Point 2
-              GPIO26/A19───┤9   26          GPIO18   ├─── Test Point 1
-              GPIO27/A17───┤10  27          GPIO05   ├─── LED Activity (Green)
-              GPIO14/A16───┤11  14          GPIO17/TX├─── UART2 TX (Radar) ──►
-              GPIO12/A15───┤12  12          GPIO16/RX├─── UART2 RX (Radar) ◄──
-                    GND ───┤13  GND         GPIO04   ├─── LED Status (Blue)
-              GPIO13/A14───┤14  13          GPIO00   ├─── Boot (10k pull-up)
-              SD2/GPIO09───┤15  SD2         GPIO02   ├─── NC (Boot strapping)
-              SD3/GPIO10───┤16  SD3         GPIO15/A13├── Test Point 3
-              CMD/GPIO11───┤17  CMD          SD1/GPIO8├── NC
-              CLK/GPIO06───┤18  CLK          SD0/GPIO7├── NC
-              SD0/GPIO07───┤19  SD0               GND ├─── GND
+                    3V3 ──┤ 3V3                  GND ├─── GND
+                    RST ──┤ EN                   D23 ├─── NC
+               (NC) VP ───┤ VP                   D22 ├─── I2C SCL ──► MLX90640
+               (NC) VN ───┤ VN                   D1  ├─── USB TX (to PC)
+               (NC) D34 ──┤ D34                  D3  ├─── USB RX (from PC)
+               (NC) D35 ──┤ D35                  D21 ├─── I2C SDA ──► MLX90640
+               (NC) D32 ──┤ D32                  D19 ├─── NC
+               (NC) D33 ──┤ D33                  D18 ├─── NC
+               (NC) D25 ──┤ D25                  D5  ├─── LED Activity (Green)
+               (NC) D26 ──┤ D26                  D17 ├─── NC (was UART2 TX)
+               (NC) D27 ──┤ D27                  D16 ├─── NC (was UART2 RX)
+               (NC) D14 ──┤ D14                  D4  ├─── LED Status (Blue)
+               (NC) D12 ──┤ D12                  D0  ├─── Boot (leave floating)
+                    GND ──┤ GND                  D2  ├─── NC
+               (NC) D13 ──┤ D13                  D15 ├─── NC
+                    VIN ──┤ VIN (5V from USB)   GND ├─── GND
                           └──────────────────────────┘
 
-Power Filtering:
-    3.3V ───┬─── 10μF ─┬─── ESP32 3V3
-            │          │
-            └─ 100nF ──┘
-                       │
-                      GND
-
-Boot Circuit:
-    GPIO0 ──┬── 10kΩ ── 3.3V
-            │
-            └── [SW_BOOT] ── GND
-
-Reset Circuit:
-    EN ─────┬── 10kΩ ── 3.3V
-            │
-            └── 10μF ── GND
-            │
-            └── [SW_RST] ── GND
+SIMPLIFIED WIRING (Only 4 wires!):
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                  │
+│   MLX90640 Breakout (55° FOV)                                   │
+│   ┌────────────────────────┐                                    │
+│   │  VIN ─────────────────────── ESP32 3V3                      │
+│   │  GND ─────────────────────── ESP32 GND                      │
+│   │  SDA ─────────────────────── ESP32 D21 (GPIO21)             │
+│   │  SCL ─────────────────────── ESP32 D22 (GPIO22)             │
+│   └────────────────────────┘                                    │
+│                                                                  │
+│   Optional: 4.7kΩ pull-up resistors on SDA/SCL to 3.3V          │
+│   (Most breakout boards have these built-in)                    │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-#### 2.2 I2C Bus (Thermal Camera + Pulse Oximeter)
+### 2.2 Seeed Radar Kit (MR60BHA2) - Standalone USB
+
+The Seeed MR60BHA2 kit is a self-contained unit with a built-in XIAO ESP32C6 microcontroller. It connects directly to the USB hub and appears as a serial COM port.
 
 ```
-                         I2C BUS SCHEMATIC
-            ┌────────────────────────────────────────────────────┐
-            │                                                    │
-            │     SDA (GPIO21)                SCL (GPIO22)       │
-            │        │                           │               │
-            │        ├── 4.7kΩ ── 3.3V           ├── 4.7kΩ ── 3.3V
-            │        │                           │               │
-            │        │     ┌─────────────────────┘               │
-            │        │     │                                     │
-            │    ┌───▼─────▼───┐                                 │
-            │    │   MLX90640   │  Addr: 0x33                    │
-            │    │  32×24 IR    │                                │
-            │    │  Thermal Cam │                                │
-            │    └──────┬───────┘                                │
-            │           │ VDD=3.3V, GND                          │
-            │           │                                        │
-            │    ┌──────▼───────┐                                │
-            │    │   MAX30102   │  Addr: 0x57                    │
-            │    │ Pulse/SpO2   │                                │
-            │    │              │                                │
-            │    └──────┬───────┘                                │
-            │           │ VDD=3.3V, GND                          │
-            │           │                                        │
-            │    ┌──────▼───────┐                                │
-            │    │   OPTIONAL   │                                │
-            │    │  SSD1306     │  Addr: 0x3C (OLED Display)     │
-            │    │  128×64 OLED │                                │
-            │    └──────────────┘                                │
-            │                                                    │
-            └────────────────────────────────────────────────────┘
-
-MLX90640 Pinout (SMD breakout):
-    VDD ─── 3.3V (with 10μF + 100nF)
-    GND ─── GND
-    SDA ─── GPIO21
-    SCL ─── GPIO22
-
-MAX30102 Pinout:
-    VIN ─── 3.3V (with 10μF + 100nF)  
-    GND ─── GND
-    SDA ─── GPIO21
-    SCL ─── GPIO22
-    INT ─── GPIO35 (optional interrupt)
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                  │
+│   Seeed MR60BHA2 60GHz mmWave Breathing & Heartbeat Kit         │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │                                                          │   │
+│   │   ┌─────────────────┐    ┌─────────────────┐            │   │
+│   │   │ 60GHz mmWave    │◄──►│ XIAO ESP32C6   │            │   │
+│   │   │ Radar Sensor    │    │ (Built-in MCU)  │            │   │
+│   │   │                 │    │                 │            │   │
+│   │   │ • Breathing     │    │ Processes radar │            │   │
+│   │   │ • Heartbeat     │    │ data and sends  │            │   │
+│   │   │ • Presence      │    │ via USB Serial  │            │   │
+│   │   └─────────────────┘    └────────┬────────┘            │   │
+│   │                                   │                      │   │
+│   │                                   │ USB-C                │   │
+│   │                                   ▼                      │   │
+│   │                          ┌─────────────────┐            │   │
+│   │                          │ To USB Hub      │            │   │
+│   │                          │ (appears as COM │            │   │
+│   │                          │  port on PC)    │            │   │
+│   │                          └─────────────────┘            │   │
+│   │                                                          │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│   No wiring required to ESP32 NodeMCU!                          │
+│   Power: 5V from USB                                            │
+│   Data: Serial @ 115200 baud (configurable)                     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-#### 2.3 mmWave Radar Interface (UART)
+### 2.3 Camera Connection
+
+The webcam connects directly to the USB hub. No wiring to any microcontroller.
 
 ```
-                     60 GHz RADAR MODULE CONNECTION
-            ┌────────────────────────────────────────────────────┐
-            │                                                    │
-            │    IWR6843 / AWR1642 EVM (TI Radar Module)         │
-            │    ┌─────────────────────────────────────┐         │
-            │    │                                     │         │
-            │    │  VCC ─────────────── 5V Rail        │         │
-            │    │  GND ─────────────── GND            │         │
-            │    │                                     │         │
-            │    │  UART TX ─────┬───── Level Shift ───┼─── GPIO16 (ESP32 RX)
-            │    │               │     (5V → 3.3V)     │         │
-            │    │  UART RX ────┬┼───── Level Shift ───┼─── GPIO17 (ESP32 TX)
-            │    │              ││     (3.3V → 5V)     │         │
-            │    │              ││                     │         │
-            │    │  RESET ──────┼┼── GPIO27 (Optional) │         │
-            │    │              ││                     │         │
-            │    └──────────────┼┼─────────────────────┘         │
-            │                   ││                               │
-            │                   ▼▼                               │
-            │    ┌─────────────────────────────────────┐         │
-            │    │  BSS138 Level Shifter Module        │         │
-            │    │  ┌─────────────────────────────────┐│         │
-            │    │  │ LV ─── 3.3V    HV ─── 5V        ││         │
-            │    │  │ GND ─── GND   GND ─── GND       ││         │
-            │    │  │ L1 ──── ◄───► ── H1             ││         │
-            │    │  │ L2 ──── ◄───► ── H2             ││         │
-            │    │  └─────────────────────────────────┘│         │
-            │    └─────────────────────────────────────┘         │
-            │                                                    │
-            │    UART Configuration:                             │
-            │      Baud Rate: 921600 (typical for TI radar)      │
-            │      Data Bits: 8                                  │
-            │      Stop Bits: 1                                  │
-            │      Parity: None                                  │
-            │                                                    │
-            └────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                  │
+│   Webcam Options:                                               │
+│                                                                  │
+│   Option A: External USB Webcam (Logitech C270 or similar)      │
+│   ┌────────────────────────┐                                    │
+│   │                        │                                    │
+│   │   Logitech C270        │───► USB Cable ───► USB Hub        │
+│   │   720p/30fps           │                                    │
+│   │                        │                                    │
+│   └────────────────────────┘                                    │
+│                                                                  │
+│   Option B: Laptop Built-in Webcam                              │
+│   • No additional hardware needed                                │
+│   • Use camera index 0 in OpenCV                                │
+│   • Frees up one USB hub port                                   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
-#### 2.4 Camera and USB Connections
-
-> [!IMPORTANT]
-> The **camera connects directly to your laptop** via USB or uses the built-in laptop webcam. It does NOT connect to the ESP32 or Raspberry Pi.
-
-```
-                LAPTOP USB CONNECTIONS
-    ┌──────────────────────────────────────────────────────────┐
-    │                                                          │
-    │    YOUR LAPTOP / PC                                      │
-    │    ┌─────────────────┐                                   │
-    │    │  USB Port 1   ──┼──► Logitech C270 / Webcam        │
-    │    │                 │    (or use built-in camera)       │
-    │    │                 │                                   │
-    │    │  USB Port 2   ──┼──► ESP32 DevKit (USB-Micro)      │
-    │    │                 │    Serial @ 115200 baud           │
-    │    │                 │                                   │
-    │    │  (Optional)     │                                   │
-    │    │  USB Hub      ──┼──► Additional devices             │
-    │    └─────────────────┘                                   │
-    │                                                          │
-    │    For Demo/Hackathon:                                   │
-    │    • Just use laptop's built-in webcam (index 0)         │
-    │    • ESP32 connected via single USB cable                │
-    │    • No Raspberry Pi needed - laptop runs everything!    │
-    │                                                          │
-    │    Camera Settings:                                      │
-    │    • 720p or 1080p @ 30fps                               │
-    │    • Good lighting for rPPG                              │
-    │    • Distance: face capture 0.5-1m, body 2-3m            │
-    │                                                          │
-    └──────────────────────────────────────────────────────────┘
-```
-
 
 ---
 
-### 3. Pin Assignment Table
+## 3. Pin Assignment Table
+
+### ESP32 NodeMCU Pinout (Thermal Camera Only)
 
 | ESP32 Pin | GPIO | Function | Interface | Voltage | Connected To |
 |-----------|------|----------|-----------|---------|--------------|
-| 3V3 | - | Power | Power | 3.3V | All 3.3V devices |
-| GND | - | Ground | Power | 0V | All grounds |
-| GPIO21 | 21 | I2C SDA | I2C | 3.3V | MLX90640, MAX30102, OLED |
-| GPIO22 | 22 | I2C SCL | I2C | 3.3V | MLX90640, MAX30102, OLED |
-| GPIO16 | 16 | UART2 RX | UART | 3.3V | mmWave Radar TX (via level shifter) |
-| GPIO17 | 17 | UART2 TX | UART | 3.3V | mmWave Radar RX (via level shifter) |
-| GPIO01 | 01 | UART0 TX | UART | 3.3V | Host Processor / Debug |
-| GPIO03 | 03 | UART0 RX | UART | 3.3V | Host Processor / Debug |
-| GPIO04 | 04 | LED Status | GPIO | 3.3V | Blue LED (status) |
-| GPIO05 | 05 | LED Activity | GPIO | 3.3V | Green LED (data activity) |
-| GPIO18 | 18 | Test Point 1 | Debug | 3.3V | TP1 Header |
-| GPIO19 | 19 | Test Point 2 | Debug | 3.3V | TP2 Header |
-| GPIO15 | 15 | Test Point 3 | Debug | 3.3V | TP3 Header |
-| GPIO35 | 35 | Interrupt | GPIO In | 3.3V | MAX30102 INT (optional) |
-| GPIO27 | 27 | Radar Reset | GPIO Out | 3.3V | mmWave Reset (optional) |
-| GPIO00 | 00 | Boot Mode | Boot | 3.3V | Boot Button + 10k pull-up |
-| EN | - | Enable/Reset | Reset | 3.3V | Reset Button + RC filter |
+| 3V3 | - | Power Out | Power | 3.3V | MLX90640 VIN |
+| GND | - | Ground | Power | 0V | MLX90640 GND |
+| D21 | 21 | I2C SDA | I2C | 3.3V | MLX90640 SDA |
+| D22 | 22 | I2C SCL | I2C | 3.3V | MLX90640 SCL |
+| D4 | 04 | LED Status | GPIO Out | 3.3V | Blue LED (optional) |
+| D5 | 05 | LED Activity | GPIO Out | 3.3V | Green LED (optional) |
+| VIN | - | Power In | USB | 5V | From USB Hub |
+| D1/D3 | 01/03 | USB Serial | UART0 | 3.3V | USB-to-Serial (CP2102) |
+
+> [!NOTE]
+> **Simplified Pinout:** Only 4 GPIO pins are used (D21, D22 for I2C + optional D4, D5 for LEDs). GPIO 16/17 (UART2) are no longer used since the radar is on a separate USB connection.
 
 ---
 
-### 4. Communication Protocol Summary
+## 4. Communication Protocol Summary
 
-| Interface | Protocol | Speed | Devices | Data Flow |
-|-----------|----------|-------|---------|-----------|
-| I2C (GPIO21/22) | I2C @ 400kHz | 400 kbps | MLX90640, MAX30102, OLED | Bidirectional |
-| UART2 (GPIO16/17) | UART | 921600 baud | mmWave Radar | Radar → ESP32 (processed frames) |
-| UART0 (GPIO01/03) | UART | 115200 baud | Host Processor | ESP32 ↔ Host (JSON data) |
-| USB | USB 2.0 | 480 Mbps | Logitech C270 | Camera → Host (video frames) |
-| USB | USB 2.0 | 12 Mbps | ESP32 DevKit | Host ↔ ESP32 (optional) |
+| Device | Interface | Protocol | Speed | Data | COM Port Example |
+|--------|-----------|----------|-------|------|------------------|
+| Webcam | USB | UVC | 30 fps | Video frames | N/A (OpenCV) |
+| Seeed Radar Kit | USB Serial | UART | 115200 baud | Breathing/HR JSON | COM3 (Windows) |
+| ESP32 NodeMCU | USB Serial | UART | 115200 baud | Thermal JSON | COM4 (Windows) |
 
-**Data Format (ESP32 → Host via UART):**
+### Data Format: Seeed Radar Kit → bridge.py (COM_A)
 
-> [!IMPORTANT]
-> The ESP32 must send data in the **exact format expected by the FastAPI `/api/v1/screening` endpoint**. See format below.
-
-**Raw Sensor Data (ESP32 → Python Serial Reader):**
 ```json
 {
   "timestamp": 1707050232,
   "radar": {
     "respiration_rate": 15.2,
+    "heart_rate": 72,
     "breathing_depth": 0.73,
-    "micro_motion": 0.12
-  },
+    "presence_detected": true
+  }
+}
+```
+
+> [!WARNING]
+> **Verify Radar Protocol:** The exact JSON format from the Seeed MR60BHA2 kit may differ. Refer to [Seeed MR60BHA2 documentation](https://wiki.seeedstudio.com/mmwave_kit/) for the actual output format and adjust `bridge.py` accordingly.
+
+### Data Format: ESP32 NodeMCU → bridge.py (COM_B)
+
+```json
+{
+  "timestamp": 1707050232,
   "thermal": {
     "skin_temp_avg": 36.4,
     "skin_temp_max": 37.1,
     "thermal_asymmetry": 0.3,
     "thermal_map": [[36.1, 36.2, ...], ...]
-  },
-  "pulse_ox": {
-    "spo2": 98,
-    "heart_rate": 72
   }
 }
 ```
 
-**Python Bridge (Transforms ESP32 data → API ScreeningRequest):**
+### Data Flow: bridge.py → FastAPI
 
-A Python script on the Raspberry Pi must transform the raw sensor data into the API format:
-
-```python
-# bridge.py - ESP32 to API bridge
-import serial
-import json
-import requests
-
-API_URL = "http://localhost:8000/api/v1/screening"
-
-def transform_to_api_format(esp32_data: dict) -> dict:
-    """Transform ESP32 sensor data to API ScreeningRequest format."""
-    return {
-        "patient_id": "WALK_THROUGH_PATIENT",
-        "include_validation": True,
-        "systems": [
-            {
-                "system": "cardiovascular",
-                "biomarkers": [
-                    {"name": "heart_rate", "value": esp32_data["pulse_ox"]["heart_rate"], 
-                     "unit": "bpm", "normal_range": [60, 100]},
-                    {"name": "spo2", "value": esp32_data["pulse_ox"]["spo2"], 
-                     "unit": "%", "normal_range": [95, 100]},
-                    {"name": "chest_micro_motion", "value": esp32_data["radar"]["micro_motion"],
-                     "unit": "normalized_amplitude", "normal_range": [0.001, 0.01]}
-                ]
-            },
-            {
-                "system": "respiratory",  # Maps to pulmonary
-                "biomarkers": [
-                    {"name": "respiration_rate", "value": esp32_data["radar"]["respiration_rate"],
-                     "unit": "breaths/min", "normal_range": [12, 20]},
-                    {"name": "breathing_depth", "value": esp32_data["radar"]["breathing_depth"],
-                     "unit": "normalized", "normal_range": [0.5, 1.0]}
-                ]
-            },
-            {
-                "system": "skin",
-                "biomarkers": [
-                    {"name": "skin_temperature", "value": esp32_data["thermal"]["skin_temp_avg"],
-                     "unit": "celsius", "normal_range": [35.5, 37.5]},
-                    {"name": "thermal_asymmetry", "value": esp32_data["thermal"]["thermal_asymmetry"],
-                     "unit": "delta_celsius", "normal_range": [0, 0.5]}
-                ]
-            }
-        ]
-    }
-
-# Main loop
-ser = serial.Serial('/dev/ttyUSB0', 115200)
-while True:
-    line = ser.readline().decode().strip()
-    if line:
-        esp32_data = json.loads(line)
-        api_payload = transform_to_api_format(esp32_data)
-        response = requests.post(API_URL, json=api_payload)
-        print(f"Screening ID: {response.json()['screening_id']}")
 ```
-
-**Final API Request Format (what the API receives):**
-```json
-{
-  "patient_id": "WALK_THROUGH_PATIENT",
-  "include_validation": true,
-  "systems": [
-    {
-      "system": "cardiovascular",
-      "biomarkers": [
-        {"name": "heart_rate", "value": 72, "unit": "bpm", "normal_range": [60, 100]},
-        {"name": "spo2", "value": 98, "unit": "%", "normal_range": [95, 100]},
-        {"name": "chest_micro_motion", "value": 0.12, "unit": "normalized_amplitude"}
-      ]
-    },
-    {
-      "system": "pulmonary",
-      "biomarkers": [
-        {"name": "respiration_rate", "value": 15.2, "unit": "breaths/min"},
-        {"name": "breathing_depth", "value": 0.73, "unit": "normalized"}
-      ]
-    },
-    {
-      "system": "skin",
-      "biomarkers": [
-        {"name": "skin_temperature", "value": 36.4, "unit": "celsius"},
-        {"name": "thermal_asymmetry", "value": 0.3, "unit": "delta_celsius"}
-      ]
-    }
-  ]
-}
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                            DATA FLOW ARCHITECTURE                             │
+│                                                                               │
+│   ┌───────────────┐  Video    ┌─────────────────┐                            │
+│   │    Webcam     │─────────►│ CameraCapture    │                            │
+│   │               │          │ (rPPG, Pose)     │                            │
+│   └───────────────┘          └────────┬─────────┘                            │
+│                                       │                                       │
+│   ┌───────────────┐  COM_A   ┌────────┼─────────┐                            │
+│   │ Seeed Radar   │────────►│ RadarReader      │                            │
+│   │ Kit (USB)     │          │ (Breathing Data) │                            │
+│   └───────────────┘          └────────┼─────────┘                            │
+│                                       │                                       │
+│   ┌───────────────┐  COM_B   ┌────────┼─────────┐                            │
+│   │ ESP32 NodeMCU │────────►│ ESP32Reader      │                            │
+│   │ (USB)         │          │ (Thermal Data)   │                            │
+│   └───────────────┘          └────────┼─────────┘                            │
+│                                       │                                       │
+│                                       ▼                                       │
+│                         ┌─────────────────────────┐                          │
+│                         │     DataFusion          │                          │
+│                         │                         │                          │
+│                         │ • Merge rPPG biomarkers │                          │
+│                         │ • Merge radar data      │                          │
+│                         │ • Merge thermal data    │                          │
+│                         │ • Build API request     │                          │
+│                         └───────────┬─────────────┘                          │
+│                                     │                                         │
+│                                     ▼                                         │
+│                         ┌─────────────────────────┐                          │
+│                         │  POST /api/v1/screening │                          │
+│                         │     → FastAPI Server    │                          │
+│                         └─────────────────────────┘                          │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### 5. Bill of Materials (BOM)
+## 5. Bill of Materials (BOM)
 
 > [!IMPORTANT]
-> **Your laptop is the brain!** No Raspberry Pi needed. The BOM below is only for sensors + ESP32.
+> **Updated BOM with specific SKUs.** Your laptop is the brain - no Raspberry Pi needed.
 
-| # | Component | Part Number | Qty | Unit Price (INR) | Total (INR) | Source |
-|---|-----------|-------------|-----|------------------|-------------|--------|
-| 1 | ESP32-WROOM-32D DevKit | ESP32-DevKitC-32D | 1 | ₹450 | ₹450 | Robu.in |
-| 2 | Logitech C270 HD Webcam | C270 | 1 | ₹1,500 | ₹1,500 | Amazon.in |
-| 3 | MLX90640 Thermal Camera | MLX90640ESF-BAB | 1 | ₹3,500 | ₹3,500 | Robu.in |
-| 4 | MAX30102 Pulse Oximeter | MAX30102 Module | 1 | ₹250 | ₹250 | Robu.in |
-| 5 | 60GHz mmWave Radar | IWR6843ISK-ODS | 1 | ₹8,000 | ₹8,000 | TI Store* |
-| 6 | LM2596 Buck Converter | LM2596-ADJ | 1 | ₹100 | ₹100 | Robu.in |
-| 7 | BSS138 Level Shifter | BSS138 Module | 1 | ₹50 | ₹50 | Robu.in |
-| 8 | SSD1306 OLED 128×64 | 0.96" I2C OLED | 1 | ₹180 | ₹180 | Robu.in |
-| 9 | LEDs (Blue, Green) | 5mm LED | 4 | ₹5 | ₹20 | Local |
-| 10 | Resistors (10k, 4.7k, 330Ω) | Assorted | 20 | ₹2 | ₹40 | Local |
-| 11 | Capacitors (10μF, 100nF) | Ceramic/Electrolytic | 20 | ₹3 | ₹60 | Local |
-| 12 | Headers (Male/Female) | 2.54mm Pitch | 4 | ₹20 | ₹80 | Local |
-| 13 | Jumper Wires | Dupont Wires | 40 | ₹2 | ₹80 | Local |
-| 14 | Prototype PCB | 7×9cm Perf Board | 2 | ₹50 | ₹100 | Local |
-| 15 | USB Cables | Type-A to Micro | 2 | ₹80 | ₹160 | Amazon.in |
-| 16 | Enclosure/Mount | 3D Printed | 1 | ₹500 | ₹500 | Custom |
-| | | | | **Total** | **₹15,070** | |
+| # | Component | Description | SKU | Qty | Unit Price (INR) | Total (INR) | Source |
+|---|-----------|-------------|-----|-----|------------------|-------------|--------|
+| 1 | ESP32 NodeMCU Dev Board | 30-Pin, CP2102 USB-Serial | TIFCC01062 | 1 | ₹450 | ₹450 | Robu.in |
+| 2 | MLX90640 Thermal Camera | **55° FOV** IR Array Breakout | TIFCM0036 | 1 | ₹3,500 | ₹3,500 | Robu.in |
+| 3 | Seeed MR60BHA2 Radar Kit | 60GHz mmWave Breathing & Heartbeat | R1959399 | 1 | ₹8,000 | ₹8,000 | Seeed Studio |
+| 4 | Logitech C270 Webcam | HD 720p USB Camera | C270 | 1 | ₹1,500 | ₹1,500 | Amazon.in |
+| 5 | 4-Port USB 2.0 Hub | Standard USB hub (powered optional) | Generic | 1 | ₹300 | ₹300 | Amazon.in |
+| 6 | USB-A to USB-C Cable | For Seeed Radar Kit | Generic | 1 | ₹150 | ₹150 | Amazon.in |
+| 7 | USB-A to Micro-USB Cable | For ESP32 NodeMCU | Generic | 1 | ₹100 | ₹100 | Amazon.in |
+| 8 | Dupont Jumper Wires | Female-to-Female, 20cm | F-F 40pcs | 1 | ₹80 | ₹80 | Local |
+| 9 | LEDs (Blue, Green) | 5mm, optional status indicators | 5mm LED | 4 | ₹5 | ₹20 | Local |
+| 10 | Resistors (330Ω) | LED current limiting | 1/4W | 4 | ₹2 | ₹8 | Local |
+| | | | | | **Total** | **₹14,108** | |
 
-> [!NOTE]
-> *TI mmWave radar modules may require IndiaMART or direct TI order. Alternative: LD2410 radar module (~₹800) for simplified respiration detection.
-
-**Budget-Conscious Alternative (₹7,000):**
-- Replace IWR6843 with LD2410 (₹800) - saves ₹7,200
-- Use laptop's built-in webcam - saves ₹1,500
-- Total: ~₹6,370
+> [!TIP]
+> **Budget-Conscious Alternative (~₹6,000):**
+> - Use laptop built-in webcam (saves ₹1,500)
+> - Use LD2410 radar module instead of Seeed kit (~₹800 vs ₹8,000) - simpler but less accurate
+> - Total: ~₹5,358
 
 ---
 
-### 6. PCB Footprint Recommendations
-
-| Component | Package | Footprint | Notes |
-|-----------|---------|-----------|-------|
-| ESP32-WROOM-32D | Module | 25.5×18mm | 38-pin castellated |
-| MLX90640 | QFP-24 | 7×7mm | IR-transparent window required |
-| MAX30102 | Module | 14×11mm | Finger clip mount |
-| LM2596 | TO-263 | 10×15mm | Use adequate copper pour |
-| BSS138 | SOT-23 | 3×3mm | 4-channel module preferred |
-| USB Connector | Type-B | Standard | Use through-hole for durability |
-| LED | 5mm THT | 5mm | 330Ω series resistor |
-
----
-
-### 7. Mechanical Mounting Considerations
+## 6. Mechanical Mounting Considerations
 
 ```
                     WALK-THROUGH CHAMBER LAYOUT (Top View)
@@ -542,25 +385,26 @@ while True:
     │                          │                                  │
     │    ┌─────────────────────▼─────────────────────────────┐   │
     │    │                                                    │   │
-    │    │        [THERMAL CAM]                               │   │
-    │    │        Height: 1.2m                                │   │
-    │    │        Angle: Slightly downward                    │   │
+    │    │        [SEEED RADAR KIT]                          │   │
+    │    │        Height: 1.0m (chest level)                  │   │
+    │    │        Distance: 0.5-1.5m from subject             │   │
+    │    │        Angle: Perpendicular to chest               │   │
     │    │                                                    │   │
     │    │    ────────────── WALK PATH ────────────────       │   │
     │    │                      ↑                             │   │
-    │    │                      │                             │   │
-    │    │              [LOGITECH C270]                       │   │
-    │    │              Height: 1.2m (face) / 0.8m (body)     │   │
-    │    │              Distance: 1.5-2.0m from subject       │   │
-    │    │                                                    │   │
-    │    │    [mmWAVE RADAR]                                  │   │
-    │    │    Height: 1.0m (chest level)                      │   │
-    │    │    Distance: 0.5-1.5m optimal range                │   │
+    │    │               [MLX90640 THERMAL]                   │   │
+    │    │               Height: 1.5m (face level)            │   │
+    │    │               Distance: 0.5-1.0m                   │   │
+    │    │               FOV: 55° (narrow, face-focused)      │   │
+    │    │                      ↑                             │   │
+    │    │              [WEBCAM / CAMERA]                     │   │
+    │    │              Height: 1.5m (face) / 1.0m (body)     │   │
+    │    │              Distance: 1.0-2.0m from subject       │   │
     │    │                                                    │   │
     │    │    ────────────── WALK PATH ────────────────       │   │
     │    │                                                    │   │
     │    │    [CONTROL STATION]                               │   │
-    │    │    ESP32 + LAPTOP (on table) + Power               │   │
+    │    │    Laptop + USB Hub + ESP32                        │   │
     │    │    Side-mounted, accessible for maintenance        │   │
     │    │                                                    │   │
     │    └────────────────────────────────────────────────────┘   │
@@ -576,94 +420,65 @@ Lighting Requirements:
 • Consistent lighting reduces motion artifacts
 ```
 
-**Sensor Mounting Specifications:**
+### Sensor Mounting Specifications
 
 | Sensor | Height | Distance | Angle | Notes |
 |--------|--------|----------|-------|-------|
-| Logitech C270 (Face) | 1.2m | 0.5-1.0m | Eye level | Phase 1: Close-up face |
-| Logitech C270 (Body) | 0.8-1.0m | 2.0-3.0m | Full body | Phase 2: Gait analysis |
-| MLX90640 | 1.2m | 0.5-1.0m | Face-level | Forehead/cheek thermal |
-| mmWave Radar | 1.0m | 0.5-1.5m | Chest-level | Perpendicular to chest |
-| MAX30102 | Side station | N/A | Finger clip | Calibration station |
+| Webcam (Face) | 1.5m | 0.5-1.0m | Eye level | Phase 1: Close-up face for rPPG |
+| Webcam (Body) | 1.0m | 2.0-3.0m | Full body | Phase 2: Gait analysis |
+| MLX90640 | 1.5m | 0.5-1.0m | Face-level | 55° FOV focused on forehead/cheeks |
+| Seeed Radar | 1.0m | 0.5-1.5m | Chest-level | Perpendicular to chest wall |
 
 ---
 
-### 8. EMI Shielding and Cable Guidelines
+## 7. Software Integration
 
-> [!WARNING]
-> 60 GHz radar is extremely sensitive to EMI and reflections. Proper shielding is critical.
+### Key Files
 
-**Shielding Guidelines:**
+| File | Purpose |
+|------|---------|
+| [bridge.py](file:///c:/Users/KOUSTAV%20BERA/OneDrive/Desktop/chiranjeevi/fastapi2/bridge.py) | Main integration - reads from TWO serial ports + camera |
+| [esp32_thermal_bridge.ino](file:///c:/Users/KOUSTAV%20BERA/OneDrive/Desktop/chiranjeevi/fastapi2/firmware/esp32_thermal_bridge.ino) | ESP32 firmware (thermal camera only) |
 
-1. **mmWave Radar:**
-   - Use shielded twisted pair for UART lines
-   - Keep radar module away from power cables (>10cm)
-   - Shield radar enclosure with metal mesh (aperture <λ/10 = 0.5mm)
-   - Grounded metal plate behind radar to reduce multipath
+### Running the Bridge
 
-2. **Camera:**
-   - Use shielded USB cables with ferrite cores
-   - Keep USB cables away from radar and power
-   - Max USB cable length: 3m (use active extension if longer)
+```bash
+# Start the FastAPI server first
+uvicorn app.main:app --reload
 
-3. **I2C Bus:**
-   - Keep I2C traces short (<30cm)
-   - Use proper pull-up resistors (4.7kΩ for 400kHz)
-   - Avoid running parallel to high-speed signals
+# Run bridge with all hardware (Windows example)
+python bridge.py --radar-port COM3 --port COM4 --camera 0
 
-4. **Power:**
-   - Separate analog and digital grounds (star topology)
-   - Add ferrite beads on power input
-   - Use ground plane on PCB
+# Run with simulated data (no hardware)
+python bridge.py --simulate
+```
 
----
+### CLI Arguments
 
-### 9. Design Notes
-
-#### 9.1 Component Selection Rationale
-
-| Component | Why Chosen | Alternatives |
-|-----------|------------|--------------|
-| ESP32-WROOM-32 | WiFi/BT, dual-core, multiple UART, low cost | Arduino Mega (no WiFi), STM32 (complex) |
-| Your Laptop | Runs MediaPipe/OpenCV/FastAPI, already have it | Raspberry Pi 4B (slower), Intel NUC (expensive) |
-| Logitech C270 / Laptop webcam | 720p/30fps, good low-light, USB, cheap | Logitech C920 (overkill), Intel RealSense (expensive) |
-| MLX90640 | 32×24 resolution, I2C, radiometric | AMG8833 (8×8, too low), FLIR Lepton (expensive) |
-| MAX30102 | Proven accuracy, I2C, low power | MAX30100 (older), pulse sensor (unreliable) |
-| IWR6843 | TI's 60GHz vital signs radar, SDK available | AWR1642 (similar), LD2410 (simpler but less data) |
-
-#### 9.2 Hardware Limitations & Mitigations
-
-| Limitation | Impact | Mitigation |
-|------------|--------|------------|
-| Camera motion blur | rPPG artifacts | Fixed mount, software stabilization |
-| Ambient light variation | rPPG SNR | Controlled LED lighting |
-| Thermal drift | Temperature offset | Calibration every 30 min |
-| Radar multipath | False respiratory rate | Shielding, signal processing |
-| ESP32 UART limited buffers | Data loss | DMA transfer, flow control |
-| I2C clock stretching | Timing issues | Proper timeouts in firmware |
-
-#### 9.3 Safety Considerations
-
-- **Electrical:** Use fused power input, low-voltage DC only
-- **EMI:** Radar complies with FCC Part 15, CE marked modules only
-- **Optical:** Camera uses visible light only, no IR laser
-- **Thermal:** Passive heat dissipation, no active cooling needed (<40°C ambient)
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--radar-port` | COM3 | Serial port for Seeed Radar Kit |
+| `--port` | COM4 | Serial port for ESP32 NodeMCU (thermal) |
+| `--camera` | 0 | Camera index for OpenCV |
+| `--api-url` | http://localhost:8000 | FastAPI server URL |
+| `--simulate` | False | Use simulated sensor data |
+| `--patient-id` | WALKTHROUGH_001 | Patient identifier |
 
 ---
 
-### 10. Verification Plan
+## 8. Verification Plan
 
-#### Automated Tests
+### Automated Tests
 
 | Test | Method | Pass Criteria |
 |------|--------|---------------|
-| Power rail voltages | Multimeter at test points | 5V ±0.25V, 3.3V ±0.1V |
-| I2C device scan | `i2cdetect -y 1` | Detect 0x33, 0x57, 0x3C |
-| ESP32 UART echo | Loopback test | 100% byte accuracy |
-| Camera detection | `lsusb` / OpenCV | Device ID visible |
-| Radar data stream | Serial monitor | JSON frames at 20Hz |
+| USB Hub detection | Device Manager / `lsusb` | All 3 devices visible |
+| Camera detection | `python -c "import cv2; print(cv2.VideoCapture(0).isOpened())"` | Returns `True` |
+| Radar serial | `python -c "import serial; print(serial.Serial('COM3', 115200))"` | No exception |
+| ESP32 serial | `python -c "import serial; print(serial.Serial('COM4', 115200))"` | No exception |
+| Simulated run | `python bridge.py --simulate` | Screening ID returned |
 
-#### Manual Verification
+### Manual Verification
 
 1. **Camera Test:**
    - Run `python camera_test.py`
@@ -671,147 +486,85 @@ Lighting Requirements:
    - Check frame rate: should be 25-30 fps
 
 2. **Thermal Camera Test:**
-   - Point at known temperature reference (body temp ~36.5°C)
-   - Verify ±1°C accuracy after calibration
+   - Point MLX90640 at known temperature (body ~36.5°C)
+   - Verify ±1°C accuracy via ESP32 serial output
 
 3. **Radar Test:**
    - Stand 1m from radar, breathe normally
-   - Verify respiration rate matches manual count (±1 BPM)
+   - Check Seeed Radar serial output for respiration_rate
+   - Verify matches manual count (±1 BPM)
 
-4. **Pulse Oximeter Test:**
-   - Compare SpO₂ with clinical reference device
-   - Verify ±2% accuracy
-
-#### Data Synchronization Checklist
-
-- [ ] All sensor streams tagged with Unix timestamp
-- [ ] ESP32 NTP sync at boot (via WiFi)
-- [ ] Maximum timestamp drift: <50ms over 60s session
-- [ ] JSON packet includes `timestamp` field
+4. **Full Integration Test:**
+   ```bash
+   python bridge.py --radar-port COM3 --port COM4 --camera 0
+   ```
+   - Verify all 3 data sources appear in API request
+   - Check PDF report generation
 
 ---
 
-### 11. Software Integration Notes
+## 9. Design Notes
 
-The hardware interfaces with the existing FastAPI software via the **bridge.py** script:
+### Component Selection Rationale
 
-#### Key Files
+| Component | Why Chosen | Alternatives |
+|-----------|------------|--------------|
+| ESP32 NodeMCU (30-Pin) | Simple, CP2102 driver works on Windows, cheap | Wemos D1 Mini, Arduino Nano |
+| MLX90640 55° FOV | Narrow FOV better for face focus, I2C, radiometric | AMG8833 (8×8 too low), 110° FOV (too wide) |
+| Seeed MR60BHA2 | All-in-one solution, USB plug-and-play, built-in MCU | TI IWR6843 (needs UART wiring), LD2410 (simpler) |
+| 4-Port USB Hub | Central connection, single laptop USB port used | USB 3.0 Hub (overkill), direct connections (uses 3 ports) |
 
-| File | Purpose |
-|------|---------|
-| [bridge.py](file:///c:/Users/KOUSTAV%20BERA/OneDrive/Desktop/chiranjeevi/fastapi2/bridge.py) | Main integration script |
-| [esp32_health_bridge.ino](file:///c:/Users/KOUSTAV%20BERA/OneDrive/Desktop/chiranjeevi/fastapi2/firmware/esp32_health_bridge.ino) | ESP32 Arduino firmware |
-| [HARDWARE_QUICKSTART.md](file:///c:/Users/KOUSTAV%20BERA/OneDrive/Desktop/chiranjeevi/fastapi2/HARDWARE_QUICKSTART.md) | Quick start guide |
+### Hardware Limitations & Mitigations
 
-#### Data Flow Architecture
+| Limitation | Impact | Mitigation |
+|------------|--------|------------|
+| Camera motion blur | rPPG artifacts | Fixed mount, software stabilization |
+| Ambient light variation | rPPG SNR degradation | Controlled LED lighting |
+| Thermal drift | Temperature offset | Calibration every 30 min |
+| USB bandwidth | Video lag with 3 devices | Use USB 3.0 hub if issues arise |
+| Two serial ports | More complex software | RadarReader class in bridge.py |
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        HARDWARE LAYER                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │ mmWave Radar │  │ MLX90640     │  │ MAX30102     │               │
-│  │ (Respiration)│  │ (Thermal)    │  │ (SpO2/HR)    │               │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘               │
-│         │                 │                 │                        │
-│         └────────────────┬┴─────────────────┘                        │
-│                          ▼                                           │
-│              ┌────────────────────────┐                              │
-│              │  ESP32 (sensor fusion) │                              │
-│              │  JSON via UART @ 20 Hz │                              │
-│              └───────────┬────────────┘                              │
-└──────────────────────────┼───────────────────────────────────────────┘
-                           │ Serial USB
-                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        BRIDGE LAYER (bridge.py)                      │
-│                                                                      │
-│  ┌──────────────┐  ┌──────────────────────┐  ┌─────────────────┐    │
-│  │ ESP32Reader  │  │ CameraCapture        │  │ DataFusion      │    │
-│  │ (Serial JSON)│  │ (rPPG + Pose)        │  │ (API Transform) │    │
-│  └──────┬───────┘  └──────────┬───────────┘  └────────┬────────┘    │
-│         │                     │                       │              │
-│         └─────────────────────┴───────────────────────┘              │
-│                               │                                      │
-│                               ▼                                      │
-│              ┌────────────────────────────┐                          │
-│              │  build_screening_request() │                          │
-│              │  → POST /api/v1/screening  │                          │
-│              └────────────────────────────┘                          │
-└──────────────────────────────────────────────────────────────────────┘
-                                │ HTTP POST
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        API LAYER (FastAPI)                           │
-│  ┌───────────────────────────────────────────────────────────┐      │
-│  │ /api/v1/screening                                          │      │
-│  │  → RiskEngine.compute_risk()                               │      │
-│  │  → CompositeRiskCalculator                                 │      │
-│  │  → AgentConsensus (LLM validation)                         │      │
-│  └───────────────────────────────────────────────────────────┘      │
-│                               │                                      │
-│                               ▼                                      │
-│  ┌───────────────────────────────────────────────────────────┐      │
-│  │ /api/v1/reports/generate                                   │      │
-│  │  → PatientReportGenerator.generate()                       │      │
-│  │  → DoctorReportGenerator.generate()                        │      │
-│  └───────────────────────────────────────────────────────────┘      │
-└──────────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-                    ┌───────────────────┐
-                    │   PDF Reports     │
-                    │   reports/*.pdf   │
-                    └───────────────────┘
-```
+### Safety Considerations
 
-#### Quick Test (No Hardware)
+- **Electrical:** All USB-powered, low-voltage DC only (5V max)
+- **EMI:** 60GHz radar FCC/CE compliant, sealed module
+- **Optical:** Camera uses visible light only, no IR laser
+- **Thermal:** Passive sensors, no active heating
 
-```bash
-# Terminal 1: Start API
-uvicorn app.main:app --reload
+---
 
-# Terminal 2: Test with simulated sensors
-python bridge.py --simulate
-```
+## 10. Known Issues & Items for Review
 
-#### ESP32 Firmware
+> [!WARNING]
+> **Seeed Radar Data Format Unknown:** The exact JSON output format from the MR60BHA2 kit needs verification. The `bridge.py` `RadarReader` class may need adjustment based on actual output. Refer to [Seeed Wiki](https://wiki.seeedstudio.com/mmwave_kit/) for protocol documentation.
 
-The ESP32 firmware sends JSON at 20 Hz:
+> [!IMPORTANT]
+> **MAX30102 Pulse Oximeter Removed:** The new Split-USB design focuses on webcam, radar, and thermal sensors. If SpO₂/pulse oximetry is still required:
+> - Add MAX30102 to ESP32 I2C bus (address 0x57)
+> - Update ESP32 firmware and bridge.py to include pulse_ox data
+> - This adds ~₹250 to the BOM
 
-```c
-// firmware/esp32_health_bridge.ino
-void sendJsonData() {
-    StaticJsonDocument<512> doc;
-    doc["timestamp"] = millis() / 1000;
-    
-    JsonObject radar = doc.createNestedObject("radar");
-    radar["respiration_rate"] = respirationRate;
-    radar["breathing_depth"] = breathingDepth;
-    
-    JsonObject thermal = doc.createNestedObject("thermal");
-    thermal["skin_temp_avg"] = skinTempAvg;
-    
-    JsonObject pulseOx = doc.createNestedObject("pulse_ox");
-    pulseOx["heart_rate"] = heartRate;
-    pulseOx["spo2"] = spO2;
-    
-    serializeJson(doc, Serial);
-    Serial.println();
-}
-```
+> [!NOTE]
+> **MLX90640 FOV Selection:** The 55° FOV version (TIFCM0036) is specified for face-focused thermal imaging. The 110° FOV version covers a wider area but with lower resolution per subject. Ensure you order the correct SKU.
+
+> [!CAUTION]
+> **COM Port Assignment:** Windows assigns COM port numbers dynamically. After plugging in devices:
+> 1. Open Device Manager → Ports (COM & LPT)
+> 2. Note which device is on which COM port
+> 3. Update `bridge.py` arguments accordingly
+> 4. Consider setting fixed COM ports via Device Manager → Port Settings → Advanced
 
 ---
 
 ## Summary
 
-This design provides a **modular, hackathon-ready hardware architecture** that:
+This **Split-USB Architecture** provides a:
 
-- ✅ Uses your laptop as the brain (no Raspberry Pi needed!)
-- ✅ Camera connects directly to laptop via USB or built-in
-- ✅ ESP32 handles sensors: thermal, radar, pulse-ox
-- ✅ Low cost: ~₹15,000 for sensors + ESP32
-- ✅ Provides clear schematics, pin assignments, and BOM
-- ✅ Supports the existing FastAPI software extractors
-- ✅ Prioritizes workability over sophistication
+- ✅ **Simpler** hardware setup (no UART wiring between components)
+- ✅ **Modular** design (each sensor is independent USB device)
+- ✅ **Safer** approach (no level shifters, no custom wiring)
+- ✅ **Hackathon-ready** (plug-and-play USB connections)
+- ✅ **Low cost** (~₹14,000 for sensors + ESP32 + hub)
+- ✅ **Compatible** with existing FastAPI software extractors
 
-The mmWave radar replaces RIS for respiratory and micro-motion sensing, which should achieve 70-90% of the accuracy target for the hackathon demonstration.
+The bridge.py script reads from **two serial ports** (Radar on COM_A, ESP32/Thermal on COM_B) plus the webcam, fuses the data, and sends screening requests to the FastAPI server.

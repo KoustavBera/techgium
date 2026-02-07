@@ -37,11 +37,19 @@ except ImportError:
 
 
 # Risk level colors for tables
+# Risk level colors for tables (Pastel)
 RISK_BG_COLORS = {
-    RiskLevel.LOW: HexColor("#DCFCE7") if REPORTLAB_AVAILABLE else "#DCFCE7",
-    RiskLevel.MODERATE: HexColor("#FEF3C7") if REPORTLAB_AVAILABLE else "#FEF3C7",
-    RiskLevel.HIGH: HexColor("#FEE2E2") if REPORTLAB_AVAILABLE else "#FEE2E2",
-    RiskLevel.CRITICAL: HexColor("#FCA5A5") if REPORTLAB_AVAILABLE else "#FCA5A5",
+    RiskLevel.LOW: HexColor("#D1FAE5") if REPORTLAB_AVAILABLE else "#D1FAE5",       # Mint Green
+    RiskLevel.MODERATE: HexColor("#FEF3C7") if REPORTLAB_AVAILABLE else "#FEF3C7",  # Pale Amber
+    RiskLevel.HIGH: HexColor("#FEE2E2") if REPORTLAB_AVAILABLE else "#FEE2E2",      # Pale Rose
+    RiskLevel.CRITICAL: HexColor("#FEF2F2") if REPORTLAB_AVAILABLE else "#FEF2F2",  # Very Pale Red
+}
+
+RISK_TEXT_COLORS = {
+    RiskLevel.LOW: HexColor("#065F46") if REPORTLAB_AVAILABLE else "#065F46",
+    RiskLevel.MODERATE: HexColor("#92400E") if REPORTLAB_AVAILABLE else "#92400E",
+    RiskLevel.HIGH: HexColor("#B91C1C") if REPORTLAB_AVAILABLE else "#B91C1C",
+    RiskLevel.CRITICAL: HexColor("#7F1D1D") if REPORTLAB_AVAILABLE else "#7F1D1D",
 }
 
 
@@ -116,7 +124,7 @@ class DoctorReportGenerator:
         logger.info(f"DoctorReportGenerator initialized, output: {output_dir}")
     
     def _create_custom_styles(self):
-        """Create custom paragraph styles."""
+        """Create custom paragraph styles with minimalist clinical design."""
         if not REPORTLAB_AVAILABLE:
             return
         
@@ -128,21 +136,24 @@ class DoctorReportGenerator:
                 parent=self._styles['Title'],
                 fontSize=20,
                 spaceAfter=20,
-                textColor=HexColor("#1F2937"),
-                alignment=TA_CENTER
+                textColor=HexColor("#111827"),
+                alignment=TA_LEFT,
+                fontName='Helvetica-Bold'
             ))
         
         if 'ClinicalSection' not in self._styles:
-            # Section header
+            # Section header - minimalist, no background box
             self._styles.add(ParagraphStyle(
                 name='ClinicalSection',
                 parent=self._styles['Heading2'],
-                fontSize=14,
+                fontSize=12,
                 spaceBefore=15,
                 spaceAfter=8,
-                textColor=HexColor("#1F2937"),
-                borderPadding=5,
-                backColor=HexColor("#E5E7EB")
+                textColor=HexColor("#374151"),
+                fontName='Helvetica-Bold',
+                borderPadding=0,
+                borderWidth=0,
+                textTransform='uppercase' # All caps for section headers
             ))
         
         if 'Subsection' not in self._styles:
@@ -150,10 +161,11 @@ class DoctorReportGenerator:
             self._styles.add(ParagraphStyle(
                 name='Subsection',
                 parent=self._styles['Heading3'],
-                fontSize=12,
+                fontSize=11,
                 spaceBefore=10,
                 spaceAfter=5,
-                textColor=HexColor("#374151")
+                textColor=HexColor("#4B5563"),
+                fontName='Helvetica-Bold'
             ))
         
         if 'ClinicalBody' not in self._styles:
@@ -161,9 +173,10 @@ class DoctorReportGenerator:
             self._styles.add(ParagraphStyle(
                 name='ClinicalBody',
                 parent=self._styles['Normal'],
-                fontSize=10,
+                fontSize=9,
                 spaceAfter=6,
-                leading=12
+                leading=12,
+                fontName='Helvetica'
             ))
         
         if 'SmallText' not in self._styles:
@@ -173,7 +186,8 @@ class DoctorReportGenerator:
                 parent=self._styles['Normal'],
                 fontSize=8,
                 textColor=HexColor("#6B7280"),
-                spaceAfter=4
+                spaceAfter=4,
+                fontName='Helvetica'
             ))
         
         if 'AlertText' not in self._styles:
@@ -181,10 +195,11 @@ class DoctorReportGenerator:
             self._styles.add(ParagraphStyle(
                 name='AlertText',
                 parent=self._styles['Normal'],
-                fontSize=10,
-                textColor=HexColor("#DC2626"),
-                spaceBefore=3,
-                spaceAfter=3
+                fontSize=9,
+                textColor=HexColor("#B91C1C"),
+                spaceBefore=2,
+                spaceAfter=2,
+                fontName='Helvetica'
         ))
     
     def generate(
@@ -319,9 +334,12 @@ class DoctorReportGenerator:
         meta_table = Table(meta_data, colWidths=[1.2*inch, 2*inch, 1.2*inch, 2*inch])
         meta_table.setStyle(TableStyle([
             ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
             ('TEXTCOLOR', (0, 0), (0, -1), HexColor("#6B7280")),
             ('TEXTCOLOR', (2, 0), (2, -1), HexColor("#6B7280")),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
         ]))
         story.append(meta_table)
         story.append(Spacer(1, 15))
@@ -340,15 +358,21 @@ class DoctorReportGenerator:
         
         summary_table = Table(summary_data, colWidths=[2*inch, 1.5*inch, 3*inch])
         summary_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), HexColor("#1F2937")),
-            ('TEXTCOLOR', (0, 0), (-1, 0), white),
+            # Minimalist header
+            ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#374151")),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('LINEBELOW', (0, 0), (-1, 0), 1, HexColor("#E5E7EB")),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            
+            # Content
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#D1D5DB")),
-            ('BACKGROUND', (0, 1), (-1, -1), HexColor("#F9FAFB")),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('LINEBELOW', (0, 1), (-1, -1), 0.5, HexColor("#F9FAFB")),
         ]))
         story.append(summary_table)
         story.append(Spacer(1, 15))
@@ -373,14 +397,19 @@ class DoctorReportGenerator:
             
             trust_table = Table(trust_data, colWidths=[2.5*inch, 1.5*inch, 2.5*inch])
             trust_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), HexColor("#4B5563")),
-                ('TEXTCOLOR', (0, 0), (-1, 0), white),
+                # Minimalist header
+                ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#374151")),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#D1D5DB")),
-                ('BACKGROUND', (0, 1), (-1, -1), HexColor("#F3F4F6")),
-                ('TOPPADDING', (0, 0), (-1, -1), 5),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('LINEBELOW', (0, 0), (-1, 0), 1, HexColor("#E5E7EB")),
+                ('TOPPADDING', (0, 0), (-1, 0), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                
+                # Content
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('TOPPADDING', (0, 1), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+                ('LINEBELOW', (0, 1), (-1, -1), 0.5, HexColor("#F9FAFB")),
             ]))
             story.append(trust_table)
             
@@ -406,14 +435,17 @@ class DoctorReportGenerator:
             
             val_table = Table(val_data, colWidths=[2.5*inch, 4*inch])
             val_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), HexColor("#6366F1")),
-                ('TEXTCOLOR', (0, 0), (-1, 0), white),
+                ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#374151")),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('GRID', (0, 0), (-1, -1), 0.5, HexColor("#D1D5DB")),
-                ('BACKGROUND', (0, 1), (-1, -1), HexColor("#EEF2FF")),
-                ('TOPPADDING', (0, 0), (-1, -1), 5),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('LINEBELOW', (0, 0), (-1, 0), 1, HexColor("#E5E7EB")),
+                ('TOPPADDING', (0, 0), (-1, 0), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('TOPPADDING', (0, 1), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+                ('LINEBELOW', (0, 1), (-1, -1), 0.5, HexColor("#F9FAFB")),
             ]))
             story.append(val_table)
             story.append(Spacer(1, 10))
@@ -434,8 +466,10 @@ class DoctorReportGenerator:
             
             story.append(Paragraph(system_name, self._styles['Subsection']))
             
-            # System summary row
+            # System summary row - Pastel background
             risk_color = RISK_BG_COLORS.get(risk.level, lightgrey)
+            risk_text_color = RISK_TEXT_COLORS.get(risk.level, black)
+            
             sys_data = [
                 ["Risk Score", "Risk Level", "Confidence", "Alerts"],
                 [f"{risk.score:.1f}/100", risk.level.value.upper(), 
@@ -444,15 +478,15 @@ class DoctorReportGenerator:
             
             sys_table = Table(sys_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
             sys_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), HexColor("#374151")),
-                ('TEXTCOLOR', (0, 0), (-1, 0), white),
+                # Header with pastel background
+                ('BACKGROUND', (0, 0), (-1, 1), risk_color), # Specific background for this block
+                ('TEXTCOLOR', (0, 0), (-1, -1), risk_text_color),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('GRID', (0, 0), (-1, -1), 0.5, black),
-                ('BACKGROUND', (0, 1), (-1, 1), risk_color),
+                ('GRID', (0, 0), (-1, -1), 0, white), # No grid
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('TOPPADDING', (0, 0), (-1, -1), 4),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
             ]))
             story.append(sys_table)
             
@@ -473,10 +507,13 @@ class DoctorReportGenerator:
                     bm_table = Table(bm_data, colWidths=[2.5*inch, 2*inch, 1.5*inch])
                     bm_table.setStyle(TableStyle([
                         ('FONTSIZE', (0, 0), (-1, -1), 8),
-                        ('BACKGROUND', (0, 0), (-1, 0), HexColor("#E5E7EB")),
-                        ('GRID', (0, 0), (-1, -1), 0.25, HexColor("#D1D5DB")),
-                        ('TOPPADDING', (0, 0), (-1, -1), 3),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#374151")),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('LINEBELOW', (0, 0), (-1, 0), 0.5, HexColor("#E5E7EB")),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                        ('GRID', (0, 0), (-1, -1), 0, white),
+                        ('LINEBELOW', (0, 1), (-1, -1), 0.25, HexColor("#F9FAFB")),
                     ]))
                     story.append(bm_table)
             
