@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Clinical Report{% endblock %}
+
+{% block extra_css %}
+    .executive-summary {
+        background-color: #f8fafc;
+        border: 1px solid var(--border-light);
+        padding: 1rem;
+        border-radius: 4px;
+        margin-bottom: 2rem;
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 9pt;
+    }
+
+    .data-table th {
+        background-color: #f1f5f9;
+        font-weight: 700;
+        text-align: left;
+        padding: 8px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .data-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: top;
+    }
+
+    .data-table tr:nth-child(even) {
+        background-color: #f9fafb;
+    }
+
+    .trust-envelope {
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+
+    .trust-header {
+        background-color: #f1f5f9;
+        padding: 0.5rem 1rem;
+        font-weight: 700;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .trust-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .metric-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.25rem;
+    }
+
+    .alert-box {
+        background-color: #fef2f2;
+        border: 1px solid #fee2e2;
+        color: #b91c1c;
+        padding: 0.75rem;
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+        font-size: 9pt;
+    }
+{% endblock %}
+
+{% block content %}
+    <!-- EXECUTIVE SUMMARY -->
+    <div class="executive-summary">
+        <h3>Executive Summary</h3>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                    <th>Interpretation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Overall Risk Score</td>
+                    <td><b>{{ "%.1f"|format(report.overall_risk_score) }}</b> / 100</td>
+                    <td><span class="risk-badge risk-{{ report.overall_risk_level|lower }}">{{ report.overall_risk_level }}</span></td>
+                </tr>
+                <tr>
+                    <td>Confidence</td>
+                    <td>{{ "%.1f"|format(report.overall_confidence * 100) }}%</td>
+                    <td>
+                        {% if report.overall_confidence >= 0.9 %}High - Results Reliable
+                        {% elif report.overall_confidence >= 0.7 %}Moderate - Standard Caution
+                        {% else %}Low - Verify Results{% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td>Systems Assessed</td>
+                    <td>{{ report.system_details|length }}</td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td>Active Alerts</td>
+                    <td>{{ report.all_alerts|length }}</td>
+                    <td>{% if report.all_alerts %}Review Recommended{% else %}None{% endif %}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- TRUST ENVELOPE -->
+    <div class="trust-envelope">
+        <div class="trust-header">Data Quality & Trust Envelope</div>
+        <div class="trust-grid">
+            <div>
+                <div class="metric-row">
+                    <span>Overall Reliability:</span>
+                    <span class="font-bold">{{ "%.1f"|format(report.trust_envelope_data.overall_reliability * 100) }}%</span>
+                </div>
+                <div class="metric-row">
+                    <span>Data Quality:</span>
+                    <span>{{ "%.1f"|format(report.trust_envelope_data.data_quality_score * 100) }}%</span>
+                </div>
+            </div>
+            <div>
+                <div class="metric-row">
+                    <span>Biomarker Plausibility:</span>
+                    <span>{{ "%.1f"|format(report.trust_envelope_data.biomarker_plausibility * 100) }}%</span>
+                </div>
+                <div class="metric-row">
+                    <span>Consistency:</span>
+                    <span>{{ "%.1f"|format(report.trust_envelope_data.cross_system_consistency * 100) }}%</span>
+                </div>
+            </div>
+        </div>
+        {% if report.trust_envelope_data.safety_flags %}
+        <div style="padding: 0 1rem 1rem 1rem;">
+            <div style="font-weight: 700; color: var(--risk-high-text); font-size: 9pt;">Safety Flags:</div>
+            {% for flag in report.trust_envelope_data.safety_flags %}
+            <div style="font-size: 8pt; color: var(--text-muted);">- {{ flag }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- VALIDATION SUMMARY -->
+    {% if report.validation_summary %}
+    <div class="section">
+        <h3>Agentic Validation</h3>
+        <p><b>Status:</b> {{ report.validation_summary.overall_status }} | <b>Agreement:</b> {{ "%.0f"|format(report.validation_summary.agent_agreement * 100) }}%</p>
+        {% if report.validation_summary.recommendation %}
+        <p><i>{{ report.validation_summary.recommendation }}</i></p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- ALERTS -->
+    {% if report.all_alerts %}
+    <div class="section">
+        <h3>Active Alerts & Flags</h3>
+        {% for alert in report.all_alerts %}
+        <div class="alert-box">
+            ⚠ {{ alert }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- SYSTEM DETAILS -->
+    <div class="section">
+        <h3>System Details</h3>
+        {% for system, detail in report.system_details.items() %}
+            <h4 style="margin-top: 1.5rem; border-bottom: 2px solid var(--color-accent); padding-bottom: 4px;">
+                {{ system.value|replace("_", " ")|title }}
+            </h4>
+            
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Biomarker</th>
+                        <th style="width: 20%;">Value</th>
+                        <th style="width: 20%;">Score</th>
+                        <th style="width: 20%;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for name, info in detail.biomarker_summary.items() %}
+                    <tr>
+                        <td>{{ name|replace("_", " ")|title }}</td>
+                        {% if info is mapping %}
+                            <td>{{ info.value }} <span class="measurement-unit">{{ info.unit }}</span></td>
+                            <td>-</td> <!-- Score not always available in summary dict, logic might vary -->
+                            <td>{{ info.status }}</td>
+                        {% else %}
+                            <td>{{ info }}</td>
+                            <td>-</td>
+                            <td>-</td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endfor %}
+    </div>
+{% endblock %}

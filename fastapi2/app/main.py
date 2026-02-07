@@ -361,7 +361,9 @@ async def generate_report(request: ReportRequest):
             report = _patient_report_gen.generate(
                 system_results=screening["system_results"],
                 composite_risk=screening["composite_risk"],
-                patient_id=screening["patient_id"]
+                patient_id=screening["patient_id"],
+                trusted_results=screening.get("trusted_results"),
+                rejected_systems=screening.get("rejected_systems")
             )
         elif request.report_type == "doctor":
             report = _doctor_report_gen.generate(

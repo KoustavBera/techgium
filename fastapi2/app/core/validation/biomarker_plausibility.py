@@ -362,7 +362,7 @@ class BiomarkerPlausibilityValidator:
         bm_map = {bm.name: bm.value for bm in biomarker_set.biomarkers}
         
         # Cardiovascular contradictions
-        if "systolic_bp" in bm_map and "diastolic_bp" in bm_map:
+        if  "systolic_bp" in bm_map and "diastolic_bp" in bm_map:
             if bm_map["systolic_bp"] <= bm_map["diastolic_bp"]:
                 violations.append(PlausibilityViolation(
                     biomarker_name="systolic_bp,diastolic_bp",
