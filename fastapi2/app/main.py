@@ -13,6 +13,10 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 import uuid
 import logging
 
@@ -123,6 +127,12 @@ _patient_report_gen = PatientReportGenerator(output_dir="reports")
 _doctor_report_gen = DoctorReportGenerator(output_dir="reports")
 _risk_engine = RiskEngine()
 _consensus = AgentConsensus()
+
+# ---- Medical Validation Agents ----
+from app.core.agents.medical_agents import MedGemmaAgent, OpenBioLLMAgent
+_med_gemma_agent = MedGemmaAgent()
+_open_biollm_agent = OpenBioLLMAgent()
+
 
 
 # ---- Utility Functions ----
@@ -301,17 +311,40 @@ async def run_screening(request: ScreeningRequest):
         requires_review = False
         
         if request.include_validation and system_results:
-            # Simplified validation for API
-            consensus_result = ConsensusResult(
-                overall_status=_consensus._determine_overall_status({}),
-                overall_confidence=composite.confidence,
-                agent_agreement=0.9,
-                combined_flags=[],
-                agent_results={},
-                recommendation="Validation completed."
-            )
-            validation_status = "plausible" if not rejected_systems else "partial"
-            requires_review = consensus_result.requires_human_review or len(rejected_systems) > 0
+            # Real AI validation using medical agents
+            agent_results = {}
+            
+            # 1. MedGemma: Validate biomarker plausibility for each system
+            for system, result in system_results.items():
+                try:
+                    med_validation = _med_gemma_agent.validate_biomarkers(
+                        biomarker_summary=result.biomarker_summary,
+                        system=system
+                    )
+                    agent_results[f"MedGemma_{system.value}"] = med_validation
+                    logger.info(f"MedGemma validation for {system.value}: {med_validation.status.value}")
+                except Exception as e:
+                    logger.warning(f"MedGemma validation failed for {system.value}: {e}")
+            
+            # 2. OpenBioLLM: Cross-system consistency check
+            try:
+                consistency_validation = _open_biollm_agent.validate_consistency(
+                    system_results=system_results,
+                    trust_envelope=None
+                )
+                agent_results["OpenBioLLM_consistency"] = consistency_validation
+                logger.info(f"OpenBioLLM consistency check: {consistency_validation.status.value}")
+            except Exception as e:
+                logger.warning(f"OpenBioLLM consistency check failed: {e}")
+            
+            # 3. Compute consensus from all agent results
+            if agent_results:
+                consensus_result = _consensus.compute_consensus(agent_results)
+                validation_status = consensus_result.overall_status.value
+                requires_review = consensus_result.requires_human_review or len(rejected_systems) > 0
+            else:
+                validation_status = "plausible" if not rejected_systems else "partial"
+                requires_review = len(rejected_systems) > 0
         
         # Store screening for report generation (include trusted results)
         _screenings[screening_id] = {
@@ -455,6 +488,131 @@ async def list_systems():
             for s in PhysiologicalSystem
         ]
     }
+
+
+# ---- Hardware Screening Endpoint ----
+
+class HardwareScreeningRequest(BaseModel):
+    """Request for hardware-based screening."""
+    patient_id: str = Field(default="HARDWARE_PATIENT")
+    radar_port: str = Field(default="COM7", description="Serial port for mmRadar")
+    camera_index: int = Field(default=0, description="Camera index for OpenCV")
+    esp32_port: Optional[str] = Field(default=None, description="Optional ESP32 thermal port")
+
+
+class HardwareScreeningResponse(BaseModel):
+    """Response from hardware screening."""
+    status: str
+    screening_id: Optional[str] = None
+    patient_report_id: Optional[str] = None
+    doctor_report_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+@app.post("/api/v1/hardware/start-screening", response_model=HardwareScreeningResponse, tags=["Hardware"])
+async def start_hardware_screening(request: HardwareScreeningRequest):
+    """
+    Start a hardware-based health screening using connected sensors.
+    
+    Triggers the bridge.py script with the specified hardware configuration.
+    Returns screening results and report IDs for download.
+    """
+    import subprocess
+    import sys
+    import re
+    import asyncio
+    
+    def run_bridge_subprocess():
+        """Run bridge.py in a subprocess (blocking call to be run in thread)."""
+        bridge_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "bridge.py")
+        
+        cmd = [
+            sys.executable, bridge_path,
+            "--radar-port", request.radar_port,
+            "--camera", str(request.camera_index),
+            "--patient-id", request.patient_id,
+            "--api-url", "http://localhost:8000"
+        ]
+        
+        if request.esp32_port:
+            cmd.extend(["--port", request.esp32_port])
+        
+        logger.info(f"Starting hardware screening: {' '.join(cmd)}")
+        
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=180,  # 3-minute timeout for hardware capture
+            cwd=os.path.dirname(os.path.dirname(__file__))
+        )
+    
+    try:
+        # Run subprocess in a thread to avoid blocking the event loop
+        # This allows the server to handle the API calls from bridge.py
+        result = await asyncio.to_thread(run_bridge_subprocess)
+        
+        logger.info(f"Bridge stdout (last 1000): {result.stdout[-1000:] if len(result.stdout) > 1000 else result.stdout}")
+        if result.stderr:
+            logger.warning(f"Bridge stderr (last 500): {result.stderr[-500:] if len(result.stderr) > 500 else result.stderr}")
+        
+        # Parse screening ID from output
+        screening_id = None
+        screening_match = re.search(r'Screening ID:\s*(SCR-[A-Z0-9]+)', result.stdout)
+        if screening_match:
+            screening_id = screening_match.group(1)
+        
+        # Also check for screening ID in error/fallback pattern
+        if not screening_id:
+            # Try to find from the stored screenings (bridge.py already submitted)
+            if _screenings:
+                # Get the most recent screening
+                screening_id = list(_screenings.keys())[-1]
+                logger.info(f"Found screening ID from storage: {screening_id}")
+        
+        if not screening_id:
+            return HardwareScreeningResponse(
+                status="error",
+                error="Screening completed but no screening ID found. Check server logs."
+            )
+        
+        # Generate reports
+        patient_report_id = None
+        doctor_report_id = None
+        
+        try:
+            patient_req = ReportRequest(screening_id=screening_id, report_type="patient")
+            patient_resp = await generate_report(patient_req)
+            patient_report_id = patient_resp.report_id
+        except Exception as e:
+            logger.warning(f"Patient report generation failed: {e}")
+        
+        try:
+            doctor_req = ReportRequest(screening_id=screening_id, report_type="doctor")
+            doctor_resp = await generate_report(doctor_req)
+            doctor_report_id = doctor_resp.report_id
+        except Exception as e:
+            logger.warning(f"Doctor report generation failed: {e}")
+        
+        return HardwareScreeningResponse(
+            status="success",
+            screening_id=screening_id,
+            patient_report_id=patient_report_id,
+            doctor_report_id=doctor_report_id
+        )
+        
+    except subprocess.TimeoutExpired:
+        logger.error("Hardware screening timed out")
+        return HardwareScreeningResponse(
+            status="error",
+            error="Screening timed out after 3 minutes. Check hardware connections."
+        )
+    except Exception as e:
+        logger.error(f"Hardware screening failed: {e}")
+        return HardwareScreeningResponse(
+            status="error",
+            error=str(e)
+        )
 
 
 # ---- Application Lifecycle ----

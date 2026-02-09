@@ -29,8 +29,8 @@ except ImportError:
 class HFModel(str, Enum):
     """Available Hugging Face models for medical validation."""
     # Primary medical models
-    GPT_OSS_120B = "openai/gpt-oss-120b"  # GPT-OSS-120B (OpenAI-compatible)
-    II_MEDICAL_8B = "Intelligent-Internet/II-Medical-8B"  # II-Medical-8B
+    GPT_OSS_120B = "openai/gpt-oss-120b:groq"  # GPT-OSS-120B via Groq
+    II_MEDICAL_8B = "Intelligent-Internet/II-Medical-8B-1706:featherless-ai"  # II-Medical-8B via Featherless
     
     # Legacy models (kept for compatibility)
     MEDGEMMA_4B = "google/medgemma-4b-it"

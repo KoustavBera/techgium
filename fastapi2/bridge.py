@@ -58,6 +58,7 @@ Usage:
 
 import asyncio
 import json
+import re
 import time
 import threading
 import queue
@@ -123,7 +124,7 @@ class BridgeConfig:
     serial_baud: int = 115200
     
     # Serial - Seeed Radar Kit (Breathing/Heartbeat Data)
-    radar_port: str = "COM3"  # Windows: COM3, Linux: /dev/ttyUSB0
+    radar_port: str = "COM7"  # Windows: COM7, Linux: /dev/ttyUSB0
     radar_baud: int = 115200
     
     # Camera
@@ -281,37 +282,54 @@ class RadarReader(BaseSerialReader):
         super().__init__(port, baud, name="Seeed Radar Kit (MR60BHA2)")
     
     def read_loop(self):
-        """Background thread to read serial data (Binary) from Radar."""
+        """Background thread to read serial data (Text-based) from Radar."""
         self.running = True
-        buffer = b""
         
         while self.running and self.serial_conn and self.serial_conn.is_open:
             try:
-                # Read chunks
                 if self.serial_conn.in_waiting:
-                    chunk = self.serial_conn.read(self.serial_conn.in_waiting or 1)
-                    buffer += chunk
+                    line = self.serial_conn.readline().decode(errors="ignore").strip()
                     
-                    # Try to find header 0x02 0x81
-                    while len(buffer) >= 12:  # Min length for our known frame
-                        # Check for header
-                        if buffer[0] == 0x02 and buffer[1] == 0x81:
-                             # We have a potential frame
-                             frame_data = buffer[:12]
-                             parsed = self.parse_radar_binary(frame_data)
-                             if parsed:
-                                 parsed['received_at'] = time.time()
-                                 self.last_data = parsed
-                                 # Queue manage
-                                 if self.data_queue.full():
-                                     self.data_queue.get()
-                                 self.data_queue.put(parsed)
-                                 
-                             # Remove processed frame
-                             buffer = buffer[12:]
-                        else:
-                            # Slide window
-                            buffer = buffer[1:]
+                    if not line:
+                        continue
+                    
+                    # Parse text-based output using regex (matches actual hardware)
+                    hr_match = re.search(r'heart rate.*?([\d.]+)\s*bpm', line.lower())
+                    rr_match = re.search(r'respiratory rate.*?([\d.]+)', line.lower())
+                    
+                    # Update last_data with any new values found
+                    if hr_match or rr_match:
+                        if not self.last_data or 'radar' not in self.last_data:
+                            self.last_data = {
+                                'timestamp': int(time.time()),
+                                'radar': {
+                                    'respiration_rate': 0.0,
+                                    'heart_rate': 0,
+                                    'presence_detected': True
+                                }
+                            }
+                        
+                        if hr_match:
+                            heart_rate = float(hr_match.group(1))
+                            # Validate physiological range
+                            if 40 <= heart_rate <= 180:
+                                self.last_data['radar']['heart_rate'] = int(heart_rate)
+                                self.last_data['timestamp'] = int(time.time())
+                                logger.debug(f"Heart Rate: {heart_rate} bpm")
+                        
+                        if rr_match:
+                            resp_rate = float(rr_match.group(1))
+                            # Validate physiological range
+                            if 5 <= resp_rate <= 40:
+                                self.last_data['radar']['respiration_rate'] = round(resp_rate, 1)
+                                self.last_data['timestamp'] = int(time.time())
+                                logger.debug(f"Respiration Rate: {resp_rate} bpm")
+                        
+                        # Update queue with latest data
+                        self.last_data['received_at'] = time.time()
+                        if self.data_queue.full():
+                            self.data_queue.get()
+                        self.data_queue.put(self.last_data.copy())
                 else:
                     time.sleep(0.01)
                         
@@ -319,39 +337,42 @@ class RadarReader(BaseSerialReader):
                 logger.error(f"Radar read error: {e}")
                 time.sleep(0.1)
     
-    def parse_radar_binary(self, raw_bytes: bytes) -> Optional[Dict]:
-        """Parse binary frame from Seeed MR60BHA2 radar.
+    def parse_radar_text(self, line: str) -> Optional[Dict]:
+        """Parse text-based output from Seeed MR60BHA2 radar.
         
-        Binary frame format (12 bytes):
-        - Bytes 0-1: Header (0x02 0x81)
-        - Bytes 2-3: Reserved
-        - Bytes 4-7: Respiration rate (float32, little-endian)
-        - Bytes 8-11: Heart rate (float32, little-endian)
+        Text format (actual hardware output):
+        - "heart rate ... XX.XXXXX bpm"
+        - "respiratory rate ... XX.XXXXX bpm"
+        
+        Note: This method is deprecated - parsing is now done inline in read_loop()
+        for better real-time performance. Kept for backward compatibility.
         """
-        if len(raw_bytes) < 12:
+        hr_match = re.search(r'heart rate.*?([\d.]+)\s*bpm', line.lower())
+        rr_match = re.search(r'respiratory rate.*?([\d.]+)', line.lower())
+        
+        if not (hr_match or rr_match):
             return None
-        if raw_bytes[0] != 0x02 or raw_bytes[1] != 0x81:
-            return None
-        try:
-            resprate = struct.unpack('<f', raw_bytes[4:8])[0]
-            heartrate = struct.unpack('<f', raw_bytes[8:12])[0]
-            
-            # Validate physiological ranges
-            if not (5 <= resprate <= 40):
-                resprate = 0.0
-            if not (40 <= heartrate <= 180):
-                heartrate = 0.0
-                
-            return {
-                'timestamp': int(time.time()),
-                'radar': {
-                    'respiration_rate': round(float(resprate), 1),
-                    'heart_rate': int(heartrate),
-                    'presence_detected': True
-                }
+        
+        result = {
+            'timestamp': int(time.time()),
+            'radar': {
+                'respiration_rate': 0.0,
+                'heart_rate': 0,
+                'presence_detected': True
             }
-        except struct.error:
-            return None
+        }
+        
+        if hr_match:
+            heart_rate = float(hr_match.group(1))
+            if 40 <= heart_rate <= 180:
+                result['radar']['heart_rate'] = int(heart_rate)
+        
+        if rr_match:
+            resp_rate = float(rr_match.group(1))
+            if 5 <= resp_rate <= 40:
+                result['radar']['respiration_rate'] = round(resp_rate, 1)
+        
+        return result
 
 
 
@@ -983,17 +1004,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python bridge.py --radar-port COM3 --port COM4 --camera 0
+  python bridge.py --radar-port COM7 --port COM4 --camera 0
   python bridge.py --simulate
   python bridge.py --simulate --patient-id PATIENT_123
 
 Split-USB Architecture:
-  - Radar (Seeed MR60BHA2): --radar-port (default: COM3)
+  - Radar (Seeed MR60BHA2): --radar-port (default: COM7)
   - ESP32 Thermal: --port (default: COM4)
   - Webcam: --camera (default: 0)
         """
     )
-    parser.add_argument("--radar-port", default="COM3", 
+    parser.add_argument("--radar-port", default="COM7", 
                         help="Serial port for Seeed Radar Kit (COM_A)")
     parser.add_argument("--port", default="COM4", 
                         help="Serial port for ESP32 NodeMCU thermal (COM_B)")

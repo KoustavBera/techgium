@@ -6,6 +6,7 @@ python-multipart>=0.0.12
 # Computer vision
 opencv-python>=4.10.0
 mediapipe>=0.10.18
+scikit-image>=0.24.0
 
 # Data processing
 numpy>=2.0.0
@@ -43,3 +44,4 @@ httpx>=0.28.0
 python-dotenv>=1.0.1
 aiofiles>=24.1.0
 pyserial>=3.5  # For ESP32 hardware bridge
+rich
