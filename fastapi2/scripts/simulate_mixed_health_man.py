@@ -54,10 +54,10 @@ def simulate_mixed_health_screening():
     # Fever
     print("  - Generating Skin data (Fever - Unhealthy)...")
     skin_biomarkers = [
-        create_biomarker("skin_temperature", 38.5, "C", [35.0, 38.0]),     # Fever
-        create_biomarker("skin_temperature_max", 39.0, "C", [36.0, 38.5]), # High max
-        create_biomarker("inflammation_index", 20.0, "%", [0.0, 15.0]),    # High inflammation
-        create_biomarker("thermal_asymmetry", 0.2, "C", [0.0, 0.5]),       # Normal asymmetry
+        create_biomarker("skin_temperature", 39.5, "C", [35.0, 38.0]),     # High fever
+        create_biomarker("skin_temperature_max", 40.5, "C", [36.0, 38.5]), # Very high
+        create_biomarker("inflammation_index", 45.0, "%", [0.0, 15.0]),    # Severe inflammation
+        create_biomarker("thermal_asymmetry", 1.5, "C", [0.0, 0.5]),       # High asymmetry
     ]
     systems_data.append({
         "system": "skin",

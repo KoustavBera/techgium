@@ -38,10 +38,10 @@ class Settings(BaseSettings):
     # LLM Configuration
     gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API key")
     hf_token: Optional[str] = Field(default=None, description="Hugging Face API token")
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-2.0-flash-lite"
     # Medical AI models for validation and reports
-    medical_model_1: str = "openai/gpt-oss-120b"  # GPT-OSS-120B (OpenAI-compatible)
-    medical_model_2: str = "Intelligent-Internet/II-Medical-8B"  # II-Medical-8B
+    medical_model_1: str = "openai/gpt-oss-120b:groq"  # GPT-OSS-120B via Groq
+    medical_model_2: str = "Intelligent-Internet/II-Medical-8B-1706:featherless-ai"  # II-Medical-8B via Featherless
     use_mock_llm: bool = Field(default=True, description="Use mock LLM for testing")
     
     # Data Ingestion

@@ -530,10 +530,10 @@ class EnhancedPatientReportGenerator:
     def _get_simple_status(self, level: RiskLevel) -> str:
         """Convert risk level to simple patient-friendly status."""
         statuses = {
-            RiskLevel.LOW: "✓ Good",
-            RiskLevel.MODERATE: "⚠ Attention Recommended",
-            RiskLevel.HIGH: "⚠ Consult Doctor",
-            RiskLevel.CRITICAL: "🚨 Urgent Care Needed"
+            RiskLevel.LOW: "Good",
+            RiskLevel.MODERATE: "Attention Recommended",
+            RiskLevel.HIGH: "Consult Doctor",
+            RiskLevel.CRITICAL: "Urgent Care Needed"
         }
         return statuses.get(level, "Unknown")
     
@@ -544,13 +544,13 @@ class EnhancedPatientReportGenerator:
     def _get_biomarker_status_icon(self, status: str) -> str:
         """Get icon for biomarker status."""
         if status == "normal":
-            return " Normal"
+            return "Normal"
         elif status == "low":
-            return " Below Normal"
+            return "Below Normal"
         elif status == "high":
-            return " Above Normal"
+            return "Above Normal"
         else:
-            return " Not Assessed"
+            return "Not Assessed"
     
     def _format_normal_range(self, normal_range: Optional[tuple]) -> str:
         """Format normal range for display."""
@@ -759,13 +759,25 @@ Format as a single paragraph with line breaks (<br/>) between sections. Keep it 
             # 1. Header and Table Group (KeepTogether)
             header_group = []
             
-            # System name and overall status
+            # System name (clean header, no status text)
             system_header = Paragraph(
-                f"<b>{system_name}</b> — {self._get_simple_status(risk_level)}",
+                f"<b>{system_name}</b>",
                 self._styles['SubHeader']
             )
             header_group.append(system_header)
-            header_group.append(Spacer(1, 8))
+            header_group.append(Spacer(1, 6))
+
+            # Visual risk indicator (pill)
+            header_group.append(
+                RiskIndicator(
+                    risk_level=risk_level,
+                    width=200,
+                    height=28
+                )
+            )
+
+            header_group.append(Spacer(1, 10))
+
             
             # Biomarker details table
             if biomarkers:

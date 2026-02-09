@@ -432,7 +432,7 @@ Use simple, patient-friendly language but do NOT be superficial. Go deep into th
             "hf_available": self.hf_client.is_available,
             "pipeline_type": "sequential_quality",
             "models_used": [
-                "gemini-2.5-flash (Primary)",
+                "gemini-1.5-flash (Primary)",
                 f"{settings.medical_model_1} (Validator)",
                 f"{settings.medical_model_2} (Arbiter)"
             ]
