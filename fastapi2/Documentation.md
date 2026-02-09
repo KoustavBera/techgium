@@ -391,3 +391,52 @@ ESP32 + MLX90640
 - Distributed biomarkers to appropriate physiological systems
 - Added backward compatibility for old esp32_data format
 
+---
+
+## Bridge.py Hardware Integration ✅
+
+### Overview
+The `bridge.py` script implements the Split-USB architecture, connecting the webcam, Seeed Radar Kit (MR60BHA2), and ESP32 NodeMCU to the laptop via a USB hub.
+
+### Components
+| Component | Purpose |
+|-----------|---------|
+| CameraCapture | OpenCV webcam frame capture |
+| RadarReader | Seeed MR60BHA2 binary protocol parser |
+| ESP32Reader | Thermal camera JSON reader |
+| DataFusion | Aggregates all sensor data |
+
+### Radar Binary Protocol (MR60BHA2)
+```
+Header:  0x02 0x81 (2 bytes)
+Padding: 2 bytes
+Respiration Rate: 4 bytes (little-endian float)
+Heart Rate: 4 bytes (little-endian float)
+Total: 12 bytes per frame
+```
+
+### Execution Log
+- **2026-02-09**: Fixed `parse_radar_binary` indentation (was at module level, now in `RadarReader` class)
+- **2026-02-09**: Updated `generate_simulated_esp32_data` to match HARDWARE.md thermal biomarker structure
+- Verified with syntax check and simulation mode
+
+---
+
+## Patient Report Improvements ✅
+
+### Overview
+Enhanced the PDF patient report generator with improved status color coding and cleaner visual presentation.
+
+### Status Color Scheme
+| Status | Background Color | Description |
+|--------|-----------------|-------------|
+| Normal | `#ECFDF5` (Mint) | Healthy readings |
+| Above Normal | `#FFECD2` (Pastel Orange) | Elevated values |
+| Below Normal | `#FFECD2` (Pastel Orange) | Low values |
+| Not Assessed | `#F9FAFB` (Light Gray) | Insufficient data |
+
+### Execution Log
+- **2026-02-09**: Fixed status color logic - reordered checks to match "Above/Below" before "Normal" to prevent false green coloring
+- **2026-02-09**: Removed emoji icons (✓, ⚠, —) from status text for cleaner PDF rendering
+- Verified with unhealthy patient simulation
+

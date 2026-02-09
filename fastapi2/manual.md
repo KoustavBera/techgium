@@ -1015,4 +1015,61 @@ print(f"Heart rate: {cardio_markers.get('heart_rate').value}")
 
 ---
 
-*Last updated: 2026-02-01*
+## Hardware Integration (bridge.py)
+
+### Overview
+The `bridge.py` script implements the Split-USB architecture for real-time sensor data collection.
+
+### Components
+
+| Class | Purpose |
+|-------|---------|
+| `CameraCapture` | OpenCV webcam frame capture |
+| `RadarReader` | Seeed MR60BHA2 binary protocol parser |
+| `ESP32Reader` | Thermal camera JSON reader |
+| `DataFusion` | Aggregates all sensor data and posts to API |
+
+### RadarReader
+
+**Purpose**: Parses binary data from the Seeed MR60BHA2 60GHz mmWave radar kit.
+
+**Binary Protocol**:
+```
+Header:  0x02 0x81 (2 bytes)
+Padding: 2 bytes
+Respiration Rate: 4 bytes (little-endian float)
+Heart Rate: 4 bytes (little-endian float)
+```
+
+### ESP32Reader
+
+**Purpose**: Reads JSON thermal biomarker data from ESP32 + MLX90640.
+
+**Expected JSON Structure**:
+```json
+{
+  "thermal": {
+    "fever": {"canthus_temp": 36.4, "neck_temp": 36.8},
+    "cardiovascular": {"thermal_asymmetry": 0.3},
+    "inflammation": {"hot_pixel_pct": 3.2},
+    "autonomic": {"stress_gradient": 1.2}
+  }
+}
+```
+
+---
+
+## Report Generation
+
+### Patient Report Status Colors
+
+| Status | Background Color | Hex |
+|--------|-----------------|-----|
+| Normal | Mint Green | `#ECFDF5` |
+| Above Normal | Pastel Orange | `#FFECD2` |
+| Below Normal | Pastel Orange | `#FFECD2` |
+| Not Assessed | Light Gray | `#F9FAFB` |
+
+---
+
+*Last updated: 2026-02-09*

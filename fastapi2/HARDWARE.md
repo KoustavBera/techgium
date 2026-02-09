@@ -598,3 +598,17 @@ This **Split-USB Architecture** provides a:
 - ✅ **Compatible** with existing FastAPI software extractors
 
 The bridge.py script reads from **two serial ports** (Radar on COM_A, ESP32/Thermal on COM_B) plus the webcam, fuses the data, and sends screening requests to the FastAPI server.
+
+---
+
+## Changelog
+
+### 2026-02-09
+- **Fixed `parse_radar_binary` indentation** in `bridge.py` - was incorrectly at module level instead of inside `RadarReader` class
+- **Updated `generate_simulated_esp32_data`** to match the HARDWARE.md thermal biomarker structure (fever, diabetes, cardiovascular, inflammation, autonomic categories)
+- **Radar Binary Protocol Verified**: MR60BHA2 sends binary frames with 0x02 0x81 header, followed by respiration and heart rate as little-endian floats
+
+### 2026-02-07
+- Integrated ESP32 thermal firmware v2
+- Added JSON parsing in ESP32Reader (bridge.py)
+- Distributed biomarkers to appropriate physiological systems
