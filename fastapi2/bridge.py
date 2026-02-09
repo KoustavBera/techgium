@@ -318,36 +318,42 @@ class RadarReader(BaseSerialReader):
             except Exception as e:
                 logger.error(f"Radar read error: {e}")
                 time.sleep(0.1)
-
+    
     def parse_radar_binary(self, raw_bytes: bytes) -> Optional[Dict]:
-        """Parse Seeed MR60BHA2 binary protocol."""
+        """Parse binary frame from Seeed MR60BHA2 radar.
+        
+        Binary frame format (12 bytes):
+        - Bytes 0-1: Header (0x02 0x81)
+        - Bytes 2-3: Reserved
+        - Bytes 4-7: Respiration rate (float32, little-endian)
+        - Bytes 8-11: Heart rate (float32, little-endian)
+        """
         if len(raw_bytes) < 12:
             return None
-        
-        # Header check
         if raw_bytes[0] != 0x02 or raw_bytes[1] != 0x81:
             return None
-            
         try:
-            # Protocol: Header(2) + Reserved(2) + Resp(4) + Heart(4)
-            resp_rate = struct.unpack('f', raw_bytes[4:8])[0]
-            heart_rate = struct.unpack('f', raw_bytes[8:12])[0]
+            resprate = struct.unpack('<f', raw_bytes[4:8])[0]
+            heartrate = struct.unpack('<f', raw_bytes[8:12])[0]
             
-            # Simple validation filters
-            if resp_rate < 0 or resp_rate > 60: resp_rate = 0.0
-            if heart_rate < 0 or heart_rate > 200: heart_rate = 0.0
-            
+            # Validate physiological ranges
+            if not (5 <= resprate <= 40):
+                resprate = 0.0
+            if not (40 <= heartrate <= 180):
+                heartrate = 0.0
+                
             return {
-                "timestamp": int(time.time()),
-                "radar": {
-                    "respiration_rate": round(float(resp_rate), 1),
-                    "heart_rate": int(heart_rate),
-                    "breathing_depth": 0.8,  # Placeholder/mock as it wasn't in binary
-                    "presence_detected": True
+                'timestamp': int(time.time()),
+                'radar': {
+                    'respiration_rate': round(float(resprate), 1),
+                    'heart_rate': int(heartrate),
+                    'presence_detected': True
                 }
             }
         except struct.error:
             return None
+
+
 
 
 # ==============================================================================
@@ -920,13 +926,48 @@ def generate_simulated_radar_data() -> Dict[str, Any]:
 
 
 def generate_simulated_esp32_data() -> Dict[str, Any]:
-    """Generate realistic simulated ESP32 thermal data."""
+    """Generate realistic simulated ESP32 thermal data.
+    
+    Matches the structure defined in HARDWARE.md for MLX90640 thermal camera
+    output via ESP32 NodeMCU, including clinical biomarkers for multiple systems.
+    """
+    base_temp = np.random.uniform(36.2, 36.8)
+    
     return {
         "timestamp": int(time.time()),
         "thermal": {
-            "skin_temp_avg": round(np.random.uniform(36.0, 37.0), 1),
-            "skin_temp_max": round(np.random.uniform(36.5, 37.5), 1),
-            "thermal_asymmetry": round(np.random.uniform(0.1, 0.4), 2)
+            "fever": {
+                "canthus_temp": round(base_temp + np.random.uniform(-0.2, 0.3), 2),
+                "neck_temp": round(base_temp + np.random.uniform(0.2, 0.6), 2),
+                "neck_stability": round(np.random.uniform(0.3, 0.6), 2),
+                "fever_risk": 0
+            },
+            "diabetes": {
+                "canthus_temp": round(base_temp + np.random.uniform(-0.2, 0.3), 2),
+                "canthus_stability": round(np.random.uniform(0.2, 0.5), 2),
+                "risk_flag": 0
+            },
+            "cardiovascular": {
+                "thermal_asymmetry": round(np.random.uniform(0.1, 0.4), 3),
+                "left_cheek_temp": round(base_temp - np.random.uniform(0.3, 0.6), 2),
+                "right_cheek_temp": round(base_temp - np.random.uniform(0.2, 0.5), 2),
+                "risk_flag": 0
+            },
+            "inflammation": {
+                "hot_pixel_pct": round(np.random.uniform(1.0, 5.0), 2),
+                "face_mean_temp": round(base_temp - np.random.uniform(0.5, 1.0), 2),
+                "detected": 0
+            },
+            "autonomic": {
+                "nose_temp": round(base_temp - np.random.uniform(1.5, 2.5), 2),
+                "forehead_temp": round(base_temp - np.random.uniform(0.3, 0.8), 2),
+                "stress_gradient": round(np.random.uniform(0.8, 1.8), 2),
+                "stress_flag": 0
+            },
+            "metadata": {
+                "face_detected": 1,
+                "valid_rois": 7
+            }
         }
     }
 

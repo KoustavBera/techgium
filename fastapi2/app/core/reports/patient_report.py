@@ -544,13 +544,13 @@ class EnhancedPatientReportGenerator:
     def _get_biomarker_status_icon(self, status: str) -> str:
         """Get icon for biomarker status."""
         if status == "normal":
-            return "✓ Normal"
+            return " Normal"
         elif status == "low":
-            return "⚠ Below Normal"
+            return " Below Normal"
         elif status == "high":
-            return "⚠ Above Normal"
+            return " Above Normal"
         else:
-            return "— Not Assessed"
+            return " Not Assessed"
     
     def _format_normal_range(self, normal_range: Optional[tuple]) -> str:
         """Format normal range for display."""
@@ -818,19 +818,17 @@ Format as a single paragraph with line breaks (<br/>) between sections. Keep it 
                 # Add status pill colors for the status column
                 for i, row in enumerate(table_data[1:], start=1):
                     status_text = row[3]
-                    # We won't color the whole row, just the status text or cell if possible.
-                    # For minimalist look, let's keep the row white but maybe distinct text color?
-                    # actually, the STATUS_COLORS are pastel backgrounds. 
-                    # Let's apply a subtle background to the Status cell ONLY.
+                    # Determine background color based on status
+                    # Check order matters: check "Above/Below" before "Normal" to avoid false matches
                     
-                    if "Normal" in status_text or "Good" in status_text:
-                        bg_color = STATUS_COLORS["normal"]
-                    elif "Below" in status_text or "Low" in status_text:
-                        bg_color = STATUS_COLORS["low"]
-                    elif "Above" in status_text or "High" in status_text:
-                        bg_color = STATUS_COLORS["high"]
+                    if "Below" in status_text:
+                        bg_color = STATUS_COLORS["low"]  # Pastel orange
+                    elif "Above" in status_text:
+                        bg_color = STATUS_COLORS["high"]  # Pastel orange
+                    elif "✓" in status_text or status_text == "✓ Normal":
+                        bg_color = STATUS_COLORS["normal"]  # Mint green (only for truly normal)
                     else:
-                        bg_color = STATUS_COLORS["not_assessed"]
+                        bg_color = STATUS_COLORS["not_assessed"]  # Light gray
                         
                     # Apply background to the Status column (index 3)
                     table_style.append(('BACKGROUND', (3, i), (3, i), bg_color))
