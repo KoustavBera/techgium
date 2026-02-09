@@ -1,142 +1,186 @@
 import { OpenAI } from "openai";
+import { InMemoryChatMessageHistory } from "@langchain/core/chat_history";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import dotenv from "dotenv";
-import vectorStoreService from "./VectorStoreService.js";
 
 dotenv.config();
 
 /**
- * Medical Chatbot Service using LangChain-style pipeline
+ * Medical Chatbot Service using LangChain for Context Management
  * 
  * Architecture:
  * 1. Translation Pipeline: Hindi/Hinglish → English (Cohere)
- * 2. Medical Reasoning: English medical Q&A (gpt-oss-120b)
+ * 2. Medical Reasoning: English medical Q&A with LangChain memory (gpt-oss-120b)
  * 3. Translation Pipeline: English → Original Language (Cohere)
  */
 class MedicalChatService {
     constructor() {
-        // Initialize OpenAI client for Hugging Face router
+        // OpenAI client for Hugging Face router
         this.client = new OpenAI({
             baseURL: "https://router.huggingface.co/v1",
             apiKey: process.env.HF_TOKEN,
         });
 
-        // Model configurations
+        // Models
         this.models = {
             medical: "openai/gpt-oss-120b:groq",
             translate: "CohereLabs/command-a-translate-08-2025:cohere"
         };
 
-        // Conversation history: sessionId -> messages[]
-        this.conversationHistory = new Map();
+        // LangChain memory map: sessionId -> InMemoryChatMessageHistory
+        this.memoryStore = new Map();
 
-        // Emergency keywords for alert detection
-        this.emergencyKeywords = [
-            'chest pain', 'heart attack', 'stroke', 'seizure', 'unconscious',
-            'severe bleeding', 'difficulty breathing', 'suicide', 'overdose',
-            'severe headache', 'paralysis', 'high fever', 'blood pressure'
+        // Critical emergency keywords (always trigger emergency)
+        this.criticalEmergencyKeywords = [
+            'heart attack', 'stroke', 'seizure', 'unconscious', 'not breathing',
+            'severe bleeding', 'suicide', 'overdose', 'paralysis', 'anaphylaxis'
         ];
+
+        // Warning keywords (require LLM confirmation via EMERGENCY: marker)
+        this.warningKeywords = [
+            'chest pain', 'difficulty breathing', 'severe headache', 'high fever',
+            'blood pressure', 'fainting', 'severe pain'
+        ];
+
+        // System prompt for medical assistant
+        this.systemPrompt = `You are Dr. MedAssist, a friendly medical AI assistant for Indian users.
+
+ROLE:
+- Answer medical and health questions accurately
+- Provide helpful advice, home remedies, and medication suggestions
+- Identify TRULY serious conditions requiring immediate attention
+- You are NOT a replacement for professional diagnosis
+
+GUIDELINES:
+- Be empathetic, warm, and conversational
+- Use simple, easy-to-understand language
+- For common ailments: suggest home remedies, OTC medicines, when to see a doctor
+- ONLY use "EMERGENCY:" prefix for life-threatening conditions (heart attack, stroke, severe allergic reaction, etc.)
+- High fever alone is NOT an emergency - suggest fever management + when to see a doctor
+- Sore throat + fever = common cold/flu, suggest remedies first
+- Never diagnose definitively
+- Consider Indian medical context (AYUSH, Ayurvedic remedies, local medicines)`;
     }
 
     /**
-     * Detect language of input text
-     * @param {string} text - Input text
-     * @returns {string} - 'hi' for Hindi/Hinglish, 'en' for English
+     * Get or create LangChain memory for session
+     */
+    getMemory(sessionId) {
+        if (!this.memoryStore.has(sessionId)) {
+            this.memoryStore.set(sessionId, new InMemoryChatMessageHistory());
+        }
+        return this.memoryStore.get(sessionId);
+    }
+
+    /**
+     * Detect language and style of input text
+     * Returns: { language: 'en'|'hi', style: 'english'|'hindi'|'hinglish' }
      */
     detectLanguage(text) {
-        // Check for Devanagari script (Hindi)
+        // Hindi (Devanagari script)
         const hindiPattern = /[\u0900-\u097F]/;
         if (hindiPattern.test(text)) {
-            return 'hi';
+            return { language: 'hi', style: 'hindi' };
         }
 
-        // Check for common Hindi words in Latin script (Hinglish)
-        const hinglishWords = ['kya', 'hai', 'mujhe', 'aap', 'hum', 'main', 'ke', 'ki', 'ko', 'se'];
+        // Hinglish (common Hindi words in Latin script)
+        const hinglishWords = [
+            'kya', 'hai', 'mujhe', 'aap', 'hum', 'main', 'ke', 'ki', 'ko', 'se',
+            'mera', 'tera', 'kaise', 'kahan', 'nahi', 'haan', 'acha', 'theek',
+            'bahut', 'bhi', 'aur', 'lekin', 'toh', 'mein', 'ho', 'raha', 'rahi',
+            'karo', 'karna', 'dard', 'bukhar', 'sir', 'pet', 'gala', 'khana',
+            'paani', 'dawai', 'doctor', 'hospital', 'lagra', 'lagta', 'hora', 'hota'
+        ];
         const lowerText = text.toLowerCase();
-        const hasHinglish = hinglishWords.some(word => lowerText.includes(word));
+        const hinglishMatches = hinglishWords.filter(word => {
+            const regex = new RegExp(`\\b${word}\\b`, 'i');
+            return regex.test(lowerText);
+        });
 
-        if (hasHinglish) {
-            return 'hi';
+        if (hinglishMatches.length >= 1) {
+            return { language: 'hi', style: 'hinglish' };
         }
 
-        return 'en';
+        return { language: 'en', style: 'english' };
     }
 
     /**
      * Pipeline 1 & 3: Translation using Cohere
-     * @param {string} text - Text to translate
-     * @param {string} sourceLang - Source language ('hi' or 'en')
-     * @param {string} targetLang - Target language ('hi' or 'en')
-     * @returns {Promise<string>} - Translated text
+     * Preserves Hinglish style when input is Hinglish
      */
-    async translate(text, sourceLang, targetLang) {
-        // Skip translation if same language
-        if (sourceLang === targetLang) {
-            return text;
-        }
+    async translate(text, sourceLang, targetLang, inputStyle = 'english') {
+        if (sourceLang === targetLang) return text;
 
         try {
-            const translationPrompt = sourceLang === 'hi'
-                ? `Translate the following Hindi/Hinglish text to English. Only provide the translation, no explanations:\n\n${text}`
-                : `Translate the following English text to Hindi. Only provide the translation, no explanations:\n\n${text}`;
+            let prompt, systemContent;
+
+            if (sourceLang === 'hi' || inputStyle === 'hinglish') {
+                // Translating Hindi/Hinglish TO English
+                prompt = `Translate this Hindi/Hinglish text to clear English. Only provide the translation:\n\n${text}`;
+                systemContent = "You are a Hindi-English medical translator. Provide only the translation, nothing else.";
+            } else {
+                // Translating English back - match the input style
+                if (inputStyle === 'hinglish') {
+                    prompt = `Convert this English medical response to Hinglish (Hindi words written in English/Roman script, casual conversational style). Mix Hindi and English naturally like how Indians speak. Only provide the translation:\n\n${text}`;
+                    systemContent = "You are a medical translator. Convert to casual Hinglish (Roman script). Use common Hindi words mixed with English. Example: 'Aapko paani bahut peena chahiye aur rest lena hai. Fever ke liye Paracetamol le sakte ho.'";
+                } else if (inputStyle === 'hindi') {
+                    prompt = `Translate this English medical response to Hindi (Devanagari script). Only provide the translation:\n\n${text}`;
+                    systemContent = "You are a Hindi-English medical translator. Translate to Hindi in Devanagari script. Provide only the translation.";
+                } else {
+                    return text; // English in, English out
+                }
+            }
 
             const response = await this.client.chat.completions.create({
                 model: this.models.translate,
                 messages: [
-                    {
-                        role: "system",
-                        content: "You are a professional translator specializing in Hindi-English medical translations. Provide only the translation without any additional text."
-                    },
-                    {
-                        role: "user",
-                        content: translationPrompt,
-                    },
+                    { role: "system", content: systemContent },
+                    { role: "user", content: prompt }
                 ],
-                temperature: 0.3, // Low temperature for consistent translations
-                max_tokens: 500,
+                temperature: 0.4,
+                max_tokens: 600,
             });
 
             return response.choices[0].message.content.trim();
         } catch (error) {
-            console.error('Translation error:', error);
-            return text; // Fallback to original text
+            console.error('[Translate] Error:', error.message);
+            return text;
         }
     }
 
     /**
-     * Pipeline 2: Medical reasoning using gpt-oss-120b
-     * @param {string} englishQuery - Medical query in English
-     * @param {string} medicalContext - Patient's medical report context (optional)
-     * @param {Array} conversationHistory - Previous conversation messages
-     * @returns {Promise<Object>} - { response: string, isEmergency: boolean }
+     * Pipeline 2: Medical reasoning with LangChain memory
      */
-    async getMedicalResponse(englishQuery, medicalContext = null, conversationHistory = []) {
+    async getMedicalResponse(sessionId, englishQuery, medicalContext = null) {
         try {
-            // Build system prompt
-            let systemPrompt = `You are a professional medical AI assistant. Your role is to:
-1. Answer medical and health-related questions accurately
-2. Provide helpful health advice based on symptoms
-3. Identify potentially serious conditions that require immediate medical attention
-4. Always remind users that you are not a replacement for professional medical diagnosis
+            const chatHistory = this.getMemory(sessionId);
 
-Important guidelines:
-- Be empathetic and professional
-- Use simple, clear language
-- If symptoms suggest a serious condition, clearly state: "EMERGENCY: Please consult a doctor immediately"
-- Never diagnose definitively, only provide information and suggestions
-- Encourage users to seek professional medical help when appropriate`;
+            // Get chat history from LangChain memory
+            const history = await chatHistory.getMessages();
 
-            // Add medical context if available
+            // Build messages array
+            let systemContent = this.systemPrompt;
             if (medicalContext) {
-                systemPrompt += `\n\nPatient's Medical Report Context:\n${medicalContext}`;
+                systemContent += `\n\nPatient Medical Context:\n${medicalContext}`;
             }
 
-            // Build messages array with conversation history
             const messages = [
-                { role: "system", content: systemPrompt },
-                ...conversationHistory,
-                { role: "user", content: englishQuery }
+                { role: "system", content: systemContent }
             ];
 
+            // Add history from LangChain memory
+            for (const msg of history) {
+                if (msg instanceof HumanMessage) {
+                    messages.push({ role: "user", content: msg.content });
+                } else if (msg instanceof AIMessage) {
+                    messages.push({ role: "assistant", content: msg.content });
+                }
+            }
+
+            // Add current query
+            messages.push({ role: "user", content: englishQuery });
+
+            // Call LLM
             const response = await this.client.chat.completions.create({
                 model: this.models.medical,
                 messages: messages,
@@ -146,203 +190,124 @@ Important guidelines:
 
             const medicalResponse = response.choices[0].message.content.trim();
 
-            // Check for emergency keywords
+            // Save to LangChain memory
+            await chatHistory.addMessage(new HumanMessage(englishQuery));
+            await chatHistory.addMessage(new AIMessage(medicalResponse));
+
+            // Check emergency
             const isEmergency = this.detectEmergency(englishQuery, medicalResponse);
 
-            return {
-                response: medicalResponse,
-                isEmergency
-            };
+            return { response: medicalResponse, isEmergency };
         } catch (error) {
-            console.error('Medical reasoning error:', error);
-            throw new Error('Failed to get medical response. Please try again.');
+            console.error('[Medical] Error:', error.message);
+            throw new Error('Failed to get medical response');
         }
     }
 
     /**
-     * Detect if query or response indicates an emergency
-     * @param {string} query - User's query
-     * @param {string} response - AI's response
-     * @returns {boolean} - True if emergency detected
+     * Detect emergency conditions - smarter detection
      */
     detectEmergency(query, response) {
-        const combinedText = (query + ' ' + response).toLowerCase();
+        const combined = (query + ' ' + response).toLowerCase();
 
-        // Check for emergency keywords
-        const hasEmergencyKeyword = this.emergencyKeywords.some(keyword =>
-            combinedText.includes(keyword.toLowerCase())
-        );
+        // Check for critical keywords (always emergency)
+        const hasCritical = this.criticalEmergencyKeywords.some(kw => combined.includes(kw));
+        if (hasCritical) return true;
 
-        // Check for explicit emergency markers in response
-        const hasEmergencyMarker = response.includes('EMERGENCY:') ||
-            response.includes('immediately') ||
-            response.includes('urgent medical attention');
+        // Check if LLM explicitly marked as emergency
+        const hasLLMMarker = response.includes('EMERGENCY:') ||
+            response.includes('call emergency') ||
+            response.includes('call 108') ||
+            response.includes('rush to hospital');
 
-        return hasEmergencyKeyword || hasEmergencyMarker;
+        return hasLLMMarker;
     }
 
     /**
-     * Main chat function - orchestrates the 3-pipeline flow with RAG
-     * @param {string} sessionId - Unique session identifier
-     * @param {string} userMessage - User's input message
-     * @param {Object} options - { medicalContext, mode, userId }
-     * @returns {Promise<Object>} - { response, language, isEmergency }
+     * Main chat function - 3-pipeline flow with LangChain context
      */
     async chat(sessionId, userMessage, options = {}) {
-        const { medicalContext = null, mode = 'standalone', userId = null } = options;
+        const { medicalContext = null, mode = 'standalone' } = options;
 
-        // Initialize conversation history for this session
-        if (!this.conversationHistory.has(sessionId)) {
-            this.conversationHistory.set(sessionId, []);
-        }
+        // Step 1: Detect language and style (english/hindi/hinglish)
+        const { language: inputLanguage, style: inputStyle } = this.detectLanguage(userMessage);
+        console.log(`[Chat] Language: ${inputLanguage}, Style: ${inputStyle}`);
 
-        const history = this.conversationHistory.get(sessionId);
+        // Step 2: Translate to English (for LLM processing)
+        const englishQuery = await this.translate(userMessage, inputLanguage, 'en', inputStyle);
+        console.log(`[Chat] English: ${englishQuery.substring(0, 50)}...`);
 
-        // Step 1: Detect input language
-        const inputLanguage = this.detectLanguage(userMessage);
-        console.log(`[MedicalChat] Detected language: ${inputLanguage}`);
-
-        // Step 2: Pipeline 1 - Translate to English if needed
-        const englishQuery = await this.translate(userMessage, inputLanguage, 'en');
-        console.log(`[MedicalChat] English query: ${englishQuery}`);
-
-        // Step 3: RAG - Retrieve relevant context from vector store
-        let ragContext = "";
-        if (mode === 'standalone') {
-            try {
-                ragContext = await vectorStoreService.buildRAGContext(englishQuery, userId);
-                if (ragContext) {
-                    console.log(`[MedicalChat] RAG context retrieved: ${ragContext.substring(0, 100)}...`);
-                }
-            } catch (error) {
-                console.error('[MedicalChat] RAG context error:', error);
-            }
-        }
-
-        // Combine RAG context with any provided medical context
-        const combinedContext = [ragContext, medicalContext].filter(Boolean).join('\n\n');
-
-        // Step 4: Pipeline 2 - Get medical response with RAG context
+        // Step 3: Get medical response with LangChain memory
         const { response: englishResponse, isEmergency } = await this.getMedicalResponse(
+            sessionId,
             englishQuery,
-            combinedContext || null,
-            history
+            medicalContext
         );
-        console.log(`[MedicalChat] Medical response: ${englishResponse.substring(0, 100)}...`);
+        console.log(`[Chat] Response: ${englishResponse.substring(0, 50)}...`);
 
-        // Step 5: Pipeline 3 - Translate back to original language
-        const finalResponse = await this.translate(englishResponse, 'en', inputLanguage);
-        console.log(`[MedicalChat] Final response: ${finalResponse.substring(0, 100)}...`);
-
-        // Step 6: Store messages with embeddings for future RAG
-        try {
-            await vectorStoreService.storeMessageWithEmbedding(
-                sessionId,
-                userMessage,
-                englishQuery,
-                'user',
-                { language: inputLanguage }
-            );
-            await vectorStoreService.storeMessageWithEmbedding(
-                sessionId,
-                finalResponse,
-                englishResponse,
-                'assistant',
-                { language: inputLanguage, isEmergency }
-            );
-        } catch (error) {
-            console.error('[MedicalChat] Store embedding error:', error);
-        }
-
-        // Update in-memory conversation history
-        history.push({ role: "user", content: englishQuery });
-        history.push({ role: "assistant", content: englishResponse });
-
-        // Keep only last 10 messages to manage token limits
-        if (history.length > 10) {
-            history.splice(0, history.length - 10);
-        }
+        // Step 4: Translate back to original style (preserves Hinglish if input was Hinglish)
+        const finalResponse = await this.translate(englishResponse, 'en', inputLanguage, inputStyle);
 
         return {
             response: finalResponse,
             language: inputLanguage,
+            style: inputStyle,
             isEmergency,
-            mode,
-            ragContextUsed: !!ragContext
+            mode
         };
     }
 
     /**
-     * Fetch patient's medical report from FastAPI service
-     * @param {string} patientId - Patient ID
-     * @returns {Promise<string>} - Medical report text
+     * Fetch patient report from FastAPI
      */
     async fetchPatientReport(patientId) {
         try {
-            // TODO: Replace with actual FastAPI endpoint
-            const fastApiUrl = process.env.FASTAPI_URL || 'http://localhost:8000';
-            const response = await fetch(`${fastApiUrl}/api/v1/reports/${patientId}`);
+            const url = process.env.FASTAPI_URL || 'http://localhost:8000';
+            const res = await fetch(`${url}/api/v1/reports/${patientId}`);
+            if (!res.ok) throw new Error('Report not found');
 
-            if (!response.ok) {
-                throw new Error('Failed to fetch patient report');
-            }
-
-            const reportData = await response.json();
-
-            // Extract relevant medical information
-            const reportSummary = this.extractReportSummary(reportData);
-            return reportSummary;
+            const data = await res.json();
+            return this.formatReport(data);
         } catch (error) {
-            console.error('Error fetching patient report:', error);
+            console.error('[Report] Error:', error.message);
             return null;
         }
     }
 
     /**
-     * Extract summary from patient report data
-     * @param {Object} reportData - Full report data from FastAPI
-     * @returns {string} - Summarized medical context
+     * Format patient report
      */
-    extractReportSummary(reportData) {
-        // Extract key biomarkers and findings
-        let summary = "Patient Medical Report Summary:\n\n";
-
-        if (reportData.systems) {
-            reportData.systems.forEach(system => {
-                summary += `${system.system.toUpperCase()}:\n`;
-                if (system.biomarkers) {
-                    system.biomarkers.forEach(biomarker => {
-                        summary += `- ${biomarker.name}: ${biomarker.value} ${biomarker.unit}\n`;
-                    });
-                }
-                summary += '\n';
+    formatReport(data) {
+        let summary = "Patient Report:\n";
+        if (data.systems) {
+            data.systems.forEach(sys => {
+                summary += `\n${sys.system.toUpperCase()}:\n`;
+                sys.biomarkers?.forEach(b => {
+                    summary += `- ${b.name}: ${b.value} ${b.unit}\n`;
+                });
             });
         }
-
-        if (reportData.risk_assessment) {
-            summary += `Overall Risk Level: ${reportData.risk_assessment.overall_risk}\n`;
+        if (data.risk_assessment) {
+            summary += `\nRisk Level: ${data.risk_assessment.overall_risk}`;
         }
-
         return summary;
     }
 
     /**
-     * Clear conversation history for a session
-     * @param {string} sessionId - Session ID to clear
+     * Clear session memory
      */
     clearHistory(sessionId) {
-        this.conversationHistory.delete(sessionId);
+        this.memoryStore.delete(sessionId);
     }
 
     /**
-     * Get conversation history for a session
-     * @param {string} sessionId - Session ID
-     * @returns {Array} - Conversation history
+     * Get session history
      */
-    getHistory(sessionId) {
-        return this.conversationHistory.get(sessionId) || [];
+    async getHistory(sessionId) {
+        const chatHistory = this.memoryStore.get(sessionId);
+        if (!chatHistory) return [];
+        return await chatHistory.getMessages();
     }
 }
 
-// Export singleton instance
 export default new MedicalChatService();
