@@ -90,6 +90,20 @@ from app.core.extraction.pulmonary import PulmonaryExtractor
 from app.core.extraction.renal import RenalExtractor
 from app.core.extraction.base import BiomarkerSet
 
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles numpy types."""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
 # Optional serial import (may not be available on all systems)
 try:
     import serial
@@ -124,7 +138,7 @@ class BridgeConfig:
     serial_baud: int = 115200
     
     # Serial - Seeed Radar Kit (Breathing/Heartbeat Data)
-    radar_port: str = "COM7"  # Windows: COM7, Linux: /dev/ttyUSB0
+    radar_port: str = "COM6"  # Windows: COM6, Linux: /dev/ttyUSB0
     radar_baud: int = 115200
     
     # Camera
@@ -938,9 +952,9 @@ def generate_simulated_radar_data() -> Dict[str, Any]:
     return {
         "timestamp": int(time.time()),
         "radar": {
-            "respiration_rate": round(np.random.uniform(12, 18), 1),
+            "respiration_rate": round(float(np.random.uniform(12, 18)), 1),
             "heart_rate": int(np.random.uniform(65, 85)),
-            "breathing_depth": round(np.random.uniform(0.5, 0.9), 2),
+            "breathing_depth": round(float(np.random.uniform(0.5, 0.9)), 2),
             "presence_detected": True
         }
     }
@@ -952,37 +966,37 @@ def generate_simulated_esp32_data() -> Dict[str, Any]:
     Matches the structure defined in HARDWARE.md for MLX90640 thermal camera
     output via ESP32 NodeMCU, including clinical biomarkers for multiple systems.
     """
-    base_temp = np.random.uniform(36.2, 36.8)
+    base_temp = float(np.random.uniform(36.2, 36.8))
     
     return {
         "timestamp": int(time.time()),
         "thermal": {
             "fever": {
-                "canthus_temp": round(base_temp + np.random.uniform(-0.2, 0.3), 2),
-                "neck_temp": round(base_temp + np.random.uniform(0.2, 0.6), 2),
-                "neck_stability": round(np.random.uniform(0.3, 0.6), 2),
+                "canthus_temp": round(base_temp + float(np.random.uniform(-0.2, 0.3)), 2),
+                "neck_temp": round(base_temp + float(np.random.uniform(0.2, 0.6)), 2),
+                "neck_stability": round(float(np.random.uniform(0.3, 0.6)), 2),
                 "fever_risk": 0
             },
             "diabetes": {
-                "canthus_temp": round(base_temp + np.random.uniform(-0.2, 0.3), 2),
-                "canthus_stability": round(np.random.uniform(0.2, 0.5), 2),
+                "canthus_temp": round(base_temp + float(np.random.uniform(-0.2, 0.3)), 2),
+                "canthus_stability": round(float(np.random.uniform(0.2, 0.5)), 2),
                 "risk_flag": 0
             },
             "cardiovascular": {
-                "thermal_asymmetry": round(np.random.uniform(0.1, 0.4), 3),
-                "left_cheek_temp": round(base_temp - np.random.uniform(0.3, 0.6), 2),
-                "right_cheek_temp": round(base_temp - np.random.uniform(0.2, 0.5), 2),
+                "thermal_asymmetry": round(float(np.random.uniform(0.1, 0.4)), 3),
+                "left_cheek_temp": round(base_temp - float(np.random.uniform(0.3, 0.6)), 2),
+                "right_cheek_temp": round(base_temp - float(np.random.uniform(0.2, 0.5)), 2),
                 "risk_flag": 0
             },
             "inflammation": {
-                "hot_pixel_pct": round(np.random.uniform(1.0, 5.0), 2),
-                "face_mean_temp": round(base_temp - np.random.uniform(0.5, 1.0), 2),
+                "hot_pixel_pct": round(float(np.random.uniform(1.0, 5.0)), 2),
+                "face_mean_temp": round(base_temp - float(np.random.uniform(0.5, 1.0)), 2),
                 "detected": 0
             },
             "autonomic": {
-                "nose_temp": round(base_temp - np.random.uniform(1.5, 2.5), 2),
-                "forehead_temp": round(base_temp - np.random.uniform(0.3, 0.8), 2),
-                "stress_gradient": round(np.random.uniform(0.8, 1.8), 2),
+                "nose_temp": round(base_temp - float(np.random.uniform(1.5, 2.5)), 2),
+                "forehead_temp": round(base_temp - float(np.random.uniform(0.3, 0.8)), 2),
+                "stress_gradient": round(float(np.random.uniform(0.8, 1.8)), 2),
                 "stress_flag": 0
             },
             "metadata": {
@@ -1004,17 +1018,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python bridge.py --radar-port COM7 --port COM4 --camera 0
+  python bridge.py --radar-port COM6 --port COM5 --camera 0
   python bridge.py --simulate
   python bridge.py --simulate --patient-id PATIENT_123
 
 Split-USB Architecture:
-  - Radar (Seeed MR60BHA2): --radar-port (default: COM7)
+  - Radar (Seeed MR60BHA2): --radar-port (default: COM6)
   - ESP32 Thermal: --port (default: COM4)
   - Webcam: --camera (default: 0)
         """
     )
-    parser.add_argument("--radar-port", default="COM7", 
+    parser.add_argument("--radar-port", default="COM6", 
                         help="Serial port for Seeed Radar Kit (COM_A)")
     parser.add_argument("--port", default="COM4", 
                         help="Serial port for ESP32 NodeMCU thermal (COM_B)")
@@ -1056,9 +1070,9 @@ Split-USB Architecture:
             simulated_thermal = generate_simulated_esp32_data()
             
             print(f"\nSimulated Radar Data:")
-            print(json.dumps(simulated_radar, indent=2))
+            print(json.dumps(simulated_radar, indent=2, cls=NumpyEncoder))
             print(f"\nSimulated Thermal Data:")
-            print(json.dumps(simulated_thermal, indent=2))
+            print(json.dumps(simulated_thermal, indent=2, cls=NumpyEncoder))
             
             # Send directly using DataFusion
             fusion = DataFusion(config.api_url)

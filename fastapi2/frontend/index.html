@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -41,7 +42,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: 
+            background:
                 radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.15), transparent),
                 radial-gradient(ellipse 60% 40% at 80% 100%, rgba(139, 92, 246, 0.1), transparent);
             pointer-events: none;
@@ -116,7 +117,297 @@
             border-radius: 2px;
         }
 
-        /* Form */
+        /* ========================================= */
+        /* SENSOR STATUS PANEL                       */
+        /* ========================================= */
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .sensor-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sensor-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 14px 14px 0 0;
+            transition: background 0.3s ease;
+        }
+
+        .sensor-card.connected::before {
+            background: var(--success);
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+        }
+
+        .sensor-card.error::before {
+            background: var(--warning);
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+        }
+
+        .sensor-card.disconnected::before {
+            background: var(--error);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+        }
+
+        .sensor-icon {
+            font-size: 28px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .sensor-name {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .sensor-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-bottom: 8px;
+        }
+
+        .sensor-status .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .sensor-card.connected .sensor-status {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
+        }
+
+        .sensor-card.connected .dot {
+            background: var(--success);
+            box-shadow: 0 0 6px var(--success);
+        }
+
+        .sensor-card.disconnected .sensor-status {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--error);
+        }
+
+        .sensor-card.disconnected .dot {
+            background: var(--error);
+        }
+
+        .sensor-card.error .sensor-status {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+        }
+
+        .sensor-card.error .dot {
+            background: var(--warning);
+        }
+
+        .sensor-card.checking .sensor-status {
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+        }
+
+        .sensor-card.checking .dot {
+            background: #818cf8;
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .sensor-detail {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            min-height: 28px;
+        }
+
+        .btn-check-sensors {
+            width: 100%;
+            padding: 14px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #6366f1, #818cf8);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-check-sensors:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 30px -8px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-check-sensors:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-check-sensors .spinner {
+            display: none;
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        .btn-check-sensors.loading .spinner {
+            display: inline-block;
+        }
+
+        /* ========================================= */
+        /* LIVE CAMERA FEED                           */
+        /* ========================================= */
+        .camera-feed-container {
+            position: relative;
+            background: #000;
+            border-radius: 14px;
+            overflow: hidden;
+            aspect-ratio: 4/3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .camera-feed-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .camera-placeholder {
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        .camera-placeholder .icon {
+            font-size: 48px;
+            opacity: 0.4;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .camera-controls {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-camera {
+            flex: 1;
+            padding: 14px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-camera-start {
+            color: white;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        .btn-camera-start:hover {
+            box-shadow: 0 12px 30px -8px rgba(34, 197, 94, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-camera-stop {
+            color: white;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .btn-camera-stop:hover {
+            box-shadow: 0 12px 30px -8px rgba(239, 68, 68, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-camera:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .camera-badge {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: none;
+            align-items: center;
+            gap: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .camera-badge.live {
+            display: flex;
+        }
+
+        .camera-badge .live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: white;
+            animation: blink 1s infinite;
+        }
+
+        /* ========================================= */
+        /* FORM                                       */
+        /* ========================================= */
         .form-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -138,7 +429,8 @@
             letter-spacing: 0.5px;
         }
 
-        input, select {
+        input,
+        select {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--border-color);
             border-radius: 12px;
@@ -149,7 +441,8 @@
             transition: all 0.2s ease;
         }
 
-        input:focus, select:focus {
+        input:focus,
+        select:focus {
             outline: none;
             border-color: var(--accent-solid);
             background: rgba(139, 92, 246, 0.05);
@@ -205,7 +498,9 @@
         }
 
         @keyframes spin {
-            to { transform: translateY(-50%) rotate(360deg); }
+            to {
+                transform: translateY(-50%) rotate(360deg);
+            }
         }
 
         /* Status */
@@ -371,8 +666,15 @@
         }
 
         @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
-            50% { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); }
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 0 10px rgba(139, 92, 246, 0);
+            }
         }
 
         /* Footer */
@@ -384,16 +686,36 @@
         }
 
         @media (max-width: 600px) {
-            h1 { font-size: 28px; }
-            .form-grid { grid-template-columns: 1fr; }
-            .results-grid { grid-template-columns: 1fr; }
-            .download-grid { grid-template-columns: 1fr; }
+            h1 {
+                font-size: 28px;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .download-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .sensor-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .camera-controls {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="bg-gradient"></div>
-    
+
     <div class="container">
         <header>
             <div class="logo">Chiranjeevi</div>
@@ -401,9 +723,78 @@
             <p class="subtitle">Non-invasive health analysis using mmWave radar and computer vision</p>
         </header>
 
+        <!-- ===== SENSOR STATUS PANEL ===== -->
+        <div class="card" id="sensorStatusCard">
+            <h2 class="card-title">Sensor Status</h2>
+
+            <div class="sensor-grid">
+                <div class="sensor-card disconnected" id="sensorCamera">
+                    <span class="sensor-icon">📷</span>
+                    <div class="sensor-name">RGB Camera</div>
+                    <div class="sensor-status">
+                        <span class="dot"></span>
+                        <span class="status-label">Disconnected</span>
+                    </div>
+                    <div class="sensor-detail">Not checked yet</div>
+                </div>
+
+                <div class="sensor-card disconnected" id="sensorEsp32">
+                    <span class="sensor-icon">🌡️</span>
+                    <div class="sensor-name">ESP32 Thermal</div>
+                    <div class="sensor-status">
+                        <span class="dot"></span>
+                        <span class="status-label">Disconnected</span>
+                    </div>
+                    <div class="sensor-detail">Not checked yet</div>
+                </div>
+
+                <div class="sensor-card disconnected" id="sensorRadar">
+                    <span class="sensor-icon">📡</span>
+                    <div class="sensor-name">mmWave Radar</div>
+                    <div class="sensor-status">
+                        <span class="dot"></span>
+                        <span class="status-label">Disconnected</span>
+                    </div>
+                    <div class="sensor-detail">Not checked yet</div>
+                </div>
+            </div>
+
+            <button class="btn-check-sensors" id="checkSensorsBtn" onclick="checkSensors()">
+                <span class="spinner"></span>
+                🔍 Check All Sensors
+            </button>
+        </div>
+
+        <!-- ===== LIVE CAMERA FEED ===== -->
+        <div class="card" id="cameraFeedCard">
+            <h2 class="card-title">Live Camera Feed</h2>
+
+            <div class="camera-feed-container" id="cameraContainer">
+                <div class="camera-badge" id="liveBadge">
+                    <span class="live-dot"></span>
+                    LIVE
+                </div>
+                <div class="camera-placeholder" id="cameraPlaceholder">
+                    <span class="icon">🎥</span>
+                    <div>Click "Start Camera" to begin live feed</div>
+                </div>
+                <img id="cameraFeed" style="display: none;" alt="Live Camera Feed">
+            </div>
+
+            <div class="camera-controls">
+                <button class="btn-camera btn-camera-start" id="startCameraBtn" onclick="startCamera()">
+                    ▶ Start Camera
+                </button>
+                <button class="btn-camera btn-camera-stop" id="stopCameraBtn" onclick="stopCamera()" disabled>
+                    ⏹ Stop Camera
+                </button>
+            </div>
+        </div>
+
+        <!-- ===== HARDWARE CONFIGURATION ===== -->
         <div class="card">
             <h2 class="card-title">Hardware Configuration</h2>
-            
+
             <form id="screeningForm">
                 <div class="form-grid">
                     <div class="form-group">
@@ -412,7 +803,7 @@
                     </div>
                     <div class="form-group">
                         <label for="radarPort">Radar Port</label>
-                        <input type="text" id="radarPort" placeholder="COM7" value="COM7">
+                        <input type="text" id="radarPort" placeholder="COM6" value="COM6">
                     </div>
                     <div class="form-group">
                         <label for="cameraIndex">Camera Index</label>
@@ -423,7 +814,7 @@
                         <input type="text" id="esp32Port" placeholder="COM4">
                     </div>
                 </div>
-                
+
                 <button type="submit" class="btn-primary" id="startBtn">
                     Start Screening
                 </button>
@@ -432,7 +823,7 @@
 
         <div class="card status-card" id="statusCard">
             <h2 class="card-title">Screening Status</h2>
-            
+
             <div class="progress-steps" id="progressSteps">
                 <div class="step" data-step="init">
                     <div class="step-indicator">1</div>
@@ -455,7 +846,7 @@
                     <span>Generating reports</span>
                 </div>
             </div>
-            
+
             <div class="status-message info" id="statusMessage">
                 <span class="status-icon">⏳</span>
                 <span id="statusText">Waiting to start...</span>
@@ -479,13 +870,15 @@
                 <div class="download-grid">
                     <a href="#" class="btn-download" id="downloadPatient">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         Patient Report
                     </a>
                     <a href="#" class="btn-download" id="downloadDoctor">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         Doctor Report
                     </a>
@@ -500,7 +893,9 @@
 
     <script>
         const API_BASE = 'http://localhost:8000';
-        
+        let cameraActive = false;
+
+        // ===== DOM REFERENCES =====
         const form = document.getElementById('screeningForm');
         const startBtn = document.getElementById('startBtn');
         const statusCard = document.getElementById('statusCard');
@@ -510,10 +905,105 @@
         const resultsGrid = document.getElementById('resultsGrid');
         const downloadSection = document.getElementById('downloadSection');
 
+        // ===== SENSOR STATUS =====
+        function updateSensorCard(id, status, detail) {
+            const card = document.getElementById(id);
+            card.className = 'sensor-card ' + status;
+
+            const labelMap = {
+                connected: 'Connected',
+                disconnected: 'Disconnected',
+                error: 'Error',
+                checking: 'Checking...'
+            };
+
+            card.querySelector('.status-label').textContent = labelMap[status] || status;
+            card.querySelector('.sensor-detail').textContent = detail;
+        }
+
+        async function checkSensors() {
+            const btn = document.getElementById('checkSensorsBtn');
+            btn.classList.add('loading');
+            btn.disabled = true;
+
+            // Set all to checking
+            updateSensorCard('sensorCamera', 'checking', 'Probing...');
+            updateSensorCard('sensorEsp32', 'checking', 'Probing...');
+            updateSensorCard('sensorRadar', 'checking', 'Probing...');
+
+            const cameraIndex = document.getElementById('cameraIndex').value || '0';
+            const esp32Port = document.getElementById('esp32Port').value || '';
+            const radarPort = document.getElementById('radarPort').value || 'COM6';
+
+            let url = `${API_BASE}/api/v1/hardware/sensor-status?camera_index=${cameraIndex}&radar_port=${radarPort}`;
+            if (esp32Port) {
+                url += `&esp32_port=${esp32Port}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                // Update Camera
+                updateSensorCard('sensorCamera', data.camera.status, data.camera.detail);
+
+                // Update ESP32
+                updateSensorCard('sensorEsp32', data.esp32.status, data.esp32.detail);
+
+                // Update Radar
+                updateSensorCard('sensorRadar', data.radar.status, data.radar.detail);
+
+            } catch (error) {
+                updateSensorCard('sensorCamera', 'error', 'Server not responding');
+                updateSensorCard('sensorEsp32', 'error', 'Server not responding');
+                updateSensorCard('sensorRadar', 'error', 'Server not responding');
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
+        // ===== LIVE CAMERA FEED =====
+        function startCamera() {
+            const cameraIndex = document.getElementById('cameraIndex').value || '0';
+            const feedImg = document.getElementById('cameraFeed');
+            const placeholder = document.getElementById('cameraPlaceholder');
+            const liveBadge = document.getElementById('liveBadge');
+            const startBtn = document.getElementById('startCameraBtn');
+            const stopBtn = document.getElementById('stopCameraBtn');
+
+            feedImg.src = `${API_BASE}/api/v1/hardware/video-feed?camera_index=${cameraIndex}`;
+            feedImg.style.display = 'block';
+            placeholder.style.display = 'none';
+            liveBadge.classList.add('live');
+
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            cameraActive = true;
+        }
+
+        function stopCamera() {
+            const feedImg = document.getElementById('cameraFeed');
+            const placeholder = document.getElementById('cameraPlaceholder');
+            const liveBadge = document.getElementById('liveBadge');
+            const startBtn = document.getElementById('startCameraBtn');
+            const stopBtn = document.getElementById('stopCameraBtn');
+
+            feedImg.src = '';
+            feedImg.style.display = 'none';
+            placeholder.style.display = 'block';
+            liveBadge.classList.remove('live');
+
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            cameraActive = false;
+        }
+
+        // ===== SCREENING (Original functionality preserved) =====
         function setStatus(message, type = 'info') {
             statusMessage.className = `status-message ${type}`;
             statusText.textContent = message;
-            
+
             const icons = { info: '⏳', success: '✅', error: '❌' };
             statusMessage.querySelector('.status-icon').textContent = icons[type] || '⏳';
         }
@@ -529,9 +1019,9 @@
         function simulateProgress() {
             const steps = ['init', 'capture', 'pose', 'process', 'report'];
             let currentStep = 0;
-            
+
             progressSteps.classList.add('visible');
-            
+
             const interval = setInterval(() => {
                 if (currentStep > 0) {
                     setStep(steps[currentStep - 1], 'completed');
@@ -542,19 +1032,24 @@
                 } else {
                     clearInterval(interval);
                 }
-            }, 4000);  // Each step takes ~4 seconds (total ~20s for capture phases)
-            
+            }, 4000);
+
             return interval;
         }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const patientId = document.getElementById('patientId').value || 'PATIENT_001';
-            const radarPort = document.getElementById('radarPort').value || 'COM7';
+            const radarPort = document.getElementById('radarPort').value || 'COM6';
             const cameraIndex = parseInt(document.getElementById('cameraIndex').value) || 0;
             const esp32Port = document.getElementById('esp32Port').value || null;
-            
+
+            // Stop camera feed if active (camera will be used by bridge.py)
+            if (cameraActive) {
+                stopCamera();
+            }
+
             // UI Updates
             startBtn.classList.add('loading');
             startBtn.disabled = true;
@@ -562,10 +1057,10 @@
             statusCard.classList.add('visible');
             downloadSection.classList.remove('visible');
             resultsGrid.style.display = 'none';
-            
+
             setStatus('Connecting to hardware and starting screening...', 'info');
             const progressInterval = simulateProgress();
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/v1/hardware/start-screening`, {
                     method: 'POST',
@@ -577,32 +1072,30 @@
                         esp32_port: esp32Port
                     })
                 });
-                
+
                 clearInterval(progressInterval);
-                // Mark all steps as completed
                 ['init', 'capture', 'pose', 'process', 'report'].forEach(s => setStep(s, 'completed'));
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'success') {
                     setStatus('Screening completed successfully!', 'success');
-                    
+
                     resultsGrid.style.display = 'grid';
                     document.getElementById('screeningId').textContent = data.screening_id || 'N/A';
                     document.getElementById('resultStatus').textContent = 'Success';
-                    
-                    // Setup download links
+
                     if (data.patient_report_id) {
-                        document.getElementById('downloadPatient').href = 
+                        document.getElementById('downloadPatient').href =
                             `${API_BASE}/api/v1/reports/${data.patient_report_id}/download`;
                         document.getElementById('downloadPatient').target = '_blank';
                     }
                     if (data.doctor_report_id) {
-                        document.getElementById('downloadDoctor').href = 
+                        document.getElementById('downloadDoctor').href =
                             `${API_BASE}/api/v1/reports/${data.doctor_report_id}/download`;
                         document.getElementById('downloadDoctor').target = '_blank';
                     }
-                    
+
                     downloadSection.classList.add('visible');
                 } else {
                     setStatus(data.error || 'Screening failed', 'error');
@@ -610,7 +1103,7 @@
                     document.getElementById('screeningId').textContent = 'N/A';
                     document.getElementById('resultStatus').textContent = 'Failed';
                 }
-                
+
             } catch (error) {
                 clearInterval(progressInterval);
                 setStatus(`Connection error: ${error.message}. Is the server running?`, 'error');
@@ -620,6 +1113,12 @@
                 startBtn.textContent = 'Start Screening';
             }
         });
+
+        // Auto-check sensors on page load
+        window.addEventListener('load', () => {
+            setTimeout(checkSensors, 500);
+        });
     </script>
 </body>
+
 </html>

@@ -43,7 +43,7 @@ class Biomarker:
         if self.normal_range is None:
             return None
         low, high = self.normal_range
-        return self.value < low or self.value > high
+        return bool(self.value < low or self.value > high)
     
     @property
     def status(self) -> str:
@@ -59,14 +59,15 @@ class Biomarker:
         return "normal"
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
+        """Convert to dictionary (all values are native Python types for JSON safety)."""
+        abnormal = self.is_abnormal()
         return {
             "name": self.name,
-            "value": self.value,
+            "value": float(self.value),
             "unit": self.unit,
-            "confidence": self.confidence,
-            "normal_range": self.normal_range,
-            "is_abnormal": self.is_abnormal(),
+            "confidence": float(self.confidence),
+            "normal_range": [float(x) for x in self.normal_range] if self.normal_range else None,
+            "is_abnormal": bool(abnormal) if abnormal is not None else None,
             "status": self.status,
             "description": self.description,
         }
@@ -148,12 +149,13 @@ class BaseExtractor(ABC):
         description: str = ""
     ) -> None:
         """Helper to add a biomarker to a set."""
+        # Convert numpy types to native Python types for JSON serialization safety
         biomarker_set.add(Biomarker(
             name=name,
-            value=value,
+            value=float(value),
             unit=unit,
-            confidence=confidence,
-            normal_range=normal_range,
+            confidence=float(confidence),
+            normal_range=tuple(float(x) for x in normal_range) if normal_range else None,
             description=description
         ))
     
