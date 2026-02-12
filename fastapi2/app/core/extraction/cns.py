@@ -106,7 +106,7 @@ class CNSExtractor(BaseExtractor):
                 f"Insufficient pose data: {len(pose_sequence)} frames. "
                 f"Need {self.min_data_length} frames (10s) for reliable CNS analysis."
             )
-            return self._generate_simulated_biomarkers(biomarker_set)
+            return biomarker_set
         
         try:
             pose_array = np.array(pose_sequence)
@@ -114,11 +114,11 @@ class CNSExtractor(BaseExtractor):
             # Validate pose array shape (frames, landmarks, coordinates)
             if pose_array.ndim != 3 or pose_array.shape[1] < 29:
                 logger.warning(f"Invalid pose array shape: {pose_array.shape}")
-                return self._generate_simulated_biomarkers(biomarker_set)
+                return biomarker_set
             
         except Exception as e:
             logger.warning(f"Failed to convert pose sequence: {e}")
-            return self._generate_simulated_biomarkers(biomarker_set)
+            return biomarker_set
         
         # =====================================================
         # 1. GAIT VARIABILITY (Zeni heel strike detection)
@@ -126,13 +126,17 @@ class CNSExtractor(BaseExtractor):
         gait_var, heel_strikes = self._calculate_gait_variability(pose_array)
         gait_confidence = min(0.95, 0.5 + len(heel_strikes) / 20)  # More strides = higher confidence
         
+        # CONTEXT-AWARE: Signal stationary state by setting normal_range=None
+        # This triggers "not_assessed" status instead of misleading "Normal"
+        gait_normal_range = None if len(heel_strikes) == 0 else self.normal_ranges["gait_variability"]
+        
         self._add_biomarker(
             biomarker_set,
             name="gait_variability",
             value=gait_var,
             unit="coefficient_of_variation",
             confidence=gait_confidence,
-            normal_range=self.normal_ranges["gait_variability"],
+            normal_range=gait_normal_range,
             description="Stride-to-stride timing variability (Zeni heel strike method)"
         )
         
@@ -773,78 +777,5 @@ class CNSExtractor(BaseExtractor):
         
         return float(np.clip(stability, 40, 100)), components
     
-    # =========================================================================
-    # SIMULATED BIOMARKERS (Fallback when data insufficient)
-    # =========================================================================
-    
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> BiomarkerSet:
-        """Generate clinically-plausible simulated biomarkers when real data unavailable."""
-        
-        # Gait variability (normal range ~3-6%)
-        self._add_biomarker(
-            biomarker_set, 
-            "gait_variability", 
-            np.random.uniform(0.03, 0.05), 
-            "coefficient_of_variation",
-            0.4, 
-            self.normal_ranges["gait_variability"], 
-            "Simulated gait variability (insufficient pose data)"
-        )
-        
-        # Posture entropy (normal range ~1.0-2.5)
-        self._add_biomarker(
-            biomarker_set, 
-            "posture_entropy",
-            np.random.uniform(1.5, 2.2), 
-            "sample_entropy",
-            0.4, 
-            self.normal_ranges["posture_entropy"], 
-            "Simulated posture entropy (insufficient pose data)"
-        )
-        
-        # Tremor scores (normal: low power)
-        for tremor_type in self.tremor_bands:
-            self._add_biomarker(
-                biomarker_set, 
-                f"tremor_{tremor_type}",
-                np.random.uniform(0.01, 0.04), 
-                "normalized_psd",
-                0.4, 
-                self.normal_ranges["tremor_power"], 
-                f"Simulated {tremor_type} tremor (insufficient pose data)"
-            )
-        
-        # Stability score (normal: 80-95)
-        self._add_biomarker(
-            biomarker_set, 
-            "cns_stability_score",
-            np.random.uniform(82, 92), 
-            "score_0_100",
-            0.4, 
-            self.normal_ranges["stability_score"], 
-            "Simulated stability score (insufficient pose data)"
-        )
-        
-        # Sway components
-        self._add_biomarker(
-            biomarker_set,
-            "sway_amplitude_ap",
-            np.random.uniform(0.01, 0.03),
-            "normalized_units",
-            0.4,
-            (0.0, 0.05),
-            "Simulated AP sway (insufficient pose data)"
-        )
-        
-        self._add_biomarker(
-            biomarker_set,
-            "sway_amplitude_ml",
-            np.random.uniform(0.01, 0.03),
-            "normalized_units",
-            0.4,
-            (0.0, 0.05),
-            "Simulated ML sway (insufficient pose data)"
-        )
-        
-        return biomarker_set
+    # SIMULATION METHOD REMOVED
         

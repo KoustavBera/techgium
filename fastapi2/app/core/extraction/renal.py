@@ -40,8 +40,8 @@ class RenalExtractor(BaseExtractor):
         
         if ris_data is not None and len(ris_data) > 0:
             self._extract_from_ris(np.array(ris_data), biomarker_set)
-        else:
-            self._generate_simulated_biomarkers(biomarker_set)
+        elif ris_data is None or len(ris_data) == 0:
+            logger.warning("RenalExtractor: No data sources available.")
         
         # NEW: Extract microcirculation from thermal camera (diabetes screening)
         if "thermal_data" in data:
@@ -170,17 +170,3 @@ class RenalExtractor(BaseExtractor):
             description="Thoracic fluid overload indicator"
         )
     
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
-        """Generate simulated renal biomarkers."""
-        self._add_biomarker(biomarker_set, "fluid_asymmetry_index",
-                           np.random.uniform(0.03, 0.07), "ratio",
-                           0.5, (0, 0.1), "Simulated fluid asymmetry")
-        self._add_biomarker(biomarker_set, "total_body_water_proxy",
-                           np.random.uniform(0.9, 1.1), "normalized",
-                           0.5, (0.8, 1.2), "Simulated TBW")
-        self._add_biomarker(biomarker_set, "extracellular_fluid_ratio",
-                           np.random.uniform(0.38, 0.42), "ratio",
-                           0.5, (0.35, 0.45), "Simulated ECF ratio")
-        self._add_biomarker(biomarker_set, "fluid_overload_index",
-                           np.random.uniform(-0.1, 0.1), "index",
-                           0.5, (-0.3, 0.3), "Simulated fluid overload")

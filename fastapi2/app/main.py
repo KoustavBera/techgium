@@ -6,9 +6,11 @@ Main application entry point with API endpoints for:
 - Report generation (Patient & Doctor PDFs)
 - Validation status
 """
-from fastapi import FastAPI, HTTPException, Response, UploadFile, File, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Response, UploadFile, File, BackgroundTasks, Query
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -117,6 +119,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---- Serve Frontend ----
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+
 
 # ---- In-memory storage (replace with database in production) ----
 _screenings: Dict[str, Dict[str, Any]] = {}
@@ -250,6 +256,11 @@ async def run_screening(request: ScreeningRequest):
         
         for sys_input in request.systems:
             # Parse system
+            logger.info(f"Processing system: {sys_input.system} with {len(sys_input.biomarkers)} biomarkers")
+            if sys_input.system.lower() == "skin":
+                 bm_names = [b.name for b in sys_input.biomarkers]
+                 logger.info(f"Skin biomarkers received: {bm_names}")
+                 
             system = _parse_system(sys_input.system)
             
             # Convert biomarker inputs to Biomarker objects
@@ -475,9 +486,9 @@ async def list_systems():
 class HardwareScreeningRequest(BaseModel):
     """Request for hardware-based screening."""
     patient_id: str = Field(default="HARDWARE_PATIENT")
-    radar_port: str = Field(default="COM7", description="Serial port for mmRadar")
+    radar_port: str = Field(default="COM6", description="Serial port for mmRadar")
     camera_index: int = Field(default=0, description="Camera index for OpenCV")
-    esp32_port: Optional[str] = Field(default=None, description="Optional ESP32 thermal port")
+    esp32_port: Optional[str] = Field(default="COM5", description="Optional ESP32 thermal port")
 
 
 class HardwareScreeningResponse(BaseModel):
@@ -593,6 +604,159 @@ async def start_hardware_screening(request: HardwareScreeningRequest):
             status="error",
             error=str(e)
         )
+
+
+# ---- Sensor Status & Live Camera Feed Endpoints ----
+
+@app.get("/api/v1/hardware/sensor-status", tags=["Hardware"])
+async def check_sensor_status(
+    camera_index: int = Query(0, description="Camera index for OpenCV"),
+    esp32_port: Optional[str] = Query("COM5", description="ESP32 serial port (e.g. COM5)"),
+    radar_port: str = Query("COM6", description="Radar serial port (e.g. COM6)")
+):
+    """
+    Probe all hardware sensors and return their connection status.
+    
+    Returns status for: RGB camera, ESP32 thermal camera, mmWave radar.
+    """
+    import cv2
+    
+    result = {
+        "camera": {"status": "disconnected", "detail": "Not checked"},
+        "esp32": {"status": "disconnected", "detail": "Not checked"},
+        "radar": {"status": "disconnected", "detail": "Not checked"},
+    }
+    
+    # --- Check RGB Camera ---
+    try:
+        cap = cv2.VideoCapture(camera_index)
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                h, w = frame.shape[:2]
+                result["camera"] = {
+                    "status": "connected",
+                    "detail": f"Camera {camera_index} — {w}x{h} resolution"
+                }
+            else:
+                result["camera"]["detail"] = f"Camera {camera_index} opened but cannot read frames"
+            cap.release()
+        else:
+            result["camera"]["detail"] = f"Camera {camera_index} not found or busy"
+    except Exception as e:
+        result["camera"]["detail"] = f"Camera error: {str(e)}"
+    
+    # --- Check ESP32 Thermal Camera ---
+    if esp32_port:
+        try:
+            import serial
+            ser = serial.Serial(port=esp32_port, baudrate=115200, timeout=3)
+            # Try to read a line of JSON from the ESP32
+            raw = ser.readline().decode('utf-8', errors='ignore').strip()
+            ser.close()
+            
+            if raw:
+                import json as _json
+                try:
+                    data = _json.loads(raw)
+                    if 'thermal' in data:
+                        result["esp32"] = {
+                            "status": "connected",
+                            "detail": f"ESP32 on {esp32_port} — Thermal data streaming"
+                        }
+                    elif 'status' in data and data['status'] == 'ready':
+                        result["esp32"] = {
+                            "status": "connected",
+                            "detail": f"ESP32 on {esp32_port} — Ready (v{data.get('version', '?')})"
+                        }
+                    elif 'error' in data:
+                        result["esp32"] = {
+                            "status": "error",
+                            "detail": f"ESP32 on {esp32_port} — Sensor error: {data['error']}"
+                        }
+                    else:
+                        result["esp32"] = {
+                            "status": "connected",
+                            "detail": f"ESP32 on {esp32_port} — Responding (unknown format)"
+                        }
+                except _json.JSONDecodeError:
+                    result["esp32"] = {
+                        "status": "connected",
+                        "detail": f"ESP32 on {esp32_port} — Port open, non-JSON data: {raw[:80]}"
+                    }
+            else:
+                result["esp32"] = {
+                    "status": "connected",
+                    "detail": f"ESP32 on {esp32_port} — Port open, no data yet (may be starting up)"
+                }
+        except ImportError:
+            result["esp32"]["detail"] = "pyserial not installed (pip install pyserial)"
+        except Exception as e:
+            result["esp32"]["detail"] = f"ESP32 on {esp32_port} — {str(e)}"
+    else:
+        result["esp32"]["detail"] = "No ESP32 port specified"
+    
+    # --- Check mmWave Radar ---
+    try:
+        import serial
+        ser = serial.Serial(port=radar_port, baudrate=115200, timeout=2)
+        # Just check if port opens successfully
+        if ser.is_open:
+            result["radar"] = {
+                "status": "connected",
+                "detail": f"Radar on {radar_port} — Port open and responding"
+            }
+        ser.close()
+    except ImportError:
+        result["radar"]["detail"] = "pyserial not installed (pip install pyserial)"
+    except Exception as e:
+        result["radar"]["detail"] = f"Radar on {radar_port} — {str(e)}"
+    
+    return result
+
+
+@app.get("/api/v1/hardware/video-feed", tags=["Hardware"])
+async def video_feed(
+    camera_index: int = Query(0, description="Camera index for OpenCV")
+):
+    """
+    Live MJPEG video stream from the RGB camera.
+    
+    Use in an <img> tag: <img src="/api/v1/hardware/video-feed?camera_index=0">
+    """
+    import cv2
+    
+    def generate_frames():
+        cap = cv2.VideoCapture(camera_index)
+        if not cap.isOpened():
+            return
+        
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Encode frame as JPEG
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                frame_bytes = buffer.tobytes()
+                
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' +
+                    frame_bytes +
+                    b'\r\n'
+                )
+        finally:
+            cap.release()
+    
+    return StreamingResponse(
+        generate_frames(),
+        media_type='multipart/x-mixed-replace; boundary=frame'
+    )
 
 
 # ---- Application Lifecycle ----

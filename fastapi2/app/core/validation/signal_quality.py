@@ -2,7 +2,7 @@
 Signal Quality Assessment Module
 
 Computes quality metrics for each sensing modality using physics-based analysis.
-NO ML/AI - purely signal processing based.
+Combines physics-based methods with optional ML-based anomaly detection.
 """
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional, Tuple
@@ -13,6 +13,14 @@ from scipy import stats
 
 # from app.core.ingestion.sync import DataPacket
 from app.utils import get_logger
+
+# Optional ML anomaly detector (graceful fallback if not available)
+try:
+    from app.core.ml.anomaly_detector import SignalAnomalyDetector
+    ANOMALY_DETECTOR_AVAILABLE = True
+except ImportError:
+    ANOMALY_DETECTOR_AVAILABLE = False
+    SignalAnomalyDetector = None
 
 logger = get_logger(__name__)
 
@@ -80,10 +88,25 @@ class SignalQualityAssessor:
     Uses physics-based signal processing - NO ML/AI.
     """
     
-    def __init__(self):
-        """Initialize assessor."""
+    def __init__(self, use_anomaly_detection: bool = True):
+        """Initialize assessor.
+        
+        Args:
+            use_anomaly_detection: Whether to use ML-based anomaly detection (if available)
+        """
         self._assessment_count = 0
-        logger.info("SignalQualityAssessor initialized (NO-ML)")
+        self._use_anomaly_detection = use_anomaly_detection
+        
+        # Initialize anomaly detector if available and enabled
+        self._anomaly_detector = None
+        if use_anomaly_detection and ANOMALY_DETECTOR_AVAILABLE:
+            try:
+                self._anomaly_detector = SignalAnomalyDetector(contamination=0.1)
+                logger.info("SignalQualityAssessor initialized WITH anomaly detection")
+            except Exception as e:
+                logger.warning(f"Failed to initialize anomaly detector: {e}. Falling back to physics-only.")
+        else:
+            logger.info("SignalQualityAssessor initialized (physics-based only)")
     
     def assess_camera(self, frames: List[np.ndarray], timestamps: Optional[List[float]] = None) -> ModalityQualityScore:
         """
@@ -197,6 +220,36 @@ class SignalQualityAssessor:
                 issues.append("Possible motion blur detected")
         else:
             score.artifact_level = 0.7
+        
+        # ENHANCEMENT: ML-based anomaly detection on green channel (rPPG)
+        if self._anomaly_detector is not None and n_frames >= 5:
+            try:
+                # Extract green channel time series for rPPG analysis
+                green_signal = []
+                for frame in frames[:min(100, n_frames)]:
+                    if frame is not None and frame.size > 0 and len(frame.shape) == 3:
+                        green_mean = np.mean(frame[:, :, 1])  # Green channel (BGR)
+                        green_signal.append(green_mean)
+                
+                if len(green_signal) >= 10:
+                    signal_array = np.array(green_signal)
+                    anomaly_result = self._anomaly_detector.detect(signal_array, sample_rate=30)
+                    
+                    logger.debug(
+                        f"Camera anomaly detection: score={anomaly_result.anomaly_score:.3f}, "
+                        f"type={anomaly_result.anomaly_type.value}, penalty={anomaly_result.confidence_penalty:.3f}"
+                    )
+                    
+                    # Apply confidence penalty to noise_level (affects overall quality)
+                    if anomaly_result.is_anomalous:
+                        original_noise = score.noise_level
+                        score.noise_level *= (1.0 - anomaly_result.confidence_penalty)
+                        issues.append(f"ML anomaly: {anomaly_result.anomaly_type.value}")
+                        logger.debug(
+                            f"Applied anomaly penalty to noise_level: {original_noise:.3f} -> {score.noise_level:.3f}"
+                        )
+            except Exception as e:
+                logger.warning(f"Anomaly detection failed (non-critical): {e}")
         
         score.issues = issues
         score.compute_overall()

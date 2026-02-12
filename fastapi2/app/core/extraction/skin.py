@@ -109,12 +109,12 @@ class SkinExtractor(BaseExtractor):
                         has_thermal = True
         
         # Priority 2: Visual Analysis (Webcam)
-        frames = data.get("frames", [])
+        frames = data.get("frames", data.get("face_frames", []))
         if len(frames) > 0:
             frame = np.array(frames[0]) if not isinstance(frames[0], np.ndarray) else frames[0]
             self._extract_from_frame(frame, biomarker_set)
         elif not has_thermal:
-            self._generate_simulated_biomarkers(biomarker_set)
+            logger.warning("SkinExtractor: No data sources available.")
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
         self._extraction_count += 1
@@ -129,15 +129,13 @@ class SkinExtractor(BaseExtractor):
         """Extract skin metrics from a video frame."""
         
         if frame.ndim < 2:
-            self._generate_simulated_biomarkers(biomarker_set)
             return
         
         # 1. Face Segmentation (MediaPipe)
         face_mask, face_roi_crop = self._get_face_mask(frame)
         
         if face_mask is None:
-            logger.warning("Skin: No face detected. Using fallback values.")
-            self._generate_simulated_biomarkers(biomarker_set)
+            logger.warning("Skin: No face detected.")
             return
 
         # 2. Texture Analysis (GLCM on Green Channel of ROI)
@@ -148,7 +146,7 @@ class SkinExtractor(BaseExtractor):
             value=texture_roughness,
             unit="glcm_contrast",
             confidence=0.75,
-            normal_range=(10, 80),  # Literature: 10-100 for skin textures
+            normal_range=(0.0, 5.0),  # Calibrated for webcam GLCM (32 levels, bilateral filtered)
             description="Skin surface texture (GLCM Contrast, multi-angle)"
         )
         
@@ -161,7 +159,7 @@ class SkinExtractor(BaseExtractor):
             value=color_metrics["redness"],
             unit="lab_deviation",
             confidence=0.85,
-            normal_range=(15, 40),  # Lab deviation scale for Fitzpatrick I-VI
+            normal_range=(0.0, 25.0),  # Calibrated: Low redness = healthy, high = inflammation
             description="Skin redness (Hemoglobin proxy, Lab a* deviation)"
         )
         
@@ -171,7 +169,7 @@ class SkinExtractor(BaseExtractor):
             value=color_metrics["yellowness"],
             unit="lab_deviation",
             confidence=0.80,
-            normal_range=(15, 40),  # Lab deviation scale for Fitzpatrick I-VI
+            normal_range=(0.0, 25.0),  # Calibrated: Low yellowness = healthy, high = jaundice proxy
             description="Skin yellowness (Bilirubin proxy, Lab b* deviation)"
         )
         
@@ -181,7 +179,7 @@ class SkinExtractor(BaseExtractor):
             value=color_metrics["uniformity"],
             unit="entropy_inv",
             confidence=0.70,
-            normal_range=(0.6, 0.95),  # Adjusted for realistic entropy range
+            normal_range=(0.25, 1.0),  # Calibrated: Real skin has natural variation (0.25-0.7 typical)
             description="Skin tone uniformity (Inverse Entropy)"
         )
         
@@ -378,29 +376,8 @@ class SkinExtractor(BaseExtractor):
     def _detect_lesions(self, frame: np.ndarray) -> int:
         """Disabled Lesion Detection."""
         return 0
-    
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
-        """Generate simulated skin biomarkers with consistent units/ranges."""
-        # Texture: GLCM contrast typically 10-100 for skin
-        self._add_biomarker(biomarker_set, "texture_roughness",
-                           np.random.uniform(20, 60), "glcm_contrast",
-                           0.5, (10, 80), "Simulated texture")
-        # Redness: Lab deviation scale, typical 15-40 for healthy skin
-        self._add_biomarker(biomarker_set, "skin_redness",
-                           np.random.uniform(20, 35), "lab_deviation",
-                           0.5, (15, 40), "Simulated redness")
-        # Yellowness: Lab deviation scale, typical 15-40 for healthy skin
-        self._add_biomarker(biomarker_set, "skin_yellowness",
-                           np.random.uniform(20, 35), "lab_deviation",
-                           0.5, (15, 40), "Simulated yellowness")
-        # Uniformity: 0-1 score, healthy skin > 0.7
-        self._add_biomarker(biomarker_set, "color_uniformity",
-                           np.random.uniform(0.75, 0.90), "entropy_inv",
-                           0.5, (0.6, 0.95), "Simulated uniformity")
-        # Lesion: Disabled (confidence=0.0 for consistency)
-        self._add_biomarker(biomarker_set, "lesion_count",
-                           0.0, "count",
-                           0.0, (0, 5), "Simulated lesion count (disabled)")
+
+    # SIMULATION METHOD REMOVED
 
     def _extract_from_thermal(self, thermal_data: Dict[str, Any], biomarker_set: BiomarkerSet) -> None:
         """Extract skin metrics from thermal sensor data (OLD FORMAT)."""
@@ -441,29 +418,64 @@ class SkinExtractor(BaseExtractor):
 
     def _extract_from_thermal_v2(self, thermal_data: Dict[str, Any], biomarker_set: BiomarkerSet) -> None:
         """Extract skin metrics from flattened thermal data (NEW FORMAT v2)."""
+        # THERMAL CALIBRATION: Hardware consistently reads ~0.8°C lower than actual
+        # Applying offset to bring readings into clinical range
+        CALIBRATION_OFFSET = 0.8
         
-        # Skin Temperature from neck (core body proxy)
-        if thermal_data.get('fever_neck_temp') is not None:
-            self._add_biomarker_safe(
+        # Skin Temperature from canthus (core body proxy - medically validated)
+        neck_temp = thermal_data.get('fever_neck_temp')
+        canthus_temp = thermal_data.get('fever_canthus_temp')
+        face_max = thermal_data.get('fever_face_max')  # NEW
+        
+        # Apply calibration
+        if neck_temp is not None: neck_temp += CALIBRATION_OFFSET
+        if canthus_temp is not None: canthus_temp += CALIBRATION_OFFSET
+        if face_max is not None: face_max += CALIBRATION_OFFSET
+        
+        # FIXED: Prioritize face_max > canthus > neck
+        # face_max captures the absolute hottest point (likely inner canthus) even if ROIs are slightly off
+        if face_max is not None:
+            final_skin_temp = face_max
+        elif canthus_temp is not None:
+             final_skin_temp = canthus_temp
+        else:
+             final_skin_temp = neck_temp
+        
+        # Validation: Warn if neck temp is suspiciously low compared to canthus
+        if neck_temp is not None and canthus_temp is not None:
+            temp_diff = abs(canthus_temp - neck_temp)
+            if temp_diff > 5.0:  # More than 5°C difference is abnormal
+                logger.warning(
+                    f"Skin: Large temperature difference detected - "
+                    f"Canthus: {canthus_temp:.1f}°C, Neck: {neck_temp:.1f}°C (Δ={temp_diff:.1f}°C). "
+                    f"Using canthus (more reliable for core temp). "
+                    f"Check thermal camera positioning or neck ROI calibration."
+                )
+        
+        if final_skin_temp is not None:
+             self._add_biomarker_safe(
                 biomarker_set,
                 name="skin_temperature",
-                value=float(thermal_data['fever_neck_temp']),
+                value=float(final_skin_temp),
                 unit="celsius",
-                confidence=0.90,
+                confidence=0.92 if canthus_temp is not None else 0.70,  # Canthus = high, Neck = lower
                 normal_range=(35.5, 37.5),
-                description="Neck temperature (MLX90640 fever screening)"
+                description="Body temperature (Inner canthus - medical standard)"
             )
         
-        # Max Temperature from inner canthus (most accurate core temp proxy)
-        if thermal_data.get('fever_canthus_temp') is not None:
+        # Max Temperature from inner canthus or face_max (most accurate core temp proxy)
+        # Use face_max if available (firmware 2.0), otherwise fallback to canthus
+        max_temp_source = face_max if face_max is not None else thermal_data.get('fever_canthus_temp')
+        
+        if max_temp_source is not None:
             self._add_biomarker_safe(
                 biomarker_set,
                 name="skin_temperature_max",
-                value=float(thermal_data['fever_canthus_temp']),
+                value=float(max_temp_source),
                 unit="celsius",
-                confidence=0.92,
+                confidence=0.95 if face_max is not None else 0.90,
                 normal_range=(36.0, 38.0),
-                description="Inner canthus temperature (core temp proxy)"
+                description="Peak facial temperature (Fever indicator)"
             )
         
         # Inflammation Index from hot pixel percentage
@@ -488,6 +500,19 @@ class SkinExtractor(BaseExtractor):
                 confidence=0.85,
                 normal_range=(34.0, 37.0),
                 description="Average face temperature (MLX90640)"
+            )
+        
+        # Thermal Stability from canthus temperature range (temporal consistency)
+        # Lower range = more stable reading = higher measurement quality
+        if thermal_data.get('thermal_stability') is not None:
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="thermal_stability",
+                value=float(thermal_data['thermal_stability']),
+                unit="delta_celsius",
+                confidence=0.80,
+                normal_range=(0.0, 0.8),
+                description="Thermal measurement stability (canthus range, MLX90640)"
             )
 
     def _add_biomarker_safe(

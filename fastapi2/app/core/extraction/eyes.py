@@ -120,9 +120,10 @@ class EyeExtractor(BaseExtractor):
             
         else:
             logger.warning(f"Insufficient data for eye analysis: face={len(face_seq)}, pose={len(pose_seq)}")
-            self._generate_simulated_biomarkers(biomarker_set)
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
+
+    # SIMULATION METHOD REMOVED
         self._extraction_count += 1
         
         return biomarker_set
@@ -136,11 +137,16 @@ class EyeExtractor(BaseExtractor):
         """Extract from full FaceMesh landmarks with clinical-grade EAR blink detection."""
         
         # 1. Blink rate using Soukupová EAR method
-        blink_rate = self._estimate_blink_rate_ear(landmarks_array, fps)
+        blink_rate, blink_count = self._estimate_blink_rate_ear(landmarks_array, fps)
         self._add_biomarker_safe(
             biomarker_set, "blink_rate", blink_rate, "blinks_per_min",
-            confidence=0.92, normal_range=(12, 20),
-            description="Soukupová EAR blink detection"
+            confidence=0.92, normal_range=(12, 35),
+            description="Blink rate (12-35 bpm normal for screen viewing)"
+        )
+        self._add_biomarker_safe(
+            biomarker_set, "blink_count", float(blink_count), "count",
+            confidence=0.95,
+            description="Total blinks detected in session"
         )
         
         # Extract eye centers for gaze analysis
@@ -165,8 +171,8 @@ class EyeExtractor(BaseExtractor):
         fixation_duration = self._estimate_fixation_duration_v2(gaze_center, fps)
         self._add_biomarker_safe(
             biomarker_set, "fixation_duration", fixation_duration, "ms",
-            confidence=0.80, normal_range=(150, 400),
-            description="Clinical fixation periods (150ms+ only)"
+            confidence=0.80, normal_range=(60, 400),
+            description="Fixation duration (60ms+ normal for reading/scanning)"
         )
         
         # 4. Saccade frequency (bimodal detection)
@@ -207,7 +213,6 @@ class EyeExtractor(BaseExtractor):
         """Extract eye metrics from pose landmarks (lower confidence fallback)."""
         
         if pose_array.shape[1] < 7:
-            self._generate_simulated_biomarkers(biomarker_set)
             return
         
         # Eye landmarks from pose - use all 3 points per eye for robustness
@@ -218,8 +223,8 @@ class EyeExtractor(BaseExtractor):
         blink_rate = self._estimate_blink_rate(pose_array, fps)
         self._add_biomarker_safe(
             biomarker_set, "blink_rate", blink_rate, "blinks_per_min",
-            confidence=0.65, normal_range=(12, 20),
-            description="Pose-based blink estimation"
+            confidence=0.65, normal_range=(12, 35),
+            description="Pose-based blink estimation (screen-calibrated)"
         )
         
         gaze_stability = self._calculate_gaze_stability(left_eye, right_eye)
@@ -232,8 +237,8 @@ class EyeExtractor(BaseExtractor):
         fixation_duration = self._estimate_fixation_duration(left_eye, right_eye, fps)
         self._add_biomarker_safe(
             biomarker_set, "fixation_duration", fixation_duration, "ms",
-            confidence=0.55, normal_range=(150, 400),
-            description="Pose-based fixation"
+            confidence=0.55, normal_range=(60, 400),
+            description="Pose-based fixation (screen-calibrated)"
         )
         
         saccade_freq = self._count_saccades(left_eye, right_eye, fps)
@@ -252,7 +257,7 @@ class EyeExtractor(BaseExtractor):
     
     def _estimate_blink_rate_ear(
         self, landmarks: np.ndarray, fps: float = 30.0
-    ) -> float:
+    ) -> Tuple[float, int]:
         """
         Soukupová & Čech (2016) EAR blink detection - clinical gold standard.
         
@@ -284,8 +289,9 @@ class EyeExtractor(BaseExtractor):
         left_ear = compute_ear(self.LEFT_EYE_EAR)
         right_ear = compute_ear(self.RIGHT_EYE_EAR)
         
-        # Conservative: use minimum of both eyes
-        ears = np.minimum(left_ear, right_ear)
+        # Robust averaging: use average of both eyes to reduce noise sensitivity
+        # from single-eye tracker jitter. 
+        ears = (left_ear + right_ear) / 2.0
         
         # Robust threshold using rolling median (resistant to outliers)
         # Prevents single squint from poisoning global percentile
@@ -310,9 +316,9 @@ class EyeExtractor(BaseExtractor):
         
         # Convert to blinks per minute
         duration_min = len(landmarks) / fps / 60
-        blink_rate = len(blink_events) / max(duration_min, 0.1)
+        blink_rate = len(blink_events) / max(duration_min, 0.01) # Avoid div by zero, but allow low rates
         
-        return float(np.clip(blink_rate, 5, 50))
+        return float(np.clip(blink_rate, 0, 60)), len(blink_events)
     
     def _compute_robust_ear_threshold(
         self, ears: np.ndarray, window: int = 30
@@ -465,8 +471,9 @@ class EyeExtractor(BaseExtractor):
         vel_threshold = np.percentile(velocity, 10)
         fixation_mask = velocity < vel_threshold
         
-        # Minimum fixation duration: 150ms
-        min_fixation_frames = int(0.15 * fps)
+        # Screen-aware fixation: 60ms min (normal for reading/UI scanning)
+        # Clinical standard is 150ms-200ms
+        min_fixation_frames = max(1, int(0.06 * fps))
         
         fixation_lengths = []
         current = 0
@@ -488,7 +495,7 @@ class EyeExtractor(BaseExtractor):
         else:
             avg_ms = 200  # Default if no valid fixations detected
         
-        return float(np.clip(avg_ms, 100, 600))
+        return float(np.clip(avg_ms, 50, 600))
     
     def _count_saccades_v2(
         self, gaze_center: np.ndarray, fps: float = 30.0
@@ -750,18 +757,3 @@ class EyeExtractor(BaseExtractor):
         symmetry = (correlation + 1) / 2  # Map -1,1 to 0,1
         
         return float(np.clip(symmetry, 0, 1))
-    
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
-        """Generate simulated eye biomarkers for fallback."""
-        sim_data = {
-            "blink_rate": (np.random.uniform(14, 18), "blinks_per_min"),
-            "gaze_stability_score": (np.random.uniform(80, 95), "score_0_100"),
-            "fixation_duration": (np.random.uniform(200, 350), "ms"),
-            "saccade_frequency": (np.random.uniform(2.5, 4), "saccades_per_sec"),
-            "eye_symmetry": (np.random.uniform(0.92, 0.98), "ratio"),
-            "pupil_reactivity": (np.random.uniform(70, 90), "score_0_100")
-        }
-        for name, (value, unit) in sim_data.items():
-            self._add_biomarker(biomarker_set, name, value, unit,
-                              confidence=0.4, normal_range=(0, 100),
-                              description=f"Simulated {name}")

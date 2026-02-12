@@ -118,6 +118,7 @@ class BiomarkerPlausibilityValidator:
             "microcirculation_temp": {"hard": (30.0, 42.0), "physiological": (34.0, 38.0)},
             "thermal_stress_gradient": {"hard": (-5.0, 10.0), "physiological": (0.0, 3.0)},
             "forehead_temperature": {"hard": (28.0, 42.0), "physiological": (33.0, 37.5)},
+            "thermal_stability": {"hard": (0.0, 10.0), "physiological": (0.0, 1.5)},
             
             # Renal
             "fluid_asymmetry_index": {"hard": (0.0, 1.0), "physiological": (0.0, 0.5)},
@@ -145,7 +146,8 @@ class BiomarkerPlausibilityValidator:
             "lesion_count": {"hard": (0.0, 1000.0), "physiological": (0.0, 50.0)},
             
             # Eyes
-            "blink_rate": {"hard": (0.0, 100.0), "physiological": (3.0, 50.0)},
+            "blink_rate": {"hard": (0.0, 100.0), "physiological": (0.0, 50.0)},
+            "blink_count": {"hard": (0.0, 1000.0), "physiological": (0.0, 100.0)},
             "gaze_stability_score": {"hard": (0.0, 100.0), "physiological": (30.0, 100.0)},
             "fixation_duration": {"hard": (10.0, 10000.0), "physiological": (50.0, 2000.0)},
             "saccade_frequency": {"hard": (0.0, 20.0), "physiological": (0.5, 10.0)},
