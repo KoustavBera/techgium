@@ -395,39 +395,14 @@ class CameraCapture:
         timestamps = [i/self.fps for i in range(len(frames))] 
         return frames, timestamps
     
-    def extract_face_roi(self, frame: np.ndarray) -> np.ndarray:
-        """Extract face ROI from a single frame using legacy API."""
-        if not self.face_detector:
-            fh, fw = frame.shape[:2]
-            return frame[fh//4:3*fh//4, fw//4:3*fw//4]
-            
-        try:
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            result = self.face_detector.process(rgb_frame)
-            
-            if result.detections:
-                detection = result.detections[0]
-                bbox = detection.location_data.relative_bounding_box
-                h, w = frame.shape[:2]
-                
-                x = int(bbox.xmin * w)
-                y = int(bbox.ymin * h)
-                box_w = int(bbox.width * w)
-                box_h = int(bbox.height * h)
-                
-                pad = int(max(box_w, box_h) * 0.2)
-                x1, y1 = max(0, x - pad), max(0, y - pad)
-                x2, y2 = min(w, x + box_w + pad), min(h, y + box_h + pad)
-                return frame[y1:y2, x1:x2]
-        except Exception as e:
-            logger.warning(f"Face detection error: {e}")
-            
-        fh, fw = frame.shape[:2]
-        return frame[fh//4:3*fh//4, fw//4:3*fw//4]
-
     def extract_face_frames(self, frames: List[np.ndarray]) -> List[np.ndarray]:
         """Batch extraction (legacy)."""
-        return [self.extract_face_roi(f) for f in frames]
+        # This method previously called extract_face_roi, which is being removed.
+        # It's likely this method will become obsolete or need re-implementation
+        # based on the new consolidated face feature extraction.
+        # For now, returning original frames as a placeholder.
+        logger.warning("extract_face_frames is deprecated. Use extract_face_features for consolidated face data.")
+        return frames
     
     def extract_pose_from_frame(self, frame: np.ndarray) -> Optional[np.ndarray]:
         """Extract pose landmarks from a single frame using legacy API."""
@@ -461,25 +436,58 @@ class CameraCapture:
             if pose is not None:
                 sequence.append(pose)
         return sequence
-
-    def extract_face_landmarks(self, frame: np.ndarray) -> Optional[np.ndarray]:
-        """Extract 468-point FaceMesh landmarks for Eyes & Nasal analysis."""
+    
+    def extract_face_features(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        """
+        Consolidated Face Feature Extraction.
+        Runs MediaPipe FaceMesh ONCE and returns both (ROI, Landmarks).
+        Eliminates the need for a separate FaceDetector pass.
+        
+        Returns:
+            Tuple of (face_roi, landmarks_array)
+        """
         if not hasattr(self, 'face_mesh') or self.face_mesh is None:
-            return None
+            return None, None
             
         try:
+            h, w = frame.shape[:2]
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             result = self.face_mesh.process(rgb_frame)
             
-            if result.multi_face_landmarks:
-                landmarks = result.multi_face_landmarks[0].landmark
-                return np.array([
-                    [lm.x, lm.y, lm.z, 1.0]
-                    for lm in landmarks
-                ])
+            if not result.multi_face_landmarks:
+                return None, None
+                
+            landmarks = result.multi_face_landmarks[0].landmark
+            landmarks_array = np.array([
+                [lm.x, lm.y, lm.z, 1.0]
+                for lm in landmarks
+            ])
+            
+            # Derive ROI from landmarks (avoiding extra detection pass)
+            # Find min/max X and Y from all landmarks
+            xs = [lm.x for lm in landmarks]
+            ys = [lm.y for lm in landmarks]
+            
+            xmin, xmax = min(xs), max(xs)
+            ymin, ymax = min(ys), max(ys)
+            
+            # Map to pixels
+            x = int(xmin * w)
+            y = int(ymin * h)
+            box_w = int((xmax - xmin) * w)
+            box_h = int((ymax - ymin) * h)
+            
+            # Apply padding (similar to extract_face_roi)
+            pad = int(max(box_w, box_h) * 0.25)
+            x1, y1 = max(0, x - pad), max(0, y - pad)
+            x2, y2 = min(w, x + box_w + pad), min(h, y + box_h + pad)
+            
+            roi = frame[y1:y2, x1:x2]
+            return roi, landmarks_array
+            
         except Exception as e:
-            logger.debug(f"FaceMesh error: {e}")
-        return None
+            logger.debug(f"Consolidated face extraction error: {e}")
+            return None, None
     
     def detect_all(self, frame: np.ndarray, active_models: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -657,37 +665,3 @@ class CameraCapture:
         
         return frame
     
-    def add_distance_warning_overlay(self, frame: np.ndarray, warning_type: str) -> np.ndarray:
-        """
-        Add visual warning overlay to frame based on distance check.
-        
-        Args:
-            frame: Input frame
-            warning_type: "too_close" or "too_far"
-        
-        Returns: Modified frame with warning overlay
-        """
-        h, w = frame.shape[:2]
-        
-        if warning_type == "too_close":
-            text = "TOO CLOSE - Move Back"
-            color = (0, 0, 255)  # Red
-            cv2.rectangle(frame, (10, 10), (w - 10, 80), color, 3)
-        elif warning_type == "too_far":
-            text = "TOO FAR - Move Closer"
-            color = (0, 165, 255)  # Orange
-            cv2.rectangle(frame, (10, 10), (w - 10, 80), color, 3)
-        else:
-            return frame
-        
-        # Draw text
-        cv2.putText(
-            frame, text,
-            (30, 55),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.5,
-            color,
-            3
-        )
-        
-        return frame

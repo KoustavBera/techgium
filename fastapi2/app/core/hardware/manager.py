@@ -116,6 +116,10 @@ class HardwareManager:
         
         self.config = HardwareConfig()
         
+        # Service and Event Loop
+        self.screening_service = None
+        self.loop = None
+        
         # Hardware handles
         self.camera: Optional[CameraCapture] = None
         self.radar: Optional[RadarReader] = None
@@ -179,10 +183,13 @@ class HardwareManager:
     # LIFECYCLE
     # ------------------------------------------------------------------
     
-    async def startup(self, config: Optional[HardwareConfig] = None):
+    async def startup(self, config: Optional[HardwareConfig] = None, screening_service = None):
         """Initialize all hardware. Call during FastAPI lifespan startup."""
         if config:
             self.config = config
+        
+        self.screening_service = screening_service
+        self.loop = asyncio.get_running_loop()
         
         logger.info("=" * 60)
         logger.info("HardwareManager starting up (Unified Architecture)")
@@ -371,7 +378,8 @@ class HardwareManager:
                     if current_phase in ["IDLE", "INITIALIZING", "FACE_ANALYSIS"]:
                         warning_type, face_width = self.camera.calculate_face_distance(frame, results)
                         if warning_type:
-                            frame = self.camera.add_distance_warning_overlay(frame, warning_type)
+                            # Distance warning is now handled by status message only
+                            pass
                         
                         # Update status for frontend polling
                         self._current_distance_warning = warning_type
@@ -526,15 +534,15 @@ class HardwareManager:
                 break
             
             # Guide user through status message
-            msg = "Ready. Please look at the camera."
+            msg = "Positioning correct. Stay still."
             if warning == "too_close":
-                msg = "MOVE BACK - You are too close."
+                msg = "Please move back slightly for a better view."
             elif warning == "too_far":
-                msg = "MOVE CLOSER - You are too far."
+                msg = "Please move closer to the camera."
             elif target_phase == "BODY_ANALYSIS" and not user_warnings.get("pose_detected"):
-                msg = "For better results, step back to show full body."
+                msg = "Please step back so your full body is visible."
             elif target_phase == "FACE_ANALYSIS" and not user_warnings.get("face_detected"):
-                msg = "LOOK HERE - Face not detected."
+                msg = "Face not detected. Please look directly at the camera."
 
             self._update_scan_status(message=msg)
             time.sleep(0.2)
@@ -671,19 +679,18 @@ class HardwareManager:
                 
                 logger.info(f"Captured {len(raw_captures)} face frames from broadcast")
                 
-                # Post-process frames (extract ROIs and landmarks)
+                # Post-process frames (CONSOLIDATED extraction: ROI + Landmarks)
                 processed_data = []
                 for item in raw_captures:
                      frame = item['frame']
-                     processed_data.append({
-                        'roi': self.camera.extract_face_roi(frame),
-                        'landmarks': self.camera.extract_face_landmarks(frame)
-                     })
+                     roi, landmarks = self.camera.extract_face_features(frame)
+                     if roi is not None:
+                         processed_data.append({'roi': roi, 'landmarks': landmarks})
 
-                face_frames = [d['roi'] for d in processed_data if d.get('roi') is not None]
-                face_landmarks_sequence = [d['landmarks'] for d in processed_data if d.get('landmarks') is not None]
+                face_frames = [d['roi'] for d in processed_data]
+                face_landmarks_sequence = [d['landmarks'] for d in processed_data if d['landmarks'] is not None]
                 
-                logger.info(f"Extracted {len(face_frames)} face ROIs, {len(face_landmarks_sequence)} landmark sets")
+                logger.info(f"Extracted {len(face_frames)} face ROIs, {len(face_landmarks_sequence)} landmark sets (CONSOLIDATED)")
             
             self._update_scan_status(progress=40)
             
@@ -782,60 +789,87 @@ class HardwareManager:
                 progress=85,
             )
             
+            # ============================================================
+            # Submit to ScreeningService (DIRECT CALL - no network overhead)
+            # ============================================================
+            self._update_scan_status(
+                message="Computing risk assessment...",
+                progress=85,
+            )
+            
             screening_id = None
             patient_report_id = None
             doctor_report_id = None
             
-            # Use httpx to call our own screening endpoint
-            try:
-                with httpx.Client(base_url="http://localhost:8000", timeout=60.0) as client:
-                    # POST screening
-                    resp = client.post("/api/v1/screening", json=request_payload)
-                    resp.raise_for_status()
-                    result = resp.json()
+            if self.screening_service and self.loop:
+                try:
+                    # Run async service call in event loop from background thread
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.screening_service.process_screening(
+                            patient_id=patient_id, 
+                            systems_input=request_payload["systems"],
+                            include_validation=True
+                        ),
+                        self.loop
+                    )
+                    result = future.result(timeout=120)  # Wait for result
                     screening_id = result.get("screening_id")
                     
-                    logger.info(f"✅ Screening completed: {screening_id}")
-                    logger.info(f"   Overall risk: {result.get('overall_risk_level')} ({result.get('overall_risk_score')})")
+                    # Store in reports dict (mimicking main.py behavior)
+                    # We need access to the reports dict from main.py
+                    # For now, we update the scan status, and main.py can pick it up
                     
-                    # Generate reports
-                    self._update_scan_status(
-                        message="Generating reports...",
-                        progress=90,
-                    )
+                    logger.info(f"✅ Screening completed via service: {screening_id}")
+                    
+                    # Update local screenings storage (directly injecting into main.py dict)
+                    from app.main import _screenings
+                    _screenings[screening_id] = {
+                        "patient_id": result["patient_id"],
+                        "system_results": result["system_results_internal"],
+                        "trusted_results": result["trusted_results"],
+                        "composite_risk": result["composite_risk"],
+                        "rejected_systems": result["rejected_systems"],
+                        "timestamp": result["timestamp"]
+                    }
+                    
+                    # Generate reports DIRECTLY using generators (instead of HTTP calls)
+                    self._update_scan_status(message="Generating reports...", progress=90)
+                    
+                    # Import here to avoid circular dependencies
+                    from app.main import _reports, _patient_report_gen, _doctor_report_gen
                     
                     try:
-                        pr = client.post("/api/v1/reports/generate", json={
-                            "screening_id": screening_id,
-                            "report_type": "patient"
-                        })
-                        if pr.status_code == 200:
-                            patient_report_id = pr.json().get("report_id")
-                            logger.info(f"Patient report: {patient_report_id}")
+                        p_report = _patient_report_gen.generate(
+                            system_results=result["system_results_internal"],
+                            composite_risk=result["composite_risk"],
+                            patient_id=result["patient_id"],
+                            trusted_results=result["trusted_results"],
+                            rejected_systems=result["rejected_systems"]
+                        )
+                        patient_report_id = p_report.report_id
+                        _reports[patient_report_id] = p_report.pdf_path
+                        logger.info(f"Patient report generated: {patient_report_id}")
                     except Exception as e:
-                        logger.warning(f"Patient report failed: {e}")
-                    
+                        logger.warning(f"Patient report generation failed: {e}")
+
                     try:
-                        dr = client.post("/api/v1/reports/generate", json={
-                            "screening_id": screening_id,
-                            "report_type": "doctor"
-                        })
-                        if dr.status_code == 200:
-                            doctor_report_id = dr.json().get("report_id")
-                            logger.info(f"Doctor report: {doctor_report_id}")
+                        d_report = _doctor_report_gen.generate(
+                            system_results=result["system_results_internal"],
+                            composite_risk=result["composite_risk"],
+                            patient_id=result["patient_id"]
+                        )
+                        doctor_report_id = d_report.report_id
+                        _reports[doctor_report_id] = d_report.pdf_path
+                        logger.info(f"Doctor report generated: {doctor_report_id}")
                     except Exception as e:
-                        logger.warning(f"Doctor report failed: {e}")
-                    
-            except Exception as e:
-                logger.error(f"Internal API call failed: {e}")
-                self._update_scan_status(
-                    state="error",
-                    phase="ERROR",
-                    message=f"API error: {str(e)}",
-                    progress=0,
-                )
-                self._scan_active = False
-                return
+                        logger.warning(f"Doctor report generation failed: {e}")
+                        
+                except Exception as e:
+                    logger.error(f"ScreeningService call failed: {e}")
+                    raise e
+            else:
+                logger.error("ScreeningService not available in HardwareManager")
+                raise Exception("ScreeningService not available")
             
             # ============================================================
             # Done!

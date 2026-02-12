@@ -30,80 +30,20 @@ from app.core.validation.trust_envelope import TrustEnvelope
 from app.core.agents.medical_agents import AgentConsensus, ConsensusResult
 from app.core.reports import PatientReportGenerator, DoctorReportGenerator
 from app.core.hardware.manager import HardwareManager, HardwareConfig
+from app.services.screening import ScreeningService
 
 logger = logging.getLogger(__name__)
 
-# ---- Pydantic Models for API ----
-
-class BiomarkerInput(BaseModel):
-    """Input biomarker data for a system."""
-    name: str
-    value: float
-    unit: Optional[str] = None
-    status: Optional[str] = None
-    normal_range: Optional[List[float]] = None  # [low, high]
-
-
-class SystemInput(BaseModel):
-    """Input data for a physiological system."""
-    system: str = Field(..., description="System name: cardiovascular, cns, pulmonary, etc.")
-    biomarkers: List[BiomarkerInput]
-
-
-class ScreeningRequest(BaseModel):
-    """Request for health screening analysis."""
-    patient_id: str = Field(default="ANONYMOUS")
-    systems: List[SystemInput]
-    include_validation: bool = Field(default=True, description="Include agentic validation")
-
-
-class RiskResultResponse(BaseModel):
-    """Response for risk result."""
-    system: str
-    risk_level: str
-    risk_score: float
-    confidence: float
-    alerts: List[str]
-    is_trusted: bool = True
-    was_rejected: bool = False
-    caveats: List[str] = []
-
-
-class ScreeningResponse(BaseModel):
-    """Response from health screening."""
-    screening_id: str
-    patient_id: str
-    timestamp: str
-    overall_risk_level: str
-    overall_risk_score: float
-    overall_confidence: float
-    system_results: List[RiskResultResponse]
-    validation_status: Optional[str] = None
-    requires_review: bool = False
-
-
-class ReportRequest(BaseModel):
-    """Request for report generation."""
-    screening_id: str
-    report_type: str = Field(default="patient", description="'patient' or 'doctor'")
-
-
-class ReportResponse(BaseModel):
-    """Response with report info."""
-    report_id: str
-    report_type: str
-    pdf_path: str
-    generated_at: str
-
-
-class HealthResponse(BaseModel):
-    """Health check response."""
-    status: str
-    version: str
-    timestamp: str
-    components: Dict[str, str]
-
-
+from app.models.screening import (
+    BiomarkerInput,
+    SystemInput,
+    ScreeningRequest,
+    RiskResultResponse,
+    ScreeningResponse,
+    ReportRequest,
+    ReportResponse,
+    HealthResponse
+)
 # ---- Hardware Manager Singleton ----
 _hw_manager = HardwareManager()
 
@@ -113,8 +53,8 @@ _hw_manager = HardwareManager()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage hardware lifecycle: startup → yield → shutdown."""
-    logger.info("Health Screening Pipeline API starting up...")
-    os.makedirs("reports", exist_ok=True)
+    # Initialize service
+    app.state.screening_service = _screening_service
     
     # Initialize hardware (camera, radar, thermal)
     config = HardwareConfig(
@@ -122,7 +62,7 @@ async def lifespan(app: FastAPI):
         radar_port=os.environ.get("RADAR_PORT", "COM7"),
         esp32_port=os.environ.get("ESP32_PORT", "COM6"),
     )
-    await _hw_manager.startup(config)
+    await _hw_manager.startup(config, screening_service=_screening_service)
     
     logger.info("API ready to accept requests")
     yield
@@ -169,6 +109,9 @@ _consensus = AgentConsensus()
 # ---- Multi-LLM Interpreter (Gemini + GPT-OSS + II-Medical) ----
 from app.core.llm.multi_llm_interpreter import MultiLLMInterpreter
 _multi_llm_interpreter = MultiLLMInterpreter()
+
+# ---- Unified Services ----
+_screening_service = ScreeningService(risk_engine=_risk_engine, interpreter=_multi_llm_interpreter)
 
 
 
@@ -273,123 +216,51 @@ async def health_check():
 async def run_screening(request: ScreeningRequest):
     """
     Run health screening on provided biomarker data.
-    
-    Returns risk assessment for each system and overall composite risk.
     """
-    screening_id = f"SCR-{uuid.uuid4().hex[:8].upper()}"
-    
     try:
-        from app.core.extraction.base import BiomarkerSet, Biomarker
-        from app.core.inference.risk_engine import CompositeRiskCalculator, TrustedRiskResult
-        
-        trusted_results: Dict[PhysiologicalSystem, TrustedRiskResult] = {}
-        system_results: Dict[PhysiologicalSystem, SystemRiskResult] = {}
-        response_results: List[RiskResultResponse] = []
-        
+        # Prepare service input
+        systems_input = []
         for sys_input in request.systems:
-            # Parse system
-            logger.info(f"Processing system: {sys_input.system} with {len(sys_input.biomarkers)} biomarkers")
-            if sys_input.system.lower() == "skin":
-                 bm_names = [b.name for b in sys_input.biomarkers]
-                 logger.info(f"Skin biomarkers received: {bm_names}")
-                 
-            system = _parse_system(sys_input.system)
-            
-            # Convert biomarker inputs to Biomarker objects
-            biomarkers = [
-                Biomarker(
-                    name=bm.name,
-                    value=bm.value,
-                    unit=bm.unit or "",
-                    confidence=1.0,
-                    normal_range=tuple(bm.normal_range) if bm.normal_range and len(bm.normal_range) == 2 else None
-                )
-                for bm in sys_input.biomarkers
-            ]
-            
-            # Create BiomarkerSet
-            biomarker_set = BiomarkerSet(
-                system=system,
-                biomarkers=biomarkers
-            )
-            
-            # Run risk calculation with validation (uses TrustedRiskResult)
-            trusted_result = _risk_engine.compute_risk_with_validation(biomarker_set, plausibility=None)
-            trusted_results[system] = trusted_result
-            
-            # Build response based on trust status
-            if trusted_result.was_rejected:
-                response_results.append(RiskResultResponse(
-                    system=system.value,
-                    risk_level="unknown",
-                    risk_score=0.0,
-                    confidence=0.0,
-                    alerts=[trusted_result.rejection_reason] if trusted_result.rejection_reason else [],
-                    is_trusted=False,
-                    was_rejected=True,
-                    caveats=trusted_result.caveats
-                ))
-            elif trusted_result.risk_result is not None:
-                result = trusted_result.risk_result
-                system_results[system] = result
-                
-                response_results.append(RiskResultResponse(
-                    system=system.value,
-                    risk_level=result.overall_risk.level.value,
-                    risk_score=round(result.overall_risk.score, 1),
-                    confidence=round(trusted_result.trust_adjusted_confidence, 2),
-                    alerts=result.alerts,
-                    is_trusted=trusted_result.is_trusted,
-                    was_rejected=False,
-                    caveats=trusted_result.caveats
-                ))
+            systems_input.append({
+                "system": sys_input.system,
+                "biomarkers": [bm.dict() for bm in sys_input.biomarkers]
+            })
         
-        # Calculate composite risk using trusted results
-        composite_calc = CompositeRiskCalculator()
-        composite, rejected_systems = composite_calc.compute_composite_risk_from_trusted(trusted_results)
+        # Call service
+        result = await _screening_service.process_screening(
+            patient_id=request.patient_id,
+            systems_input=systems_input,
+            include_validation=request.include_validation
+        )
         
-        # Validation (if requested)
-        validation_status = None
-        requires_review = False
-        
-        if request.include_validation and system_results:
-            # Use MultiLLMInterpreter for validation (Gemini + GPT-OSS + II-Medical pipeline)
-            # Smart cutoffs: MODERATE risk = single Gemini, LOW/HIGH = full 3-LLM pipeline
-            try:
-                interpretation = _multi_llm_interpreter.interpret_composite_risk(
-                    system_results=system_results,
-                    composite_risk=composite,
-                    trust_envelope=None
-                )
-                validation_status = "validated" if interpretation.validation_passed else "needs_review"
-                requires_review = not interpretation.validation_passed or len(rejected_systems) > 0
-                logger.info(f"MultiLLM validation: mode={interpretation.pipeline_mode}, passed={interpretation.validation_passed}")
-            except Exception as e:
-                logger.warning(f"MultiLLM validation failed: {e}")
-                validation_status = "plausible" if not rejected_systems else "partial"
-                requires_review = len(rejected_systems) > 0
-        
-        # Store screening for report generation (include trusted results)
-        _screenings[screening_id] = {
-            "patient_id": request.patient_id,
-            "system_results": system_results,
-            "trusted_results": trusted_results,
-            "composite_risk": composite,
-            "rejected_systems": rejected_systems,
-            "timestamp": datetime.now()
+        # Store for report generation
+        _screenings[result["screening_id"]] = {
+            "patient_id": result["patient_id"],
+            "system_results": result["system_results_internal"],
+            "trusted_results": result["trusted_results"],
+            "composite_risk": result["composite_risk"],
+            "rejected_systems": result["rejected_systems"],
+            "timestamp": result["timestamp"]
         }
         
+        # Map to response model
+        response_results = [RiskResultResponse(**r) for r in result["system_results"]]
+        
         return ScreeningResponse(
-            screening_id=screening_id,
-            patient_id=request.patient_id,
-            timestamp=datetime.now().isoformat(),
-            overall_risk_level=composite.level.value,
-            overall_risk_score=round(composite.score, 1),
-            overall_confidence=round(composite.confidence, 2),
+            screening_id=result["screening_id"],
+            patient_id=result["patient_id"],
+            timestamp=result["timestamp"].isoformat(),
+            overall_risk_level=result["overall_risk_level"],
+            overall_risk_score=result["overall_risk_score"],
+            overall_confidence=result["overall_confidence"],
             system_results=response_results,
-            validation_status=validation_status,
-            requires_review=requires_review
+            validation_status=result["validation_status"],
+            requires_review=result["requires_review"]
         )
+        
+    except Exception as e:
+        logger.error(f"Screening failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Screening failed: {str(e)}")
         
     except Exception as e:
         logger.error(f"Screening failed: {e}")

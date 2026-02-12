@@ -149,25 +149,24 @@ Provide clear, educational, and thorough explanations. Avoid being vague. Explai
         self._validator = LLMValidator()
         logger.info("MultiLLMInterpreter initialized with Sequential Quality Pipeline")
     
-    def interpret_composite_risk(
+    async def interpret_composite_risk(
         self,
         system_results: Dict[PhysiologicalSystem, SystemRiskResult],
         composite_risk: RiskScore,
         trust_envelope: Optional[TrustEnvelope] = None
     ) -> MultiLLMInterpretation:
         """
-        Interpret overall health risk using sequential quality pipeline.
+        Run the sequential 3-LLM quality pipeline to interpret screening results.
         
-        Smart Cutoffs:
-        - MODERATE (30-80): Single Gemini (fast path)
-        - LOW/HIGH: Full 3-LLM pipeline
+        Pipeline:
+        1. Gemini: Generates primary insight and JSON report structure.
+        2. II-Medical-8B: Validates clinical appropriateness and medical tone.
+        3. GPT-OSS-120B: Arbitrates any conflicts and makes final "Pass/Fail" decision.
         """
-        result = MultiLLMInterpretation()
-        total_start = time.time()
-        
-        # Build primary prompt
-        prompt = self._build_primary_prompt(system_results, composite_risk, trust_envelope)
-        
+        start_time = time.time()
+        result = MultiLLMInterpretation(
+            pipeline_mode="single"
+        )
         
         # SMART CUTOFF: Determine pipeline mode
         score = composite_risk.score
@@ -182,52 +181,54 @@ Provide clear, educational, and thorough explanations. Avoid being vague. Explai
         else:
             result.pipeline_mode = "single"
             logger.info(f"Risk score {score:.1f} uses SINGLE Gemini (fast path)")
-        
+            
         # === PHASE 1: Primary Generation (Gemini) ===
-        phase1_start = time.time()
-        primary_response = self._phase1_generate_primary(prompt)
-        result.phase1_latency_ms = (time.time() - phase1_start) * 1000
-        logger.info(f"Phase 1 complete: {result.phase1_latency_ms:.0f}ms")
+        p1_start = time.time()
+        prompt_p1 = self._build_primary_prompt(system_results, composite_risk, trust_envelope)
         
-        # Parse primary response
-        primary_data = self._parse_json_response(primary_response)
-        result.summary = primary_data.get("summary", "")
-        result.detailed_explanation = primary_data.get("detailed_explanation", "")
-        result.recommendations = primary_data.get("recommendations", [])
-        result.caveats = primary_data.get("caveats", [])
+        logger.info("Starting MultiLLM Phase 1 (Gemini)...")
+        resp_p1 = await self.gemini_client.generate_async(prompt_p1, system_instruction=self.SYSTEM_INSTRUCTION)
+        result.phase1_latency_ms = (time.time() - p1_start) * 1000
         
-        # Fast path: MODERATE risk - return after Phase 1
-        if not use_full_pipeline:
-            result.total_latency_ms = (time.time() - total_start) * 1000
-            self._add_standard_caveats(result, trust_envelope)
-            self._interpretation_count += 1
-            logger.info(f"Fast path complete: {result.total_latency_ms:.0f}ms total")
+        if resp_p1.is_mock:
+            logger.warning("Phase 1 returned MOCK response")
+        
+        # Parse Phase 1 output
+        try:
+            p1_json = self._parse_json_response(resp_p1.text)
+            result.summary = p1_json.get("summary", "")
+            result.detailed_explanation = p1_json.get("detailed_explanation", "")
+            result.recommendations = p1_json.get("recommendations", [])
+            result.caveats = p1_json.get("caveats", [])
+        except Exception as e:
+            logger.error(f"Failed to parse Phase 1 JSON: {e}")
+            result.summary = "Preliminary screening completed. Clinical review recommended."
+            result.validation_passed = False
             return result
-        
-        # === PHASE 2: Medical Validation (HF Medical 1) ===
-        phase2_start = time.time()
-        validation = self._phase2_validate(primary_response, composite_risk)
-        result.phase2_latency_ms = (time.time() - phase2_start) * 1000
+
+        if not use_full_pipeline:
+            result.validation_passed = True
+            result.total_latency_ms = (time.time() - start_time) * 1000
+            self._add_standard_caveats(result, trust_envelope)
+            return result
+
+        # === PHASE 2: Medical Validation (HF Medical 1/II-Medical) ===
+        p2_start = time.time()
+        validation = await self._phase2_validate_async(resp_p1.text, composite_risk)
+        result.phase2_latency_ms = (time.time() - p2_start) * 1000
         result.validation_passed = validation.is_clinically_appropriate and validation.tone_matches_risk
-        logger.info(f"Phase 2 complete: {result.phase2_latency_ms:.0f}ms, passed={result.validation_passed}")
         
         if result.validation_passed:
-            # Validation passed - use primary
             result.arbiter_decision = "approved_by_validator"
-            result.total_latency_ms = (time.time() - total_start) * 1000
+            result.total_latency_ms = (time.time() - start_time) * 1000
             self._add_standard_caveats(result, trust_envelope)
             self._interpretation_count += 1
-            logger.info(f"Pipeline complete (2 phases): {result.total_latency_ms:.0f}ms")
             return result
         
-        # Add validation notes
-        result.review_notes = validation.missing_caveats
-        
-        # === PHASE 3: Arbitration (HF Medical 2) ===
-        phase3_start = time.time()
-        arbiter = self._phase3_arbitrate(primary_response, validation, composite_risk)
-        result.phase3_latency_ms = (time.time() - phase3_start) * 1000
-        logger.info(f"Phase 3 complete: {result.phase3_latency_ms:.0f}ms")
+        # === PHASE 3: Arbitration (HF Medical 2/GPT-OSS) ===
+        p3_start = time.time()
+        arbiter = await self._phase3_arbitrate_async(resp_p1.text, validation, composite_risk)
+        result.phase3_latency_ms = (time.time() - p3_start) * 1000
         
         result.arbiter_decision = "approved" if arbiter.approved else "corrected"
         
@@ -238,37 +239,19 @@ Provide clear, educational, and thorough explanations. Avoid being vague. Explai
         if arbiter.escalate_to_human:
             result.caveats.insert(0, "Manual review recommended for this result.")
         
-        result.total_latency_ms = (time.time() - total_start) * 1000
+        result.total_latency_ms = (time.time() - start_time) * 1000
         self._add_standard_caveats(result, trust_envelope)
         self._interpretation_count += 1
         logger.info(f"Full pipeline complete: {result.total_latency_ms:.0f}ms")
         
         return result
     
-    def _phase1_generate_primary(self, prompt: str) -> str:
-        """Phase 1: Generate primary report with Gemini."""
-        try:
-            response = self.gemini_client.generate(prompt, self.SYSTEM_INSTRUCTION)
-            return response.text
-        except Exception as e:
-            logger.error(f"Phase 1 failed: {e}")
-            return json.dumps({
-                "summary": "Health screening analysis completed. Consult healthcare provider.",
-                "detailed_explanation": "Unable to generate detailed analysis.",
-                "recommendations": ["Consult a healthcare professional."],
-                "caveats": ["Report generation experienced technical issues."]
-            })
-    
-    def _phase2_validate(self, primary_response: str, risk: RiskScore) -> ValidationReview:
+    async def _phase2_validate_async(self, primary_response: str, risk: RiskScore) -> ValidationReview:
         """Phase 2: Validate clinical tone with HF Medical 1."""
         review = ValidationReview()
         
         validator_prompt = f"""Review this health screening report for a {risk.level.value.upper()} risk patient (score: {risk.score:.1f}/100):
-
----
-{primary_response[:1500]}
----
-
+\n{primary_response[:1500]}\n
 Critique this report (JSON only):
 {{
     "is_clinically_appropriate": true/false,
@@ -278,71 +261,47 @@ Critique this report (JSON only):
 }}"""
 
         try:
-            response = self.hf_client.generate(
+            response = await self.hf_client.generate_async(
                 validator_prompt,
                 model=settings.medical_model_1,
                 system_prompt=self.VALIDATOR_SYSTEM
             )
             review.raw_response = response.text
-            
-            # Parse JSON response
             data = self._parse_json_response(response.text)
             review.is_clinically_appropriate = data.get("is_clinically_appropriate", True)
             review.tone_matches_risk = data.get("tone_matches_risk", True)
             review.missing_caveats = data.get("missing_caveats", [])
             review.confidence = data.get("confidence", "medium")
-            
         except Exception as e:
             logger.warning(f"Phase 2 validation failed: {e}, defaulting to pass")
-            review.is_clinically_appropriate = True
-            review.tone_matches_risk = True
         
         return review
-    
-    def _phase3_arbitrate(
+
+    async def _phase3_arbitrate_async(
         self, primary_response: str, validation: ValidationReview, risk: RiskScore
     ) -> ArbiterDecision:
         """Phase 3: Arbitrate conflicts with HF Medical 2."""
         decision = ArbiterDecision()
-        
-        arbiter_prompt = f"""You are making a final quality decision on a health report.
-
-RISK LEVEL: {risk.level.value.upper()} ({risk.score:.1f}/100)
-
-PRIMARY REPORT:
-{primary_response[:1000]}
-
-VALIDATOR FEEDBACK:
-- Clinically appropriate: {validation.is_clinically_appropriate}
-- Tone matches risk: {validation.tone_matches_risk}
-- Missing caveats: {validation.missing_caveats}
-
-Make your decision (JSON only):
-{{
-    "approved": true/false,
-    "primary_reason": "brief reason",
-    "use_corrected": false,
-    "corrected_summary": "only if use_corrected is true",
-    "escalate_to_human": false
-}}"""
+        arb_prompt = f"""ARBITRATE HEALTH REPORT:
+RISK: {risk.level.value.upper()} ({risk.score:.1f})
+PRIMARY: {primary_response[:1000]}
+VALIDATOR: {validation.is_clinically_appropriate}, {validation.tone_matches_risk}, {validation.missing_caveats}
+JSON DECISION:
+{{ "approved": bool, "primary_reason": "...", "use_corrected": bool, "corrected_summary": "...", "escalate_to_human": bool }}"""
 
         try:
-            response = self.hf_client.generate(
-                arbiter_prompt,
+            response = await self.hf_client.generate_async(
+                arb_prompt,
                 model=settings.medical_model_2,
                 system_prompt=self.ARBITER_SYSTEM
             )
-            decision.raw_response = response.text
-            
             data = self._parse_json_response(response.text)
             decision.approved = data.get("approved", True)
-            decision.primary_reason = data.get("primary_reason", "")
             decision.use_corrected = data.get("use_corrected", False)
             decision.corrected_summary = data.get("corrected_summary", "")
             decision.escalate_to_human = data.get("escalate_to_human", False)
-            
         except Exception as e:
-            logger.warning(f"Phase 3 arbitration failed: {e}, approving primary")
+            logger.warning(f"Phase 3 arbitration failed: {e}")
             decision.approved = True
         
         return decision

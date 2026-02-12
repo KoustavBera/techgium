@@ -27,6 +27,57 @@ class PhysiologicalSystem(str, Enum):
     NASAL = "nasal"
     REPRODUCTIVE = "reproductive"
 
+    @classmethod
+    def from_string(cls, name: str) -> "PhysiologicalSystem":
+        """Parse system name string to enum with common aliases."""
+        name_lower = name.lower().replace(" ", "_")
+        
+        mapping = {
+            "cardiovascular": cls.CARDIOVASCULAR,
+            "cv": cls.CARDIOVASCULAR,
+            "heart": cls.CARDIOVASCULAR,
+            "cns": cls.CNS,
+            "central_nervous_system": cls.CNS,
+            "neurological": cls.CNS,
+            "brain": cls.CNS,
+            "pulmonary": cls.PULMONARY,
+            "respiratory": cls.PULMONARY,
+            "lung": cls.PULMONARY,
+            "lungs": cls.PULMONARY,
+            "renal": cls.RENAL,
+            "kidney": cls.RENAL,
+            "kidneys": cls.RENAL,
+            "gastrointestinal": cls.GASTROINTESTINAL,
+            "gi": cls.GASTROINTESTINAL,
+            "gut": cls.GASTROINTESTINAL,
+            "digestive": cls.GASTROINTESTINAL,
+            "skeletal": cls.SKELETAL,
+            "musculoskeletal": cls.SKELETAL,
+            "msk": cls.SKELETAL,
+            "bones": cls.SKELETAL,
+            "skin": cls.SKIN,
+            "dermatology": cls.SKIN,
+            "eyes": cls.EYES,
+            "eye": cls.EYES,
+            "vision": cls.EYES,
+            "ocular": cls.EYES,
+            "nasal": cls.NASAL,
+            "nose": cls.NASAL,
+            "reproductive": cls.REPRODUCTIVE,
+        }
+        
+        if name_lower in mapping:
+            return mapping[name_lower]
+        
+        try:
+            return cls(name_lower)
+        except ValueError:
+            # Try to find partial match
+            for member in cls:
+                if member.value in name_lower or name_lower in member.value:
+                    return member
+            raise ValueError(f"Unknown system: {name}")
+
 
 @dataclass
 class Biomarker:
