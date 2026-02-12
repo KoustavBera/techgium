@@ -8,23 +8,19 @@
 			href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
 			rel="stylesheet"
 		/>
-		<!-- MediaPipe Scripts -->
-		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
-		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+		<!-- No client-side MediaPipe needed — all processing is backend -->
 		<style>
 			:root {
-				--bg-primary: #F8F9FA;
-				--bg-secondary: #FFFFFF;
-				--bg-card: #FFFFFF;
-				--border-color: #DADCE0;
+				--bg-primary: #f8f9fa;
+				--bg-secondary: #ffffff;
+				--bg-card: #ffffff;
+				--border-color: #dadce0;
 				--text-primary: #202124;
-				--text-secondary: #5F6368;
-				--accent-blue: #1A73E8;
-				--success: #1E8E3E;
-				--error: #D93025;
-				--warning: #F9AB00;
+				--text-secondary: #5f6368;
+				--accent-blue: #1a73e8;
+				--success: #1e8e3e;
+				--error: #d93025;
+				--warning: #f9ab00;
 			}
 
 			* {
@@ -34,7 +30,11 @@
 			}
 
 			body {
-				font-family: 'Inter', -apple-system, system-ui, sans-serif;
+				font-family:
+					"Inter",
+					-apple-system,
+					system-ui,
+					sans-serif;
 				background: var(--bg-primary);
 				color: var(--text-primary);
 				height: 100vh;
@@ -56,24 +56,17 @@
 				overflow: hidden;
 				margin: 16px;
 				border-radius: 24px;
-				box-shadow: 0 4px 6px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.1);
+				box-shadow:
+					0 4px 6px rgba(0, 0, 0, 0.05),
+					0 1px 3px rgba(0, 0, 0, 0.1);
 			}
 
-			.camera-panel video {
+			.camera-panel img {
 				position: absolute;
 				width: 100%;
 				height: 100%;
 				object-fit: cover;
 				transform: scaleX(-1);
-				opacity: 0.8;
-			}
-
-			.camera-panel canvas {
-				position: absolute;
-				z-index: 10;
-				width: 100%;
-				height: 100%;
-				object-fit: contain;
 			}
 
 			.camera-overlay-message {
@@ -82,7 +75,7 @@
 				color: #fff;
 				text-align: center;
 				pointer-events: none;
-				background: rgba(0,0,0,0.4);
+				background: rgba(0, 0, 0, 0.4);
 				padding: 24px;
 				border-radius: 20px;
 				backdrop-filter: blur(4px);
@@ -113,7 +106,9 @@
 				letter-spacing: 0.5px;
 			}
 
-			.camera-badge.live { display: flex; }
+			.camera-badge.live {
+				display: flex;
+			}
 
 			/* ========================================= */
 			/* RIGHT PANEL: CONTROLS & INFO              */
@@ -128,7 +123,9 @@
 				gap: 24px;
 			}
 
-			header { margin-bottom: 12px; }
+			header {
+				margin-bottom: 12px;
+			}
 			.logo {
 				font-size: 11px;
 				font-weight: 700;
@@ -137,8 +134,17 @@
 				color: var(--accent-blue);
 				margin-bottom: 6px;
 			}
-			h1 { font-size: 28px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.5px; }
-			.subtitle { font-size: 15px; color: var(--text-secondary); margin-top: 4px; }
+			h1 {
+				font-size: 28px;
+				font-weight: 600;
+				color: var(--text-primary);
+				letter-spacing: -0.5px;
+			}
+			.subtitle {
+				font-size: 15px;
+				color: var(--text-secondary);
+				margin-top: 4px;
+			}
 
 			/* Cards */
 			.card {
@@ -148,7 +154,9 @@
 				border-radius: 24px;
 				transition: box-shadow 0.2s;
 			}
-			.card:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.02); }
+			.card:hover {
+				box-shadow: 0 10px 25px rgba(0, 0, 0, 0.02);
+			}
 
 			.card-title {
 				font-size: 15px;
@@ -171,7 +179,7 @@
 			.instruction-animation {
 				width: 100%;
 				height: 100px;
-				background: #F1F3F4;
+				background: #f1f3f4;
 				border-radius: 16px;
 				margin-bottom: 24px;
 				display: flex;
@@ -186,32 +194,76 @@
 				animation: pulse 1.2s infinite alternate;
 			}
 			@keyframes pulse {
-				0% { transform: scale(1); opacity: 0.4; }
-				100% { transform: scale(1.8); opacity: 1; }
+				0% {
+					transform: scale(1);
+					opacity: 0.4;
+				}
+				100% {
+					transform: scale(1.8);
+					opacity: 1;
+				}
 			}
 
-			.phase-instruction { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
-			.phase-instruction strong { color: var(--text-primary); display: block; font-size: 17px; margin-bottom: 6px; font-weight: 600; }
+			.phase-instruction {
+				font-size: 14px;
+				color: var(--text-secondary);
+				line-height: 1.6;
+			}
+			.phase-instruction strong {
+				color: var(--text-primary);
+				display: block;
+				font-size: 17px;
+				margin-bottom: 6px;
+				font-weight: 600;
+			}
 
 			/* Sensor Grid */
-			.sensor-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+			.sensor-grid {
+				display: grid;
+				grid-template-columns: repeat(3, 1fr);
+				gap: 12px;
+			}
 			.sensor-card {
-				background: #FFFFFF;
+				background: #ffffff;
 				border: 1px solid var(--border-color);
 				padding: 16px 12px;
 				text-align: center;
 				border-radius: 16px;
 			}
-			.sensor-card.connected { border-color: var(--success); background: #E6F4EA; }
-			.sensor-card.disconnected { opacity: 0.6; }
-			
-			.sensor-icon { font-size: 20px; display: block; margin-bottom: 6px; }
-			.sensor-name { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); }
-			.status-label { font-size: 11px; font-weight: 600; margin-top: 6px; }
-			.sensor-card.connected .status-label { color: var(--success); }
+			.sensor-card.connected {
+				border-color: var(--success);
+				background: #e6f4ea;
+			}
+			.sensor-card.disconnected {
+				opacity: 0.6;
+			}
+
+			.sensor-icon {
+				font-size: 20px;
+				display: block;
+				margin-bottom: 6px;
+			}
+			.sensor-name {
+				font-size: 10px;
+				font-weight: 700;
+				text-transform: uppercase;
+				color: var(--text-secondary);
+			}
+			.status-label {
+				font-size: 11px;
+				font-weight: 600;
+				margin-top: 6px;
+			}
+			.sensor-card.connected .status-label {
+				color: var(--success);
+			}
 
 			/* Buttons */
-			.camera-controls { display: flex; gap: 12px; margin-bottom: 20px; }
+			.camera-controls {
+				display: flex;
+				gap: 12px;
+				margin-bottom: 20px;
+			}
 			.btn-camera {
 				flex: 1;
 				padding: 14px;
@@ -224,11 +276,24 @@
 				border-radius: 12px;
 				transition: background 0.2s;
 			}
-			.btn-camera-start { border-color: var(--accent-blue); color: var(--accent-blue); }
-			.btn-camera-start:hover { background: #E8F0FE; }
-			.btn-camera-stop { border-color: var(--error); color: var(--error); }
-			.btn-camera-stop:hover { background: #FDE8E8; }
-			.btn-camera:disabled { opacity: 0.3; cursor: not-allowed; }
+			.btn-camera-start {
+				border-color: var(--accent-blue);
+				color: var(--accent-blue);
+			}
+			.btn-camera-start:hover {
+				background: #e8f0fe;
+			}
+			.btn-camera-stop {
+				border-color: var(--error);
+				color: var(--error);
+			}
+			.btn-camera-stop:hover {
+				background: #fde8e8;
+			}
+			.btn-camera:disabled {
+				opacity: 0.3;
+				cursor: not-allowed;
+			}
 
 			.btn-primary {
 				width: 100%;
@@ -244,12 +309,14 @@
 				box-shadow: 0 4px 12px rgba(26, 115, 232, 0.2);
 				transition: all 0.2s ease;
 			}
-			.btn-primary:hover { 
-				background: #1967D2; 
+			.btn-primary:hover {
+				background: #1967d2;
 				box-shadow: 0 6px 16px rgba(26, 115, 232, 0.3);
 				transform: translateY(-1px);
 			}
-			.btn-primary:active { transform: translateY(0); }
+			.btn-primary:active {
+				transform: translateY(0);
+			}
 
 			.btn-outline {
 				background: transparent;
@@ -258,13 +325,23 @@
 				box-shadow: none;
 			}
 			.btn-outline:hover {
-				background: #E8F0FE;
+				background: #e8f0fe;
 				box-shadow: none;
 			}
 
 			/* Form Controls */
-			.form-group { margin-bottom: 20px; }
-			label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 8px; display: block; letter-spacing: 0.5px; }
+			.form-group {
+				margin-bottom: 20px;
+			}
+			label {
+				font-size: 11px;
+				font-weight: 700;
+				color: var(--text-secondary);
+				text-transform: uppercase;
+				margin-bottom: 8px;
+				display: block;
+				letter-spacing: 0.5px;
+			}
 			input {
 				width: 100%;
 				padding: 14px;
@@ -275,7 +352,11 @@
 				font-size: 15px;
 				border-radius: 12px;
 			}
-			input:focus { border-color: var(--accent-blue); outline: none; box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1); }
+			input:focus {
+				border-color: var(--accent-blue);
+				outline: none;
+				box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+			}
 
 			/* Progress */
 			.step-item {
@@ -288,9 +369,16 @@
 				color: var(--text-secondary);
 				font-weight: 500;
 			}
-			.step-item:last-child { border-bottom: none; }
-			.step-item.active { color: var(--text-primary); font-weight: 600; }
-			.step-item.completed { color: var(--success); }
+			.step-item:last-child {
+				border-bottom: none;
+			}
+			.step-item.active {
+				color: var(--text-primary);
+				font-weight: 600;
+			}
+			.step-item.completed {
+				color: var(--success);
+			}
 			.step-circle {
 				width: 24px;
 				height: 24px;
@@ -302,14 +390,21 @@
 				font-size: 11px;
 				font-weight: 700;
 			}
-			.step-item.active .step-circle { border-color: var(--accent-blue); color: var(--accent-blue); }
-			.step-item.completed .step-circle { border-color: var(--success); background: var(--success); color: #fff; }
+			.step-item.active .step-circle {
+				border-color: var(--accent-blue);
+				color: var(--accent-blue);
+			}
+			.step-item.completed .step-circle {
+				border-color: var(--success);
+				background: var(--success);
+				color: #fff;
+			}
 
 			#statusMessage {
 				margin-top: 16px;
 				padding: 20px;
 				border-radius: 16px;
-				background: #E8F0FE;
+				background: #e8f0fe;
 				color: var(--accent-blue);
 				font-weight: 600;
 				font-size: 14px;
@@ -319,7 +414,7 @@
 			}
 
 			.phase-alert {
-				background: #FEE7E6;
+				background: #fee7e6;
 				border: 1px solid var(--error);
 				color: var(--error);
 				padding: 14px;
@@ -331,31 +426,48 @@
 				align-items: center;
 				gap: 8px;
 			}
-			.phase-alert.visible { display: flex; }
+			.phase-alert.visible {
+				display: flex;
+			}
 
 			@media (max-width: 900px) {
-				body { flex-direction: column; overflow-y: auto; height: auto; }
-				.camera-panel { height: 50vh; min-height: 350px; margin: 10px; }
-				.control-panel { width: 100%; height: auto; padding: 24px; }
+				body {
+					flex-direction: column;
+					overflow-y: auto;
+					height: auto;
+				}
+				.camera-panel {
+					height: 50vh;
+					min-height: 350px;
+					margin: 10px;
+				}
+				.control-panel {
+					width: 100%;
+					height: auto;
+					padding: 24px;
+				}
 			}
 		</style>
 	</head>
 	<body>
-
 		<!-- LEFT: CAMERA PANEL -->
 		<div class="camera-panel" id="cameraPanel">
 			<div class="camera-badge" id="liveBadge">
 				<span class="live-dot"></span> LIVE
 			</div>
-			
+
 			<div class="camera-overlay-message" id="cameraPlaceholder">
 				<span class="icon">📷</span>
-				<h2>Camera Feed Inactive</h2>
-				<p>Click "Start Camera" in the controls pipeline to begin.</p>
+				<h2>Camera Feed Loading</h2>
+				<p>Connecting to backend camera...</p>
 			</div>
 
-			<video id="inputVideo" playsinline style="display: none;"></video>
-			<canvas id="outputCanvas"></canvas>
+			<img
+				id="cameraFeed"
+				src="http://localhost:8000/api/v1/hardware/video-feed"
+				style="display: none"
+				alt="Live Camera Feed"
+			/>
 		</div>
 
 		<!-- RIGHT: CONTROLS PANEL -->
@@ -366,16 +478,20 @@
 				<p class="subtitle">Non-invasive AI health analysis</p>
 			</header>
 
+			<!-- DEBUG CONSOLE -->
+
+
 			<!-- 1. SENSORS & CAMERA CONTROLS -->
 			<div class="card">
 				<h2 class="card-title">System Controls</h2>
-				
+
 				<div class="camera-controls">
-					<button class="btn-camera btn-camera-start" id="startCameraBtn" onclick="startCamera()">
-						▶ Start Camera
-					</button>
-					<button class="btn-camera btn-camera-stop" id="stopCameraBtn" onclick="stopCamera()" disabled>
-						⏹ Stop Camera
+					<button
+						class="btn-camera btn-camera-start"
+						id="startCameraBtn"
+						onclick="toggleCamera()"
+					>
+						▶ Show Camera
 					</button>
 				</div>
 
@@ -397,7 +513,11 @@
 					</div>
 				</div>
 
-				<button class="btn-primary btn-outline" id="checkSensorsBtn" onclick="checkSensors()">
+				<button
+					class="btn-primary btn-outline"
+					id="checkSensorsBtn"
+					onclick="checkSensors()"
+				>
 					Check Sensor Connectivity
 				</button>
 			</div>
@@ -405,21 +525,26 @@
 			<!-- 2. SCREENING GUIDE -->
 			<div class="card instruction-card">
 				<h2 class="card-title">Screening Guide</h2>
-				
+
 				<div class="instruction-animation">
 					<div class="circle-ripple"></div>
 				</div>
 
 				<div class="phase-instruction" id="phaseInstruction">
 					<strong>Ready to Start</strong>
-					Please ensure all sensors are connected. Stand in the center of the frame.
+					Please ensure all sensors are connected. Stand in the center of the
+					frame.
 				</div>
 
 				<div class="phase-alert" id="phaseAlert">
-					<span>⚠️</span> <span id="alertText">Alert text here</span>
+					<span id="phaseAlertIcon">⚠️</span>
+					<span id="phaseAlertText">Alert text here</span>
 				</div>
 
-				<div id="activeBiomarkers" style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+				<div
+					id="activeBiomarkers"
+					style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px"
+				></div>
 			</div>
 
 			<!-- 3. CONFIGURATION FORM -->
@@ -428,16 +553,16 @@
 				<form id="screeningForm">
 					<div class="form-group">
 						<label>Patient ID</label>
-						<input type="text" id="patientId" value="PATIENT_001">
+						<input type="text" id="patientId" value="PATIENT_001" />
 					</div>
-					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
 						<div class="form-group">
 							<label>Radar Port</label>
-							<input type="text" id="radarPort" value="COM7">
+							<input type="text" id="radarPort" value="COM7" />
 						</div>
 						<div class="form-group">
 							<label>Thermal Port</label>
-							<input type="text" id="esp32Port" value="COM6">
+							<input type="text" id="esp32Port" value="COM6" />
 						</div>
 					</div>
 					<button type="submit" class="btn-primary" id="startBtn">
@@ -447,282 +572,418 @@
 			</div>
 
 			<!-- 4. STATUS & RESULTS -->
-			<div class="card status-card" id="statusCard" style="display: none;">
+			<div class="card status-card" id="statusCard" style="display: none">
 				<h2 class="card-title">Status</h2>
-				
+
 				<div class="step-list" id="progressSteps">
-					<div class="step-item" data-step="init"><div class="step-circle">1</div> Initializing</div>
-					<div class="step-item" data-step="capture"><div class="step-circle">2</div> Face Analysis (10s)</div>
-					<div class="step-item" data-step="pose"><div class="step-circle">3</div> Body Analysis (10s)</div>
-					<div class="step-item" data-step="process"><div class="step-circle">4</div> AI Processing</div>
+					<div class="step-item" data-step="init">
+						<div class="step-circle">1</div>
+						Initializing
+					</div>
+					<div class="step-item" data-step="capture">
+						<div class="step-circle">2</div>
+						Face Analysis (10s)
+					</div>
+					<div class="step-item" data-step="pose">
+						<div class="step-circle">3</div>
+						Body Analysis (10s)
+					</div>
+					<div class="step-item" data-step="process">
+						<div class="step-circle">4</div>
+						AI Processing
+					</div>
 				</div>
 
-				<div id="statusMessage" style="padding: 12px; border-radius: 8px; background: rgba(99,102,241,0.1); color: white; display: flex; gap: 10px; align-items: center; font-size: 14px;">
+				<div
+					id="statusMessage"
+					style="
+						padding: 12px;
+						border-radius: 8px;
+						background: rgba(99, 102, 241, 0.1);
+						color: white;
+						display: flex;
+						gap: 10px;
+						align-items: center;
+						font-size: 14px;
+					"
+				>
 					<span>⏳</span> <span id="statusText">Waiting...</span>
 				</div>
 
-				<div id="downloadSection" style="margin-top: 16px; display: none;">
-					<a href="#" class="btn-primary" id="downloadPatient" target="_blank" style="display: block; text-align: center; text-decoration: none; margin-bottom: 8px;">Download Patient Report</a>
+				<div id="downloadSection" style="margin-top: 16px; display: none">
+					<a
+						href="#"
+						class="btn-primary"
+						id="downloadPatient"
+						target="_blank"
+						style="
+							display: block;
+							text-align: center;
+							text-decoration: none;
+							margin-bottom: 8px;
+						"
+						>Download Patient Report</a
+					>
 				</div>
 			</div>
-			
-			<div style="text-align: center; color: var(--text-secondary); font-size: 11px; margin-top: auto; padding-top: 20px;">
-				Chiranjeevi v1.0 • System Ready
+
+			<div
+				style="
+					text-align: center;
+					color: var(--text-secondary);
+					font-size: 11px;
+					margin-top: auto;
+					padding-top: 20px;
+				"
+			>
+				Chiranjeevi v2.0 • Unified Architecture
 			</div>
 		</div>
 
 		<script>
 			const API_BASE = "http://localhost:8000";
-			let cameraActive = false;
-			let currentPhase = 'IDLE';
+			let cameraShowing = false;
+			let pollInterval = null;
 
-			const videoElement = document.getElementById('inputVideo');
-			const canvasElement = document.getElementById('outputCanvas');
-			const canvasCtx = canvasElement.getContext('2d');
-			const startBtn = document.getElementById('startBtn');
 
-			// ===== MEDIAPIPE INIT =====
-			const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-			faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5});
 
-			const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
-			pose.setOptions({modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5});
+			// ===== CAMERA TOGGLE (backend-owned MJPEG stream) =====
+			function toggleCamera() {
+				const feed = document.getElementById("cameraFeed");
+				const placeholder = document.getElementById("cameraPlaceholder");
+				const badge = document.getElementById("liveBadge");
+				const btn = document.getElementById("startCameraBtn");
 
-			faceMesh.onResults(onFaceResults);
-			pose.onResults(onPoseResults);
-
-			function onFaceResults(results) {
-				if (currentPhase !== 'FACE' && currentPhase !== 'IDLE') return;
-				drawResults(results, 'FACE');
-			}
-
-			function onPoseResults(results) {
-				if (currentPhase !== 'POSE') return;
-				drawResults(results, 'POSE');
-			}
-
-			function drawResults(results, type) {
-				canvasCtx.save();
-				canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-				// Mirror canvas
-				canvasCtx.translate(canvasElement.width, 0);
-				canvasCtx.scale(-1, 1);
-				canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-				if (type === 'FACE' && results.multiFaceLandmarks) {
-					for (const landmarks of results.multiFaceLandmarks) {
-						drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: 'rgba(139, 92, 246, 0.2)', lineWidth: 1});
-						drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, {color: '#8B5CF6', lineWidth: 2});
-						drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, {color: '#8B5CF6', lineWidth: 2});
-						
-						// Distance check (approximate)
-						const width = Math.abs(landmarks[234].x - landmarks[454].x);
-						if (currentPhase === 'FACE' && width < 0.2) showAlert("Move Closer");
-						else hideAlert();
-					}
+				if (!cameraShowing) {
+					// Show MJPEG stream from backend
+					feed.src = `${API_BASE}/api/v1/hardware/video-feed?t=${Date.now()}`;
+					feed.style.display = "block";
+					placeholder.style.display = "none";
+					badge.style.display = "flex";
+					btn.textContent = "⏹ Hide Camera";
+					btn.className = "btn-camera btn-camera-stop";
+					cameraShowing = true;
+					console.log("[info] Camera feed connected (backend MJPEG)");
+				} else {
+					// Hide stream (but backend keeps capturing)
+					feed.style.display = "none";
+					feed.src = "";
+					placeholder.style.display = "flex";
+					badge.style.display = "none";
+					btn.textContent = "▶ Show Camera";
+					btn.className = "btn-camera btn-camera-start";
+					cameraShowing = false;
+					console.log("[info] Camera feed hidden (backend still capturing)");
 				}
-				if (type === 'POSE' && results.poseLandmarks) {
-					drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#22c55e', lineWidth: 4});
-					drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#ffffff', lineWidth: 2, radius: 2});
-					
-					// Full body check
-					if (results.poseLandmarks[30].visibility < 0.5) showAlert("Show Full Body");
-					else hideAlert();
+			}
+
+			// ===== CHECK SENSORS =====
+			async function checkSensors() {
+				try {
+					const res = await fetch(`${API_BASE}/api/v1/hardware/sensor-status`);
+					const data = await res.json();
+
+					updateSensorCard("sensorCamera", data.camera);
+					updateSensorCard("sensorEsp32", data.esp32);
+					updateSensorCard("sensorRadar", data.radar);
+					console.log("[info] Sensor check complete");
+				} catch (e) {
+					console.error(`[error] Sensor check failed: ${e.message}`);
 				}
-				canvasCtx.restore();
 			}
 
-			// Camera Logic
-			let camera = null;
-			function startCamera() {
-				// Hide placeholder, show video logic handled by rendering to canvas
-				document.getElementById('cameraPlaceholder').style.display = 'none';
-				document.getElementById('liveBadge').style.display = 'flex';
-				document.getElementById('startCameraBtn').disabled = true;
-				document.getElementById('stopCameraBtn').disabled = false;
-				
-				camera = new Camera(videoElement, {
-					onFrame: async () => {
-						if (currentPhase === 'POSE') await pose.send({image: videoElement});
-						else await faceMesh.send({image: videoElement});
-					},
-					width: 1280,
-					height: 720
-				});
-				camera.start();
-				cameraActive = true;
-				resizeCanvas();
+			function updateSensorCard(cardId, sensorData) {
+				const card = document.getElementById(cardId);
+				if (!card) return;
+				const isConnected = sensorData.status === "connected";
+				card.className = `sensor-card ${isConnected ? "connected" : "disconnected"}`;
+				const label = card.querySelector(".status-label");
+				if (label) label.textContent = isConnected ? "Online" : "Disc.";
 			}
 
-			function stopCamera() {
-				if (camera) camera.stop();
-				document.getElementById('cameraPlaceholder').style.display = 'block';
-				document.getElementById('liveBadge').style.display = 'none';
-				document.getElementById('startCameraBtn').disabled = false;
-				document.getElementById('stopCameraBtn').disabled = true;
-				cameraActive = false;
-				
-				// Clear canvas
-				canvasCtx.clearRect(0,0, canvasElement.width, canvasElement.height);
-			}
-
-			// Resize canvas to match panel
-			function resizeCanvas() {
-				const panel = document.getElementById('cameraPanel');
-				canvasElement.width = panel.clientWidth;
-				canvasElement.height = panel.clientHeight;
-			}
-			window.addEventListener('resize', resizeCanvas);
-
-			// UI Updates
-			function updatePhaseUI(phase, subTask = null) {
-				currentPhase = phase;
+			// ===== PHASE UI =====
+			function updatePhaseUI(phase, message) {
+				const instruction = document.getElementById("phaseInstruction");
 				const texts = {
-					'IDLE': ['SYSTEM READY', 'Please ensure all sensors are connected. Stand in the center of the frame.'],
-					'PRE-FACE': ['GET READY: FACE SCAN', 'Position your face within the frame. Analysis starts in 10 seconds.'],
-					'FACE': ['PHYSIOLOGICAL ANALYSIS: FACE', subTask || 'Analyzing cardiovascular and ocular biomarkers...'],
-					'PRE-POSE': ['GET READY: BODY SCAN', 'Step back to show your full body. Gait analysis starts in 10 seconds.'],
-					'POSE': ['KINETIC ANALYSIS: BODY', subTask || 'Analyzing postural and gait stability...'],
-					'PROCESSING': ['AI DATA FUSION', 'Generating final health report using Gemini Medical LLM.']
+					IDLE: [
+						"SYSTEM READY",
+						"Please ensure all sensors are connected. Stand in the center of the frame.",
+					],
+					INITIALIZING: ["INITIALIZING", "Preparing sensors for analysis..."],
+					FACE_ANALYSIS: [
+						"FACE ANALYSIS",
+						message || "Analyzing facial features and vital signs...",
+					],
+					BODY_ANALYSIS: [
+						"BODY ANALYSIS",
+						message || "Analyzing posture and movement patterns...",
+					],
+					PROCESSING: [
+						"AI DATA FUSION",
+						message || "Running biomarker extraction and risk assessment...",
+					],
+					COMPLETE: [
+						"SCREENING COMPLETE",
+						"Your health report is ready for download.",
+					],
+					ERROR: ["ERROR", message || "An error occurred during screening."],
 				};
-				const [title, desc] = texts[phase] || ['PROCESSING', 'Please wait...'];
-				document.getElementById('phaseInstruction').innerHTML = `<strong>${title}</strong>${desc}`;
-				
-				// Biomarkers
+				const [title, desc] = texts[phase] || [
+					"PROCESSING",
+					message || "Please wait...",
+				];
+				instruction.innerHTML = `<strong>${title}</strong>${desc}`;
+
+				// Update biomarker tags
 				const marks = {
-					'FACE': ['rPPG', 'Ocular', 'Thermal', 'Stress'],
-					'POSE': ['Skeletal', 'Gait', 'Posture', 'Balance'],
-					'PROCESSING': ['Fusion', 'Risk', 'Report']
+					FACE_ANALYSIS: ["rPPG", "Ocular", "Thermal", "Skin", "Nasal"],
+					BODY_ANALYSIS: ["Skeletal", "Gait", "Posture", "Balance"],
+					PROCESSING: ["Fusion", "Risk", "LLM", "Report"],
 				};
-				const html = (marks[phase] || []).map(m => `<span style="background:#000; border: 1px solid #333; padding:4px 8px; font-size:9px; font-weight:700; color:var(--accent-blue);">${m}</span>`).join('');
-				document.getElementById('activeBiomarkers').innerHTML = html;
+				const tagList = marks[phase] || [];
+				const html = tagList
+					.map(
+						(m) =>
+							`<span style="background:#E8F0FE; border: 1px solid var(--accent-blue); padding:4px 8px; font-size:9px; font-weight:700; color:var(--accent-blue); border-radius:6px;">${m}</span>`,
+					)
+					.join("");
+				document.getElementById("activeBiomarkers").innerHTML = html;
+
+				// Update step progress
+				const stepMap = {
+					INITIALIZING: "init",
+					FACE_ANALYSIS: "capture",
+					BODY_ANALYSIS: "pose",
+					PROCESSING: "process",
+					COMPLETE: "done",
+				};
+				const steps = ["init", "capture", "pose", "process"];
+				const activeIdx = steps.indexOf(stepMap[phase] || "");
+				document.querySelectorAll(".step-item").forEach((el, i) => {
+					el.className = "step-item";
+					if (i < activeIdx || phase === "COMPLETE")
+						el.classList.add("completed");
+					else if (i === activeIdx) el.classList.add("active");
+				});
 			}
 
-			// ... (showAlert/hideAlert/checkSensors/updateSensor remain the same)
+			// ===== START SCREENING =====
+			async function startScreening(e) {
+				console.log("Start button clicked");
+				if (e) e.preventDefault();
 
-			// Flow Simulation
-			document.getElementById('screeningForm').addEventListener('submit', async (e) => {
-				e.preventDefault();
-				if (!cameraActive) startCamera();
-				
-				document.getElementById('configCard').style.display = 'none';
-				document.getElementById('statusCard').style.display = 'block';
-				
-				// Updated Flow with Positioning Delays
-				// Sequence: INIT -> PRE-FACE (10s) -> FACE (20s) -> PRE-POSE (10s) -> POSE (20s) -> PROCESS
-				
-				const timeline = [
-					{ step: 'init', phase: 'IDLE', duration: 2000 },
-					{ step: 'capture', phase: 'PRE-FACE', duration: 10000 },
-					{ step: 'capture', phase: 'FACE', duration: 20000 },
-					{ step: 'pose', phase: 'PRE-POSE', duration: 10000 },
-					{ step: 'pose', phase: 'POSE', duration: 20000 },
-					{ step: 'process', phase: 'PROCESSING', duration: 5000 }
-				];
-				
-				let idx = 0;
-				
-				function runNextPhase() {
-					if (idx >= timeline.length) {
-						submitRealRequest(); 
-						return;
+				// Show status card, hide config
+				document.getElementById("statusCard").style.display = "block";
+				document.getElementById("configCard").style.opacity = "0.5";
+				document.getElementById("startBtn").disabled = true;
+				document.getElementById("downloadSection").style.display = "none";
+
+				// Ensure camera is visible
+				if (!cameraShowing) toggleCamera();
+
+				updatePhaseUI("INITIALIZING", "Preparing sensors...");
+				document.getElementById("statusText").textContent = "Starting...";
+
+				try {
+					// Launch scan (non-blocking — returns immediately)
+					const body = {
+						patient_id: document.getElementById("patientId").value,
+						radar_port: document.getElementById("radarPort").value,
+						esp32_port: document.getElementById("esp32Port").value,
+						camera_index: 0,
+					};
+
+					console.log("Starting screening...");
+					const res = await fetch(
+						`${API_BASE}/api/v1/hardware/start-screening`,
+						{
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(body),
+						},
+					);
+
+					if (!res.ok) {
+						const errData = await res.json();
+						throw new Error(errData.detail || `Server error: ${res.status}`);
 					}
 
-					const current = timeline[idx];
-					
-					// Update Stepper UI
-					document.querySelectorAll('.step-item').forEach(el => el.classList.remove('active'));
-					const stepEl = document.querySelector(`[data-step="${current.step}"]`);
-					if (stepEl) {
-						stepEl.classList.add('active');
-						if (idx > 0 && timeline[idx-1].step !== current.step) {
-							const prevEl = document.querySelector(`[data-step="${timeline[idx-1].step}"]`);
-							if (prevEl) prevEl.classList.add('completed');
+					const data = await res.json();
+
+					if (data.status === "error") {
+						throw new Error(data.error || "Failed to start scan");
+					}
+
+					console.log("Scan started — polling for progress...");
+
+					// Start polling scan status
+					pollScanStatus();
+				} catch (e) {
+					console.error(`Start error: ${e.message}`);
+					document.getElementById("statusText").textContent =
+						"Error: " + e.message;
+					updatePhaseUI("ERROR", e.message);
+					resetUI();
+				}
+			}
+
+			// ===== POLL SCAN STATUS =====
+			function pollScanStatus() {
+				if (pollInterval) clearInterval(pollInterval);
+
+				pollInterval = setInterval(async () => {
+					try {
+						const res = await fetch(`${API_BASE}/api/v1/hardware/scan-status`);
+						const status = await res.json();
+
+						// Update UI
+						updatePhaseUI(status.phase, status.message);
+						document.getElementById("statusText").textContent =
+							`${status.message} (${status.progress}%)`;
+
+						// Display distance / alignment warnings from backend (Logic Restoration)
+						if (status.user_warnings) {
+							const { distance_warning, face_detected, pose_detected } = status.user_warnings;
+							const alertDiv = document.getElementById("phaseAlert");
+							const alertIcon = document.getElementById("phaseAlertIcon");
+							const alertText = document.getElementById("phaseAlertText");
+
+							if (distance_warning === "too_close") {
+								alertDiv.classList.add("visible");
+								alertIcon.textContent = "⚠️";
+								alertText.textContent = "TOO CLOSE — Move back from the camera";
+							} else if (distance_warning === "too_far") {
+								alertDiv.classList.add("visible");
+								alertIcon.textContent = "⚠️";
+								alertText.textContent = "TOO FAR — Move closer to the camera";
+							} else if (status.phase === "FACE_ANALYSIS" && !face_detected) {
+								alertDiv.classList.add("visible");
+								alertIcon.textContent = "👤";
+								alertText.textContent = "FACE NOT DETECTED — Center your face";
+							} else if (status.phase === "BODY_ANALYSIS" && !pose_detected) {
+								alertDiv.classList.add("visible");
+								alertIcon.textContent = "🚶";
+								alertText.textContent = "BODY NOT DETECTED — Step back until fully visible";
+							} else {
+								alertDiv.classList.remove("visible");
+							}
 						}
-					}
-					
-					// Sequential Logic for sub-tasks during Analysis
-					let subTasks = [];
-					if (current.phase === 'FACE') {
-						subTasks = [
-							"Acquiring Heart Rate (rPPG)...",
-							"Analyzing Ocular Stability...",
-							"Scanning Thermal Biomarkers...",
-							"Detecting Stress Indicators..."
-						];
-					} else if (current.phase === 'POSE') {
-						subTasks = [
-							"Mapping Skeletal Structure...",
-							"Analyzing Gait & Balance...",
-							"Checking Posture Alignment...",
-							"Finalizing Biomechanics..."
-						];
-					}
 
-					// Initial UI Update
-					updatePhaseUI(current.phase, subTasks.length > 0 ? subTasks[0] : null);
-					
-					// Update Status Text & Countdowns
-					let timeLeft = current.duration / 1000;
-					const subTaskInterval = current.duration / 4; // Cycle 4 sub-tasks every phase
-					
-					const timerInterval = setInterval(() => {
-						timeLeft--;
-						if (timeLeft >= 0) {
-							let phaseLabel = current.phase.replace('PRE-', 'GET READY: ');
-							document.getElementById('statusText').textContent = `${phaseLabel} (${timeLeft}s)`;
-							
-							// Cycle sub-tasks every 5s (for a 20s phase)
-							if (subTasks.length > 0) {
-								const subIdx = Math.floor((current.duration - (timeLeft * 1000)) / subTaskInterval);
-								if (subTasks[subIdx]) {
-									updatePhaseUI(current.phase, subTasks[subIdx]);
+						// Check terminal states
+						if (status.state === "complete") {
+							clearInterval(pollInterval);
+							pollInterval = null;
+							onScanComplete(status);
+						} else if (status.state === "error") {
+							clearInterval(pollInterval);
+							pollInterval = null;
+							onScanError(status.message);
+						}
+					} catch (e) {
+						console.error(`Poll error: ${e.message}`);
+					}
+				}, 500); // Poll every 500ms
+			}
+
+			// ===== SCAN COMPLETE =====
+			function onScanComplete(status) {
+				console.log("Screening complete!");
+				updatePhaseUI("COMPLETE", "Screening complete!");
+				document.getElementById("statusText").textContent =
+					"✅ Screening complete!";
+
+				// Show download link
+				if (status.patient_report_id) {
+					document.getElementById("downloadPatient").href =
+						`${API_BASE}/api/v1/reports/${status.patient_report_id}/download`;
+					document.getElementById("downloadSection").style.display = "block";
+				}
+
+				resetUI();
+			}
+
+			// ===== SCAN ERROR =====
+			function onScanError(msg) {
+				console.error(`Scan error: ${msg}`);
+				updatePhaseUI("ERROR", msg);
+				document.getElementById("statusText").textContent = "❌ Error: " + msg;
+				resetUI();
+			}
+
+			// ===== RESET UI =====
+			function resetUI() {
+				document.getElementById("configCard").style.opacity = "1";
+				document.getElementById("startBtn").disabled = false;
+			}
+
+			// ===== ERROR HANDLERS =====
+			window.onerror = function (msg, url, line) {
+				console.error(`JS Error: ${msg} (Line ${line})`);
+				return false;
+			};
+			window.addEventListener("unhandledrejection", function (event) {
+				console.error(`Promise Error: ${event.reason}`);
+			});
+
+			// ===== INIT =====
+			window.onload = () => {
+				// Wire form submit
+				const form = document.getElementById("screeningForm");
+				if (form) form.addEventListener("submit", startScreening);
+
+				// Auto-connect camera and check sensors
+				setTimeout(() => {
+					checkSensors();
+					toggleCamera(); // Auto-show MJPEG feed
+					startContinuousWarningCheck(); // Start continuous distance warning polling
+				}, 500);
+			};
+
+			// ===== CONTINUOUS WARNING CHECK =====
+			let warningCheckInterval = null;
+			function startContinuousWarningCheck() {
+				// Poll status every 500ms to show distance warnings even before scan starts
+				if (warningCheckInterval) clearInterval(warningCheckInterval);
+
+				warningCheckInterval = setInterval(async () => {
+					try {
+						const res = await fetch(`${API_BASE}/api/v1/hardware/scan-status`);
+						const status = await res.json();
+
+						// Only update warnings if not actively scanning (to avoid conflict with pollScanStatus)
+						if (status.state === "idle" || status.state === "complete") {
+							if (status.user_warnings) {
+								const { distance_warning, face_detected } =
+									status.user_warnings;
+								const alertDiv = document.getElementById("phaseAlert");
+								const alertIcon = document.getElementById("phaseAlertIcon");
+								const alertText = document.getElementById("phaseAlertText");
+
+								if (distance_warning === "too_close") {
+									alertDiv.classList.add("visible");
+									alertIcon.textContent = "⚠️";
+									alertText.textContent =
+										"TOO CLOSE — Please move back from the camera";
+								} else if (distance_warning === "too_far") {
+									alertDiv.classList.add("visible");
+									alertIcon.textContent = "⚠️";
+									alertText.textContent =
+										"TOO FAR — Please move closer to the camera";
+								} else if (!face_detected) {
+									alertDiv.classList.add("visible");
+									alertIcon.textContent = "👤";
+									alertText.textContent =
+										"NO FACE DETECTED — Position yourself in frame";
+								} else {
+									alertDiv.classList.remove("visible");
 								}
 							}
 						}
-					}, 1000);
-
-					setTimeout(() => {
-						clearInterval(timerInterval);
-						idx++;
-						runNextPhase();
-					}, current.duration);
-				}
-
-				runNextPhase();
-			});
-
-
-			async function submitRealRequest() {
-				try {
-					const body = {
-						patient_id: document.getElementById('patientId').value,
-						radar_port: document.getElementById('radarPort').value,
-						esp32_port: document.getElementById('esp32Port').value,
-						camera_index: 0
-					};
-					const res = await fetch(`${API_BASE}/api/v1/hardware/start-screening`, {
-						method: 'POST',
-						headers: {'Content-Type': 'application/json'},
-						body: JSON.stringify(body)
-					});
-					const data = await res.json();
-					if (data.status === 'success') {
-						document.getElementById('statusText').textContent = "Complete!";
-						document.getElementById('downloadSection').style.display = 'block';
-						if (data.patient_report_id) {
-							document.getElementById('downloadPatient').href = `${API_BASE}/api/v1/reports/${data.patient_report_id}/download`;
-						}
+					} catch (e) {
+						// Silent fail for continuous check
 					}
-				} catch(e) {
-					document.getElementById('statusText').textContent = "Error: " + e.message;
-				}
+				}, 500);
 			}
-
-			// Init
-			window.onload = () => {
-				setTimeout(checkSensors, 1000);
-			};
 		</script>
 	</body>
 </html>

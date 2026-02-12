@@ -1,11 +1,13 @@
 """
-Health Screening Pipeline - FastAPI Application
+Health Screening Pipeline - FastAPI Application (Unified Architecture)
 
 Main application entry point with API endpoints for:
 - Health screening data processing
 - Report generation (Patient & Doctor PDFs)
 - Validation status
+- Hardware management (Camera, Radar, Thermal)
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Response, UploadFile, File, BackgroundTasks, Query
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +29,7 @@ from app.core.inference.risk_engine import RiskEngine, RiskScore, RiskLevel, Sys
 from app.core.validation.trust_envelope import TrustEnvelope
 from app.core.agents.medical_agents import AgentConsensus, ConsensusResult
 from app.core.reports import PatientReportGenerator, DoctorReportGenerator
+from app.core.hardware.manager import HardwareManager, HardwareConfig
 
 logger = logging.getLogger(__name__)
 
@@ -101,14 +104,43 @@ class HealthResponse(BaseModel):
     components: Dict[str, str]
 
 
+# ---- Hardware Manager Singleton ----
+_hw_manager = HardwareManager()
+
+
+# ---- Application Lifespan ----
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage hardware lifecycle: startup → yield → shutdown."""
+    logger.info("Health Screening Pipeline API starting up...")
+    os.makedirs("reports", exist_ok=True)
+    
+    # Initialize hardware (camera, radar, thermal)
+    config = HardwareConfig(
+        camera_index=0,
+        radar_port=os.environ.get("RADAR_PORT", "COM7"),
+        esp32_port=os.environ.get("ESP32_PORT", "COM6"),
+    )
+    await _hw_manager.startup(config)
+    
+    logger.info("API ready to accept requests")
+    yield
+    
+    # Shutdown hardware
+    await _hw_manager.shutdown()
+    logger.info("Health Screening Pipeline API shut down.")
+
+
 # ---- FastAPI Application ----
 
 app = FastAPI(
     title="Health Screening Pipeline API",
-    description="Non-invasive health screening using multimodal data processing",
-    version="1.0.0",
+    description="Non-invasive health screening using multimodal data processing (Unified Architecture)",
+    version="2.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -500,279 +532,85 @@ class HardwareScreeningResponse(BaseModel):
     error: Optional[str] = None
 
 
+@app.get("/api/v1/hardware/status", tags=["Hardware"])
+async def get_hardware_status():
+    """
+    Check status of connected hardware (live from HardwareManager).
+    """
+    status = _hw_manager.get_sensor_status()
+    return {
+        "radar": status["radar"]["status"] == "connected",
+        "thermal": status["thermal"]["status"] == "connected",
+        "camera": status["camera"]["status"] == "connected",
+        "details": status
+    }
+
+
 @app.post("/api/v1/hardware/start-screening", response_model=HardwareScreeningResponse, tags=["Hardware"])
 async def start_hardware_screening(request: HardwareScreeningRequest):
     """
-    Start a hardware-based health screening using connected sensors.
+    Start a hardware-based health screening using HardwareManager.
     
-    Triggers the bridge.py script with the specified hardware configuration.
-    Returns screening results and report IDs for download.
+    Launches background scan: face capture → body capture → extraction → risk assessment.
+    Poll /api/v1/hardware/scan-status for progress.
     """
-    import subprocess
-    import sys
-    import re
-    import asyncio
+    started = _hw_manager.start_scan(
+        patient_id=request.patient_id,
+        screenings_dict=_screenings,
+    )
     
-    def run_bridge_subprocess():
-        """Run bridge.py in a subprocess (blocking call to be run in thread)."""
-        bridge_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "bridge.py")
-        
-        cmd = [
-            sys.executable, bridge_path,
-            "--radar-port", request.radar_port,
-            "--camera", str(request.camera_index),
-            "--patient-id", request.patient_id,
-            "--api-url", "http://localhost:8000"
-        ]
-        
-        if request.esp32_port:
-            cmd.extend(["--port", request.esp32_port])
-        
-        logger.info(f"Starting hardware screening: {' '.join(cmd)}")
-        
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=180,  # 3-minute timeout for hardware capture
-            cwd=os.path.dirname(os.path.dirname(__file__))
-        )
-    
-    try:
-        # Run subprocess in a thread to avoid blocking the event loop
-        # This allows the server to handle the API calls from bridge.py
-        result = await asyncio.to_thread(run_bridge_subprocess)
-        
-        logger.info(f"Bridge stdout (last 1000): {result.stdout[-1000:] if len(result.stdout) > 1000 else result.stdout}")
-        if result.stderr:
-            logger.warning(f"Bridge stderr (last 500): {result.stderr[-500:] if len(result.stderr) > 500 else result.stderr}")
-        
-        # Parse screening ID from output
-        screening_id = None
-        screening_match = re.search(r'Screening ID:\s*(SCR-[A-Z0-9]+)', result.stdout)
-        if screening_match:
-            screening_id = screening_match.group(1)
-        
-        # Also check for screening ID in error/fallback pattern
-        if not screening_id:
-            # Try to find from the stored screenings (bridge.py already submitted)
-            if _screenings:
-                # Get the most recent screening
-                screening_id = list(_screenings.keys())[-1]
-                logger.info(f"Found screening ID from storage: {screening_id}")
-        
-        if not screening_id:
-            return HardwareScreeningResponse(
-                status="error",
-                error="Screening completed but no screening ID found. Check server logs."
-            )
-        
-        # Generate reports
-        patient_report_id = None
-        doctor_report_id = None
-        
-        try:
-            patient_req = ReportRequest(screening_id=screening_id, report_type="patient")
-            patient_resp = await generate_report(patient_req)
-            patient_report_id = patient_resp.report_id
-        except Exception as e:
-            logger.warning(f"Patient report generation failed: {e}")
-        
-        try:
-            doctor_req = ReportRequest(screening_id=screening_id, report_type="doctor")
-            doctor_resp = await generate_report(doctor_req)
-            doctor_report_id = doctor_resp.report_id
-        except Exception as e:
-            logger.warning(f"Doctor report generation failed: {e}")
-        
-        return HardwareScreeningResponse(
-            status="success",
-            screening_id=screening_id,
-            patient_report_id=patient_report_id,
-            doctor_report_id=doctor_report_id
-        )
-        
-    except subprocess.TimeoutExpired:
-        logger.error("Hardware screening timed out")
+    if not started:
         return HardwareScreeningResponse(
             status="error",
-            error="Screening timed out after 3 minutes. Check hardware connections."
+            error="A scan is already in progress. Wait for it to complete."
         )
-    except Exception as e:
-        logger.error(f"Hardware screening failed: {e}")
-        return HardwareScreeningResponse(
-            status="error",
-            error=str(e)
-        )
+    
+    return HardwareScreeningResponse(
+        status="started",
+        screening_id=None,  # Will be available via /scan-status when complete
+    )
+
+
+@app.get("/api/v1/hardware/scan-status", tags=["Hardware"])
+async def get_scan_status():
+    """
+    Poll scan progress. Returns state, phase, message, progress %, and result IDs.
+    
+    States: idle, running, complete, error
+    Phases: IDLE, INITIALIZING, FACE_ANALYSIS, BODY_ANALYSIS, PROCESSING, COMPLETE, ERROR
+    """
+    return _hw_manager.get_scan_status()
 
 
 # ---- Sensor Status & Live Camera Feed Endpoints ----
 
 @app.get("/api/v1/hardware/sensor-status", tags=["Hardware"])
-async def check_sensor_status(
-    camera_index: int = Query(0, description="Camera index for OpenCV"),
-    esp32_port: Optional[str] = Query("COM5", description="ESP32 serial port (e.g. COM5)"),
-    radar_port: str = Query("COM6", description="Radar serial port (e.g. COM6)")
-):
+async def check_sensor_status():
     """
-    Probe all hardware sensors and return their connection status.
+    Get live sensor connection status from HardwareManager.
     
-    Returns status for: RGB camera, ESP32 thermal camera, mmWave radar.
+    No port probing needed — reads from the already-connected hardware.
     """
-    import cv2
-    
-    result = {
-        "camera": {"status": "disconnected", "detail": "Not checked"},
-        "esp32": {"status": "disconnected", "detail": "Not checked"},
-        "radar": {"status": "disconnected", "detail": "Not checked"},
+    status = _hw_manager.get_sensor_status()
+    return {
+        "camera": status["camera"],
+        "esp32": status["thermal"],  # Keep 'esp32' key for frontend compat
+        "radar": status["radar"],
     }
-    
-    # --- Check RGB Camera ---
-    try:
-        cap = cv2.VideoCapture(camera_index)
-        if cap.isOpened():
-            ret, frame = cap.read()
-            if ret and frame is not None:
-                h, w = frame.shape[:2]
-                result["camera"] = {
-                    "status": "connected",
-                    "detail": f"Camera {camera_index} — {w}x{h} resolution"
-                }
-            else:
-                result["camera"]["detail"] = f"Camera {camera_index} opened but cannot read frames"
-            cap.release()
-        else:
-            result["camera"]["detail"] = f"Camera {camera_index} not found or busy"
-    except Exception as e:
-        result["camera"]["detail"] = f"Camera error: {str(e)}"
-    
-    # --- Check ESP32 Thermal Camera ---
-    if esp32_port:
-        try:
-            import serial
-            ser = serial.Serial(port=esp32_port, baudrate=115200, timeout=3)
-            # Try to read a line of JSON from the ESP32
-            raw = ser.readline().decode('utf-8', errors='ignore').strip()
-            ser.close()
-            
-            if raw:
-                import json as _json
-                try:
-                    data = _json.loads(raw)
-                    if 'thermal' in data:
-                        result["esp32"] = {
-                            "status": "connected",
-                            "detail": f"ESP32 on {esp32_port} — Thermal data streaming"
-                        }
-                    elif 'status' in data and data['status'] == 'ready':
-                        result["esp32"] = {
-                            "status": "connected",
-                            "detail": f"ESP32 on {esp32_port} — Ready (v{data.get('version', '?')})"
-                        }
-                    elif 'error' in data:
-                        result["esp32"] = {
-                            "status": "error",
-                            "detail": f"ESP32 on {esp32_port} — Sensor error: {data['error']}"
-                        }
-                    else:
-                        result["esp32"] = {
-                            "status": "connected",
-                            "detail": f"ESP32 on {esp32_port} — Responding (unknown format)"
-                        }
-                except _json.JSONDecodeError:
-                    result["esp32"] = {
-                        "status": "connected",
-                        "detail": f"ESP32 on {esp32_port} — Port open, non-JSON data: {raw[:80]}"
-                    }
-            else:
-                result["esp32"] = {
-                    "status": "connected",
-                    "detail": f"ESP32 on {esp32_port} — Port open, no data yet (may be starting up)"
-                }
-        except ImportError:
-            result["esp32"]["detail"] = "pyserial not installed (pip install pyserial)"
-        except Exception as e:
-            result["esp32"]["detail"] = f"ESP32 on {esp32_port} — {str(e)}"
-    else:
-        result["esp32"]["detail"] = "No ESP32 port specified"
-    
-    # --- Check mmWave Radar ---
-    try:
-        import serial
-        ser = serial.Serial(port=radar_port, baudrate=115200, timeout=2)
-        # Just check if port opens successfully
-        if ser.is_open:
-            result["radar"] = {
-                "status": "connected",
-                "detail": f"Radar on {radar_port} — Port open and responding"
-            }
-        ser.close()
-    except ImportError:
-        result["radar"]["detail"] = "pyserial not installed (pip install pyserial)"
-    except Exception as e:
-        result["radar"]["detail"] = f"Radar on {radar_port} — {str(e)}"
-    
-    return result
 
 
 @app.get("/api/v1/hardware/video-feed", tags=["Hardware"])
-async def video_feed(
-    camera_index: int = Query(0, description="Camera index for OpenCV")
-):
+async def video_feed():
     """
-    Live MJPEG video stream from the RGB camera.
+    Live MJPEG video stream from HardwareManager's continuous capture.
     
-    Use in an <img> tag: <img src="/api/v1/hardware/video-feed?camera_index=0">
+    Use in an <img> tag: <img src="/api/v1/hardware/video-feed">
+    The camera is owned by HardwareManager — no conflicts.
     """
-    import cv2
-    
-    def generate_frames():
-        cap = cv2.VideoCapture(camera_index)
-        if not cap.isOpened():
-            return
-        
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        
-        try:
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                # Encode frame as JPEG
-                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                frame_bytes = buffer.tobytes()
-                
-                yield (
-                    b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' +
-                    frame_bytes +
-                    b'\r\n'
-                )
-        finally:
-            cap.release()
-    
     return StreamingResponse(
-        generate_frames(),
+        _hw_manager.get_video_stream(),
         media_type='multipart/x-mixed-replace; boundary=frame'
     )
-
-
-# ---- Application Lifecycle ----
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup."""
-    logger.info("Health Screening Pipeline API starting up...")
-    os.makedirs("reports", exist_ok=True)
-    logger.info("API ready to accept requests")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    logger.info("Health Screening Pipeline API shutting down...")
 
 
 # ---- Run with uvicorn ----

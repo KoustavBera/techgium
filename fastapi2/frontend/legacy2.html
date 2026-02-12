@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Chiranjeevi Health Screening</title>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+			rel="stylesheet"
+		/>
+		<!-- MediaPipe Scripts -->
+		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+		<style>
+			:root {
+				--bg-primary: #F8F9FA;
+				--bg-secondary: #FFFFFF;
+				--bg-card: #FFFFFF;
+				--border-color: #DADCE0;
+				--text-primary: #202124;
+				--text-secondary: #5F6368;
+				--accent-blue: #1A73E8;
+				--success: #1E8E3E;
+				--error: #D93025;
+				--warning: #F9AB00;
+			}
+
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+
+			body {
+				font-family: 'Inter', -apple-system, system-ui, sans-serif;
+				background: var(--bg-primary);
+				color: var(--text-primary);
+				height: 100vh;
+				width: 100vw;
+				overflow: hidden;
+				display: flex;
+			}
+
+			/* ========================================= */
+			/* LEFT PANEL: CAMERA                        */
+			/* ========================================= */
+			.camera-panel {
+				flex: 1;
+				position: relative;
+				background: #000;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				overflow: hidden;
+				margin: 16px;
+				border-radius: 24px;
+				box-shadow: 0 4px 6px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.1);
+			}
+
+			.camera-panel video {
+				position: absolute;
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+				transform: scaleX(-1);
+				opacity: 0.8;
+			}
+
+			.camera-panel canvas {
+				position: absolute;
+				z-index: 10;
+				width: 100%;
+				height: 100%;
+				object-fit: contain;
+			}
+
+			.camera-overlay-message {
+				position: absolute;
+				z-index: 20;
+				color: #fff;
+				text-align: center;
+				pointer-events: none;
+				background: rgba(0,0,0,0.4);
+				padding: 24px;
+				border-radius: 20px;
+				backdrop-filter: blur(4px);
+			}
+
+			.camera-overlay-message .icon {
+				font-size: 48px;
+				margin-bottom: 12px;
+				display: block;
+			}
+
+			/* Camera Badge */
+			.camera-badge {
+				position: absolute;
+				top: 24px;
+				left: 24px;
+				z-index: 30;
+				background: var(--error);
+				color: white;
+				font-size: 11px;
+				font-weight: 700;
+				padding: 6px 12px;
+				border-radius: 20px;
+				display: none;
+				align-items: center;
+				gap: 6px;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+			}
+
+			.camera-badge.live { display: flex; }
+
+			/* ========================================= */
+			/* RIGHT PANEL: CONTROLS & INFO              */
+			/* ========================================= */
+			.control-panel {
+				width: 460px;
+				padding: 40px 32px;
+				display: flex;
+				flex-direction: column;
+				height: 100%;
+				overflow-y: auto;
+				gap: 24px;
+			}
+
+			header { margin-bottom: 12px; }
+			.logo {
+				font-size: 11px;
+				font-weight: 700;
+				letter-spacing: 2px;
+				text-transform: uppercase;
+				color: var(--accent-blue);
+				margin-bottom: 6px;
+			}
+			h1 { font-size: 28px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.5px; }
+			.subtitle { font-size: 15px; color: var(--text-secondary); margin-top: 4px; }
+
+			/* Cards */
+			.card {
+				background: var(--bg-card);
+				border: 1px solid var(--border-color);
+				padding: 24px;
+				border-radius: 24px;
+				transition: box-shadow 0.2s;
+			}
+			.card:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.02); }
+
+			.card-title {
+				font-size: 15px;
+				font-weight: 600;
+				margin-bottom: 20px;
+				color: var(--text-primary);
+				display: flex;
+				align-items: center;
+				gap: 12px;
+			}
+			.card-title::before {
+				content: "";
+				width: 4px;
+				height: 18px;
+				background: var(--accent-blue);
+				border-radius: 4px;
+			}
+
+			/* Instruction Section */
+			.instruction-animation {
+				width: 100%;
+				height: 100px;
+				background: #F1F3F4;
+				border-radius: 16px;
+				margin-bottom: 24px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.instruction-animation .circle-ripple {
+				width: 16px;
+				height: 16px;
+				background: var(--accent-blue);
+				border-radius: 50%;
+				animation: pulse 1.2s infinite alternate;
+			}
+			@keyframes pulse {
+				0% { transform: scale(1); opacity: 0.4; }
+				100% { transform: scale(1.8); opacity: 1; }
+			}
+
+			.phase-instruction { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+			.phase-instruction strong { color: var(--text-primary); display: block; font-size: 17px; margin-bottom: 6px; font-weight: 600; }
+
+			/* Sensor Grid */
+			.sensor-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+			.sensor-card {
+				background: #FFFFFF;
+				border: 1px solid var(--border-color);
+				padding: 16px 12px;
+				text-align: center;
+				border-radius: 16px;
+			}
+			.sensor-card.connected { border-color: var(--success); background: #E6F4EA; }
+			.sensor-card.disconnected { opacity: 0.6; }
+			
+			.sensor-icon { font-size: 20px; display: block; margin-bottom: 6px; }
+			.sensor-name { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); }
+			.status-label { font-size: 11px; font-weight: 600; margin-top: 6px; }
+			.sensor-card.connected .status-label { color: var(--success); }
+
+			/* Buttons */
+			.camera-controls { display: flex; gap: 12px; margin-bottom: 20px; }
+			.btn-camera {
+				flex: 1;
+				padding: 14px;
+				font-size: 12px;
+				font-weight: 600;
+				border: 1px solid var(--border-color);
+				background: #fff;
+				color: var(--text-primary);
+				cursor: pointer;
+				border-radius: 12px;
+				transition: background 0.2s;
+			}
+			.btn-camera-start { border-color: var(--accent-blue); color: var(--accent-blue); }
+			.btn-camera-start:hover { background: #E8F0FE; }
+			.btn-camera-stop { border-color: var(--error); color: var(--error); }
+			.btn-camera-stop:hover { background: #FDE8E8; }
+			.btn-camera:disabled { opacity: 0.3; cursor: not-allowed; }
+
+			.btn-primary {
+				width: 100%;
+				padding: 16px;
+				background: var(--accent-blue);
+				color: #fff;
+				border: none;
+				font-weight: 600;
+				font-size: 15px;
+				border-radius: 12px;
+				cursor: pointer;
+				margin-top: 20px;
+				box-shadow: 0 4px 12px rgba(26, 115, 232, 0.2);
+				transition: all 0.2s ease;
+			}
+			.btn-primary:hover { 
+				background: #1967D2; 
+				box-shadow: 0 6px 16px rgba(26, 115, 232, 0.3);
+				transform: translateY(-1px);
+			}
+			.btn-primary:active { transform: translateY(0); }
+
+			.btn-outline {
+				background: transparent;
+				color: var(--accent-blue);
+				border: 1px solid var(--accent-blue);
+				box-shadow: none;
+			}
+			.btn-outline:hover {
+				background: #E8F0FE;
+				box-shadow: none;
+			}
+
+			/* Form Controls */
+			.form-group { margin-bottom: 20px; }
+			label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 8px; display: block; letter-spacing: 0.5px; }
+			input {
+				width: 100%;
+				padding: 14px;
+				background: #fff;
+				border: 1px solid var(--border-color);
+				color: var(--text-primary);
+				font-family: inherit;
+				font-size: 15px;
+				border-radius: 12px;
+			}
+			input:focus { border-color: var(--accent-blue); outline: none; box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1); }
+
+			/* Progress */
+			.step-item {
+				display: flex;
+				align-items: center;
+				gap: 16px;
+				padding: 16px 0;
+				border-bottom: 1px solid var(--border-color);
+				font-size: 14px;
+				color: var(--text-secondary);
+				font-weight: 500;
+			}
+			.step-item:last-child { border-bottom: none; }
+			.step-item.active { color: var(--text-primary); font-weight: 600; }
+			.step-item.completed { color: var(--success); }
+			.step-circle {
+				width: 24px;
+				height: 24px;
+				border: 2px solid var(--border-color);
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-size: 11px;
+				font-weight: 700;
+			}
+			.step-item.active .step-circle { border-color: var(--accent-blue); color: var(--accent-blue); }
+			.step-item.completed .step-circle { border-color: var(--success); background: var(--success); color: #fff; }
+
+			#statusMessage {
+				margin-top: 16px;
+				padding: 20px;
+				border-radius: 16px;
+				background: #E8F0FE;
+				color: var(--accent-blue);
+				font-weight: 600;
+				font-size: 14px;
+				display: flex;
+				align-items: center;
+				gap: 12px;
+			}
+
+			.phase-alert {
+				background: #FEE7E6;
+				border: 1px solid var(--error);
+				color: var(--error);
+				padding: 14px;
+				border-radius: 12px;
+				font-size: 13px;
+				font-weight: 600;
+				margin-top: 16px;
+				display: none;
+				align-items: center;
+				gap: 8px;
+			}
+			.phase-alert.visible { display: flex; }
+
+			@media (max-width: 900px) {
+				body { flex-direction: column; overflow-y: auto; height: auto; }
+				.camera-panel { height: 50vh; min-height: 350px; margin: 10px; }
+				.control-panel { width: 100%; height: auto; padding: 24px; }
+			}
+		</style>
+	</head>
+	<body>
+
+		<!-- LEFT: CAMERA PANEL -->
+		<div class="camera-panel" id="cameraPanel">
+			<div class="camera-badge" id="liveBadge">
+				<span class="live-dot"></span> LIVE
+			</div>
+			
+			<div class="camera-overlay-message" id="cameraPlaceholder">
+				<span class="icon">📷</span>
+				<h2>Camera Feed Inactive</h2>
+				<p>Click "Start Camera" in the controls pipeline to begin.</p>
+			</div>
+
+			<video id="inputVideo" playsinline style="display: none;"></video>
+			<canvas id="outputCanvas"></canvas>
+		</div>
+
+		<!-- RIGHT: CONTROLS PANEL -->
+		<div class="control-panel">
+			<header>
+				<div class="logo">Chiranjeevi</div>
+				<h1>Health Screening</h1>
+				<p class="subtitle">Non-invasive AI health analysis</p>
+			</header>
+
+			<!-- 1. SENSORS & CAMERA CONTROLS -->
+			<div class="card">
+				<h2 class="card-title">System Controls</h2>
+				
+				<div class="camera-controls">
+					<button class="btn-camera btn-camera-start" id="startCameraBtn" onclick="startCamera()">
+						▶ Start Camera
+					</button>
+					<button class="btn-camera btn-camera-stop" id="stopCameraBtn" onclick="stopCamera()" disabled>
+						⏹ Stop Camera
+					</button>
+				</div>
+
+				<div class="sensor-grid">
+					<div class="sensor-card disconnected" id="sensorCamera">
+						<span class="sensor-icon">📷</span>
+						<div class="sensor-name">RGB</div>
+						<div class="status-label">Disc.</div>
+					</div>
+					<div class="sensor-card disconnected" id="sensorEsp32">
+						<span class="sensor-icon">🌡️</span>
+						<div class="sensor-name">Thermal</div>
+						<div class="status-label">Disc.</div>
+					</div>
+					<div class="sensor-card disconnected" id="sensorRadar">
+						<span class="sensor-icon">📡</span>
+						<div class="sensor-name">Radar</div>
+						<div class="status-label">Disc.</div>
+					</div>
+				</div>
+
+				<button class="btn-primary btn-outline" id="checkSensorsBtn" onclick="checkSensors()">
+					Check Sensor Connectivity
+				</button>
+			</div>
+
+			<!-- 2. SCREENING GUIDE -->
+			<div class="card instruction-card">
+				<h2 class="card-title">Screening Guide</h2>
+				
+				<div class="instruction-animation">
+					<div class="circle-ripple"></div>
+				</div>
+
+				<div class="phase-instruction" id="phaseInstruction">
+					<strong>Ready to Start</strong>
+					Please ensure all sensors are connected. Stand in the center of the frame.
+				</div>
+
+				<div class="phase-alert" id="phaseAlert">
+					<span>⚠️</span> <span id="alertText">Alert text here</span>
+				</div>
+
+				<div id="activeBiomarkers" style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+			</div>
+
+			<!-- 3. CONFIGURATION FORM -->
+			<div class="card" id="configCard">
+				<h2 class="card-title">Configuration</h2>
+				<form id="screeningForm">
+					<div class="form-group">
+						<label>Patient ID</label>
+						<input type="text" id="patientId" value="PATIENT_001">
+					</div>
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+						<div class="form-group">
+							<label>Radar Port</label>
+							<input type="text" id="radarPort" value="COM7">
+						</div>
+						<div class="form-group">
+							<label>Thermal Port</label>
+							<input type="text" id="esp32Port" value="COM6">
+						</div>
+					</div>
+					<button type="submit" class="btn-primary" id="startBtn">
+						Start Screening Flow
+					</button>
+				</form>
+			</div>
+
+			<!-- 4. STATUS & RESULTS -->
+			<div class="card status-card" id="statusCard" style="display: none;">
+				<h2 class="card-title">Status</h2>
+				
+				<div class="step-list" id="progressSteps">
+					<div class="step-item" data-step="init"><div class="step-circle">1</div> Initializing</div>
+					<div class="step-item" data-step="capture"><div class="step-circle">2</div> Face Analysis (10s)</div>
+					<div class="step-item" data-step="pose"><div class="step-circle">3</div> Body Analysis (10s)</div>
+					<div class="step-item" data-step="process"><div class="step-circle">4</div> AI Processing</div>
+				</div>
+
+				<div id="statusMessage" style="padding: 12px; border-radius: 8px; background: rgba(99,102,241,0.1); color: white; display: flex; gap: 10px; align-items: center; font-size: 14px;">
+					<span>⏳</span> <span id="statusText">Waiting...</span>
+				</div>
+
+				<div id="downloadSection" style="margin-top: 16px; display: none;">
+					<a href="#" class="btn-primary" id="downloadPatient" target="_blank" style="display: block; text-align: center; text-decoration: none; margin-bottom: 8px;">Download Patient Report</a>
+				</div>
+			</div>
+			
+			<div style="text-align: center; color: var(--text-secondary); font-size: 11px; margin-top: auto; padding-top: 20px;">
+				Chiranjeevi v1.0 • System Ready
+			</div>
+		</div>
+
+		<script>
+			const API_BASE = "http://localhost:8000";
+			let cameraActive = false;
+			let currentPhase = 'IDLE';
+
+			const videoElement = document.getElementById('inputVideo');
+			const canvasElement = document.getElementById('outputCanvas');
+			const canvasCtx = canvasElement.getContext('2d');
+			const startBtn = document.getElementById('startBtn');
+
+			// ===== MEDIAPIPE INIT =====
+			const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+			faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5});
+
+			const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
+			pose.setOptions({modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5});
+
+			faceMesh.onResults(onFaceResults);
+			pose.onResults(onPoseResults);
+
+			function onFaceResults(results) {
+				if (currentPhase !== 'FACE' && currentPhase !== 'IDLE') return;
+				drawResults(results, 'FACE');
+			}
+
+			function onPoseResults(results) {
+				if (currentPhase !== 'POSE') return;
+				drawResults(results, 'POSE');
+			}
+
+			function drawResults(results, type) {
+				canvasCtx.save();
+				canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+				// Mirror canvas
+				canvasCtx.translate(canvasElement.width, 0);
+				canvasCtx.scale(-1, 1);
+				canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+				if (type === 'FACE' && results.multiFaceLandmarks) {
+					for (const landmarks of results.multiFaceLandmarks) {
+						drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: 'rgba(139, 92, 246, 0.2)', lineWidth: 1});
+						drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, {color: '#8B5CF6', lineWidth: 2});
+						drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, {color: '#8B5CF6', lineWidth: 2});
+						
+						// Distance check (approximate)
+						const width = Math.abs(landmarks[234].x - landmarks[454].x);
+						if (currentPhase === 'FACE' && width < 0.2) showAlert("Move Closer");
+						else hideAlert();
+					}
+				}
+				if (type === 'POSE' && results.poseLandmarks) {
+					drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#22c55e', lineWidth: 4});
+					drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#ffffff', lineWidth: 2, radius: 2});
+					
+					// Full body check
+					if (results.poseLandmarks[30].visibility < 0.5) showAlert("Show Full Body");
+					else hideAlert();
+				}
+				canvasCtx.restore();
+			}
+
+			// Camera Logic
+			let camera = null;
+			function startCamera() {
+				// Hide placeholder, show video logic handled by rendering to canvas
+				document.getElementById('cameraPlaceholder').style.display = 'none';
+				document.getElementById('liveBadge').style.display = 'flex';
+				document.getElementById('startCameraBtn').disabled = true;
+				document.getElementById('stopCameraBtn').disabled = false;
+				
+				camera = new Camera(videoElement, {
+					onFrame: async () => {
+						if (currentPhase === 'POSE') await pose.send({image: videoElement});
+						else await faceMesh.send({image: videoElement});
+					},
+					width: 1280,
+					height: 720
+				});
+				camera.start();
+				cameraActive = true;
+				resizeCanvas();
+			}
+
+			function stopCamera() {
+				if (camera) camera.stop();
+				document.getElementById('cameraPlaceholder').style.display = 'block';
+				document.getElementById('liveBadge').style.display = 'none';
+				document.getElementById('startCameraBtn').disabled = false;
+				document.getElementById('stopCameraBtn').disabled = true;
+				cameraActive = false;
+				
+				// Clear canvas
+				canvasCtx.clearRect(0,0, canvasElement.width, canvasElement.height);
+			}
+
+			// Resize canvas to match panel
+			function resizeCanvas() {
+				const panel = document.getElementById('cameraPanel');
+				canvasElement.width = panel.clientWidth;
+				canvasElement.height = panel.clientHeight;
+			}
+			window.addEventListener('resize', resizeCanvas);
+
+			// UI Updates
+			function updatePhaseUI(phase, subTask = null) {
+				currentPhase = phase;
+				const texts = {
+					'IDLE': ['SYSTEM READY', 'Please ensure all sensors are connected. Stand in the center of the frame.'],
+					'PRE-FACE': ['GET READY: FACE SCAN', 'Position your face within the frame. Analysis starts in 10 seconds.'],
+					'FACE': ['PHYSIOLOGICAL ANALYSIS: FACE', subTask || 'Analyzing cardiovascular and ocular biomarkers...'],
+					'PRE-POSE': ['GET READY: BODY SCAN', 'Step back to show your full body. Gait analysis starts in 10 seconds.'],
+					'POSE': ['KINETIC ANALYSIS: BODY', subTask || 'Analyzing postural and gait stability...'],
+					'PROCESSING': ['AI DATA FUSION', 'Generating final health report using Gemini Medical LLM.']
+				};
+				const [title, desc] = texts[phase] || ['PROCESSING', 'Please wait...'];
+				document.getElementById('phaseInstruction').innerHTML = `<strong>${title}</strong>${desc}`;
+				
+				// Biomarkers
+				const marks = {
+					'FACE': ['rPPG', 'Ocular', 'Thermal', 'Stress'],
+					'POSE': ['Skeletal', 'Gait', 'Posture', 'Balance'],
+					'PROCESSING': ['Fusion', 'Risk', 'Report']
+				};
+				const html = (marks[phase] || []).map(m => `<span style="background:#000; border: 1px solid #333; padding:4px 8px; font-size:9px; font-weight:700; color:var(--accent-blue);">${m}</span>`).join('');
+				document.getElementById('activeBiomarkers').innerHTML = html;
+			}
+
+			// ... (showAlert/hideAlert/checkSensors/updateSensor remain the same)
+
+			// Flow Simulation
+			document.getElementById('screeningForm').addEventListener('submit', async (e) => {
+				e.preventDefault();
+				if (!cameraActive) startCamera();
+				
+				document.getElementById('configCard').style.display = 'none';
+				document.getElementById('statusCard').style.display = 'block';
+				
+				// Updated Flow with Positioning Delays
+				// Sequence: INIT -> PRE-FACE (10s) -> FACE (20s) -> PRE-POSE (10s) -> POSE (20s) -> PROCESS
+				
+				const timeline = [
+					{ step: 'init', phase: 'IDLE', duration: 2000 },
+					{ step: 'capture', phase: 'PRE-FACE', duration: 10000 },
+					{ step: 'capture', phase: 'FACE', duration: 20000 },
+					{ step: 'pose', phase: 'PRE-POSE', duration: 10000 },
+					{ step: 'pose', phase: 'POSE', duration: 20000 },
+					{ step: 'process', phase: 'PROCESSING', duration: 5000 }
+				];
+				
+				let idx = 0;
+				
+				function runNextPhase() {
+					if (idx >= timeline.length) {
+						submitRealRequest(); 
+						return;
+					}
+
+					const current = timeline[idx];
+					
+					// Update Stepper UI
+					document.querySelectorAll('.step-item').forEach(el => el.classList.remove('active'));
+					const stepEl = document.querySelector(`[data-step="${current.step}"]`);
+					if (stepEl) {
+						stepEl.classList.add('active');
+						if (idx > 0 && timeline[idx-1].step !== current.step) {
+							const prevEl = document.querySelector(`[data-step="${timeline[idx-1].step}"]`);
+							if (prevEl) prevEl.classList.add('completed');
+						}
+					}
+					
+					// Sequential Logic for sub-tasks during Analysis
+					let subTasks = [];
+					if (current.phase === 'FACE') {
+						subTasks = [
+							"Acquiring Heart Rate (rPPG)...",
+							"Analyzing Ocular Stability...",
+							"Scanning Thermal Biomarkers...",
+							"Detecting Stress Indicators..."
+						];
+					} else if (current.phase === 'POSE') {
+						subTasks = [
+							"Mapping Skeletal Structure...",
+							"Analyzing Gait & Balance...",
+							"Checking Posture Alignment...",
+							"Finalizing Biomechanics..."
+						];
+					}
+
+					// Initial UI Update
+					updatePhaseUI(current.phase, subTasks.length > 0 ? subTasks[0] : null);
+					
+					// Update Status Text & Countdowns
+					let timeLeft = current.duration / 1000;
+					const subTaskInterval = current.duration / 4; // Cycle 4 sub-tasks every phase
+					
+					const timerInterval = setInterval(() => {
+						timeLeft--;
+						if (timeLeft >= 0) {
+							let phaseLabel = current.phase.replace('PRE-', 'GET READY: ');
+							document.getElementById('statusText').textContent = `${phaseLabel} (${timeLeft}s)`;
+							
+							// Cycle sub-tasks every 5s (for a 20s phase)
+							if (subTasks.length > 0) {
+								const subIdx = Math.floor((current.duration - (timeLeft * 1000)) / subTaskInterval);
+								if (subTasks[subIdx]) {
+									updatePhaseUI(current.phase, subTasks[subIdx]);
+								}
+							}
+						}
+					}, 1000);
+
+					setTimeout(() => {
+						clearInterval(timerInterval);
+						idx++;
+						runNextPhase();
+					}, current.duration);
+				}
+
+				runNextPhase();
+			});
+
+
+			async function submitRealRequest() {
+				try {
+					const body = {
+						patient_id: document.getElementById('patientId').value,
+						radar_port: document.getElementById('radarPort').value,
+						esp32_port: document.getElementById('esp32Port').value,
+						camera_index: 0
+					};
+					const res = await fetch(`${API_BASE}/api/v1/hardware/start-screening`, {
+						method: 'POST',
+						headers: {'Content-Type': 'application/json'},
+						body: JSON.stringify(body)
+					});
+					const data = await res.json();
+					if (data.status === 'success') {
+						document.getElementById('statusText').textContent = "Complete!";
+						document.getElementById('downloadSection').style.display = 'block';
+						if (data.patient_report_id) {
+							document.getElementById('downloadPatient').href = `${API_BASE}/api/v1/reports/${data.patient_report_id}/download`;
+						}
+					}
+				} catch(e) {
+					document.getElementById('statusText').textContent = "Error: " + e.message;
+				}
+			}
+
+			// Init
+			window.onload = () => {
+				setTimeout(checkSensors, 1000);
+			};
+		</script>
+	</body>
+</html>
