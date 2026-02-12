@@ -644,7 +644,7 @@ class CameraCapture:
         cv2.putText(
             frame, text,
             (30, 55),
-            cv2.FONT_HERSHEY_BOLD,
+            cv2.FONT_HERSHEY_SIMPLEX,
             1.5,
             color,
             3
