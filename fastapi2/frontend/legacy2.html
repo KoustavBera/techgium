@@ -14,331 +14,507 @@
 		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 		<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 		<style>
-			:root {
-				--bg-primary: #F8F9FA;
-				--bg-secondary: #FFFFFF;
-				--bg-card: #FFFFFF;
-				--border-color: #DADCE0;
-				--text-primary: #202124;
-				--text-secondary: #5F6368;
-				--accent-blue: #1A73E8;
-				--success: #1E8E3E;
-				--error: #D93025;
-				--warning: #F9AB00;
-			}
+         :root {
+            /* --- MATERIAL 3 COLOR TOKENS (Blue Theme) --- */
+            /* Backgrounds */
+            --md-sys-color-surface: #FDFBFF;
+            --md-sys-color-surface-container-low: #F0F4F8;
+            --md-sys-color-surface-container: #EAEFF5;
+            --md-sys-color-surface-container-high: #E2E7ED;
+            
+            /* Primary (Action) */
+            --md-sys-color-primary: #0B57D0;
+            --md-sys-color-on-primary: #FFFFFF;
+            --md-sys-color-primary-container: #D3E3FD;
+            --md-sys-color-on-primary-container: #041E49;
 
-			* {
-				margin: 0;
-				padding: 0;
-				box-sizing: border-box;
-			}
+            /* Secondary (Tonal Elements) */
+            --md-sys-color-secondary-container: #C2E7FF;
+            --md-sys-color-on-secondary-container: #001D35;
 
-			body {
-				font-family: 'Inter', -apple-system, system-ui, sans-serif;
-				background: var(--bg-primary);
-				color: var(--text-primary);
-				height: 100vh;
-				width: 100vw;
-				overflow: hidden;
-				display: flex;
-			}
+            /* Error / Status */
+            --md-sys-color-error: #BA1A1A;
+            --md-sys-color-error-container: #FFDAD6;
+            --md-sys-color-on-error-container: #410002;
+            --md-sys-color-success-container: #C4EED0;
+            --md-sys-color-on-success-container: #0F5223;
 
-			/* ========================================= */
-			/* LEFT PANEL: CAMERA                        */
-			/* ========================================= */
-			.camera-panel {
-				flex: 1;
-				position: relative;
-				background: #000;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				overflow: hidden;
-				margin: 16px;
-				border-radius: 24px;
-				box-shadow: 0 4px 6px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.1);
-			}
+            /* Text */
+            --md-sys-color-on-surface: #1B1B1F;
+            --md-sys-color-on-surface-variant: #444746;
+            --md-sys-color-outline: #747775;
+            --md-sys-color-outline-variant: #C4C7C5;
 
-			.camera-panel video {
-				position: absolute;
-				width: 100%;
-				height: 100%;
-				object-fit: cover;
-				transform: scaleX(-1);
-				opacity: 0.8;
-			}
+            /* Layout values */
+            --radius-large: 28px;
+            --radius-medium: 16px;
+            --radius-full: 999px; /* Stadium shape */
+         }
 
-			.camera-panel canvas {
-				position: absolute;
-				z-index: 10;
-				width: 100%;
-				height: 100%;
-				object-fit: contain;
-			}
+         * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+         }
 
-			.camera-overlay-message {
-				position: absolute;
-				z-index: 20;
-				color: #fff;
-				text-align: center;
-				pointer-events: none;
-				background: rgba(0,0,0,0.4);
-				padding: 24px;
-				border-radius: 20px;
-				backdrop-filter: blur(4px);
-			}
+         body {
+            font-family: 'Google Sans', 'Roboto', sans-serif;
+            background: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            padding: 16px;
+            gap: 16px;
+         }
 
-			.camera-overlay-message .icon {
-				font-size: 48px;
-				margin-bottom: 12px;
-				display: block;
-			}
+         /* ========================================= */
+         /* LEFT PANEL: CAMERA                        */
+         /* ========================================= */
+         .camera-panel {
+            flex: 1;
+            position: relative;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-radius: var(--radius-large);
+            /* M3 uses tonal difference, but black needs no border */
+         }
 
-			/* Camera Badge */
-			.camera-badge {
-				position: absolute;
-				top: 24px;
-				left: 24px;
-				z-index: 30;
-				background: var(--error);
-				color: white;
-				font-size: 11px;
-				font-weight: 700;
-				padding: 6px 12px;
-				border-radius: 20px;
-				display: none;
-				align-items: center;
-				gap: 6px;
-				text-transform: uppercase;
-				letter-spacing: 0.5px;
-			}
+         .camera-panel img {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+         }
 
-			.camera-badge.live { display: flex; }
+         .camera-overlay-message {
+            position: absolute;
+            z-index: 20;
+            color: var(--md-sys-color-surface-container-low);
+            text-align: center;
+            pointer-events: none;
+            background: rgba(30, 30, 30, 0.6);
+            padding: 32px;
+            border-radius: var(--radius-large);
+            backdrop-filter: blur(8px);
+         }
 
-			/* ========================================= */
-			/* RIGHT PANEL: CONTROLS & INFO              */
-			/* ========================================= */
-			.control-panel {
-				width: 460px;
-				padding: 40px 32px;
-				display: flex;
-				flex-direction: column;
-				height: 100%;
-				overflow-y: auto;
-				gap: 24px;
-			}
+         .camera-overlay-message .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            display: block;
+            opacity: 0.8;
+         }
 
-			header { margin-bottom: 12px; }
-			.logo {
-				font-size: 11px;
-				font-weight: 700;
-				letter-spacing: 2px;
-				text-transform: uppercase;
-				color: var(--accent-blue);
-				margin-bottom: 6px;
-			}
-			h1 { font-size: 28px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.5px; }
-			.subtitle { font-size: 15px; color: var(--text-secondary); margin-top: 4px; }
+         /* Camera Badge */
+         .camera-badge {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            z-index: 30;
+            background: var(--md-sys-color-error);
+            color: white;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: var(--radius-full);
+            display: none;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+         }
 
-			/* Cards */
-			.card {
-				background: var(--bg-card);
-				border: 1px solid var(--border-color);
-				padding: 24px;
-				border-radius: 24px;
-				transition: box-shadow 0.2s;
-			}
-			.card:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.02); }
+         .camera-badge.live {
+            display: flex;
+         }
 
-			.card-title {
-				font-size: 15px;
-				font-weight: 600;
-				margin-bottom: 20px;
-				color: var(--text-primary);
-				display: flex;
-				align-items: center;
-				gap: 12px;
-			}
-			.card-title::before {
-				content: "";
-				width: 4px;
-				height: 18px;
-				background: var(--accent-blue);
-				border-radius: 4px;
-			}
+         .live-dot {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+         }
 
-			/* Instruction Section */
-			.instruction-animation {
-				width: 100%;
-				height: 100px;
-				background: #F1F3F4;
-				border-radius: 16px;
-				margin-bottom: 24px;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-			}
-			.instruction-animation .circle-ripple {
-				width: 16px;
-				height: 16px;
-				background: var(--accent-blue);
-				border-radius: 50%;
-				animation: pulse 1.2s infinite alternate;
-			}
-			@keyframes pulse {
-				0% { transform: scale(1); opacity: 0.4; }
-				100% { transform: scale(1.8); opacity: 1; }
-			}
+         @keyframes blink { 50% { opacity: 0.5; } }
 
-			.phase-instruction { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
-			.phase-instruction strong { color: var(--text-primary); display: block; font-size: 17px; margin-bottom: 6px; font-weight: 600; }
+         /* ========================================= */
+         /* RIGHT PANEL: CONTROLS & INFO              */
+         /* ========================================= */
+         .control-panel {
+            width: 420px;
+            padding: 8px; /* Internal padding handled by cards */
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow-y: auto;
+            gap: 16px;
+            /* Hide scrollbar for cleaner look */
+            scrollbar-width: none; 
+         }
+         .control-panel::-webkit-scrollbar { display: none; }
 
-			/* Sensor Grid */
-			.sensor-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-			.sensor-card {
-				background: #FFFFFF;
-				border: 1px solid var(--border-color);
-				padding: 16px 12px;
-				text-align: center;
-				border-radius: 16px;
-			}
-			.sensor-card.connected { border-color: var(--success); background: #E6F4EA; }
-			.sensor-card.disconnected { opacity: 0.6; }
-			
-			.sensor-icon { font-size: 20px; display: block; margin-bottom: 6px; }
-			.sensor-name { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); }
-			.status-label { font-size: 11px; font-weight: 600; margin-top: 6px; }
-			.sensor-card.connected .status-label { color: var(--success); }
+         header {
+            margin: 8px 4px 16px 4px;
+         }
+         .logo {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--md-sys-color-primary);
+            margin-bottom: 8px;
+            background: var(--md-sys-color-primary-container);
+            color: var(--md-sys-color-on-primary-container);
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: var(--radius-full);
+         }
+         h1 {
+            font-family: 'Google Sans', sans-serif;
+            font-size: 32px;
+            font-weight: 400;
+            color: var(--md-sys-color-on-surface);
+            letter-spacing: -0.5px;
+            line-height: 1.2;
+         }
+         .subtitle {
+            font-size: 16px;
+            color: var(--md-sys-color-on-surface-variant);
+            margin-top: 8px;
+            font-weight: 400;
+         }
 
-			/* Buttons */
-			.camera-controls { display: flex; gap: 12px; margin-bottom: 20px; }
-			.btn-camera {
-				flex: 1;
-				padding: 14px;
-				font-size: 12px;
-				font-weight: 600;
-				border: 1px solid var(--border-color);
-				background: #fff;
-				color: var(--text-primary);
-				cursor: pointer;
-				border-radius: 12px;
-				transition: background 0.2s;
-			}
-			.btn-camera-start { border-color: var(--accent-blue); color: var(--accent-blue); }
-			.btn-camera-start:hover { background: #E8F0FE; }
-			.btn-camera-stop { border-color: var(--error); color: var(--error); }
-			.btn-camera-stop:hover { background: #FDE8E8; }
-			.btn-camera:disabled { opacity: 0.3; cursor: not-allowed; }
+         /* M3 Cards (Filled Card Variant) */
+         .card {
+            background: var(--md-sys-color-surface-container);
+            border: none; /* Removed border */
+            padding: 24px;
+            border-radius: var(--radius-large);
+            transition: background 0.2s;
+         }
 
-			.btn-primary {
-				width: 100%;
-				padding: 16px;
-				background: var(--accent-blue);
-				color: #fff;
-				border: none;
-				font-weight: 600;
-				font-size: 15px;
-				border-radius: 12px;
-				cursor: pointer;
-				margin-top: 20px;
-				box-shadow: 0 4px 12px rgba(26, 115, 232, 0.2);
-				transition: all 0.2s ease;
-			}
-			.btn-primary:hover { 
-				background: #1967D2; 
-				box-shadow: 0 6px 16px rgba(26, 115, 232, 0.3);
-				transform: translateY(-1px);
-			}
-			.btn-primary:active { transform: translateY(0); }
+         .card-title {
+            font-size: 20px; /* Title Large */
+            font-weight: 400;
+            margin-bottom: 24px;
+            color: var(--md-sys-color-on-surface);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+         }
+         /* Removed the blue pill bar before title for cleaner M3 look */
+         .card-title::before { display: none; }
 
-			.btn-outline {
-				background: transparent;
-				color: var(--accent-blue);
-				border: 1px solid var(--accent-blue);
-				box-shadow: none;
-			}
-			.btn-outline:hover {
-				background: #E8F0FE;
-				box-shadow: none;
-			}
+         /* Sensor Grid */
+         .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+         }
+         /* Sensor Chips */
+         .sensor-card {
+            background: var(--md-sys-color-surface); /* Contrast against card bg */
+            border: 1px solid transparent;
+            padding: 16px 8px;
+            text-align: center;
+            border-radius: var(--radius-medium);
+            transition: all 0.3s cubic-bezier(0.2, 0.0, 0, 1.0);
+         }
+         /* Connected State = Primary Container */
+         .sensor-card.connected {
+            background: var(--md-sys-color-success-container);
+            color: var(--md-sys-color-on-success-container);
+         }
+         .sensor-card.disconnected {
+            background: var(--md-sys-color-surface-container-high);
+            color: var(--md-sys-color-on-surface-variant);
+            opacity: 1; /* M3 doesn't use opacity for disabled usually */
+         }
 
-			/* Form Controls */
-			.form-group { margin-bottom: 20px; }
-			label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 8px; display: block; letter-spacing: 0.5px; }
-			input {
-				width: 100%;
-				padding: 14px;
-				background: #fff;
-				border: 1px solid var(--border-color);
-				color: var(--text-primary);
-				font-family: inherit;
-				font-size: 15px;
-				border-radius: 12px;
-			}
-			input:focus { border-color: var(--accent-blue); outline: none; box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1); }
+         .sensor-icon {
+            font-size: 24px;
+            display: block;
+            margin-bottom: 8px;
+         }
+         .sensor-name {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+         }
+         .status-label {
+            font-size: 12px;
+            font-weight: 500;
+            margin-top: 4px;
+         }
 
-			/* Progress */
-			.step-item {
-				display: flex;
-				align-items: center;
-				gap: 16px;
-				padding: 16px 0;
-				border-bottom: 1px solid var(--border-color);
-				font-size: 14px;
-				color: var(--text-secondary);
-				font-weight: 500;
-			}
-			.step-item:last-child { border-bottom: none; }
-			.step-item.active { color: var(--text-primary); font-weight: 600; }
-			.step-item.completed { color: var(--success); }
-			.step-circle {
-				width: 24px;
-				height: 24px;
-				border: 2px solid var(--border-color);
-				border-radius: 50%;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				font-size: 11px;
-				font-weight: 700;
-			}
-			.step-item.active .step-circle { border-color: var(--accent-blue); color: var(--accent-blue); }
-			.step-item.completed .step-circle { border-color: var(--success); background: var(--success); color: #fff; }
+         /* Buttons */
+         .camera-controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+         }
+         /* M3 Segmented Button / Tonal Button Style */
+         .btn-camera {
+            flex: 1;
+            padding: 0 24px;
+            height: 48px;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            background: var(--md-sys-color-secondary-container);
+            color: var(--md-sys-color-on-secondary-container);
+            cursor: pointer;
+            border-radius: var(--radius-full);
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+         }
+         .btn-camera:hover {
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+         }
+         .btn-camera-stop {
+            background: var(--md-sys-color-error-container);
+            color: var(--md-sys-color-on-error-container);
+         }
 
-			#statusMessage {
-				margin-top: 16px;
-				padding: 20px;
-				border-radius: 16px;
-				background: #E8F0FE;
-				color: var(--accent-blue);
-				font-weight: 600;
-				font-size: 14px;
-				display: flex;
-				align-items: center;
-				gap: 12px;
-			}
+         /* Filled Button (Primary) */
+         .btn-primary {
+            width: 100%;
+            height: 48px;
+            padding: 0 24px;
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+            border: none;
+            font-family: 'Google Sans', sans-serif;
+            font-weight: 500;
+            font-size: 14px;
+            letter-spacing: 0.25px;
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            margin-top: 24px;
+            box-shadow: none; /* M3 relies on color weight mostly */
+            transition: box-shadow 0.2s ease;
+         }
+         .btn-primary:hover {
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            background: #004A77; /* Slight darken manually or use state layer */
+         }
 
-			.phase-alert {
-				background: #FEE7E6;
-				border: 1px solid var(--error);
-				color: var(--error);
-				padding: 14px;
-				border-radius: 12px;
-				font-size: 13px;
-				font-weight: 600;
-				margin-top: 16px;
-				display: none;
-				align-items: center;
-				gap: 8px;
-			}
-			.phase-alert.visible { display: flex; }
+         /* Outlined Button */
+         .btn-outline {
+            background: transparent;
+            color: var(--md-sys-color-primary);
+            border: 1px solid var(--md-sys-color-outline);
+            margin-top: 16px;
+         }
+         .btn-outline:hover {
+            background: var(--md-sys-color-surface-container-high);
+            border-color: var(--md-sys-color-primary);
+         }
 
-			@media (max-width: 900px) {
-				body { flex-direction: column; overflow-y: auto; height: auto; }
-				.camera-panel { height: 50vh; min-height: 350px; margin: 10px; }
-				.control-panel { width: 100%; height: auto; padding: 24px; }
-			}
-		</style>
+         /* Form Controls (M3 Text Fields) */
+         .form-group {
+            margin-bottom: 20px;
+            position: relative;
+         }
+         label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface-variant);
+            margin-bottom: 8px;
+            display: block;
+            margin-left: 4px;
+         }
+         input {
+            width: 100%;
+            height: 56px;
+            padding: 8px 16px;
+            background: var(--md-sys-color-surface-container-high);
+            border: 1px solid transparent; /* Filled text field style */
+            border-bottom: 1px solid var(--md-sys-color-outline);
+            color: var(--md-sys-color-on-surface);
+            font-family: inherit;
+            font-size: 16px;
+            border-radius: 4px 4px 0 0; /* Traditional M3 Filled Input radius */
+            transition: all 0.2s;
+         }
+         /* To make it "Expressive", let's use the fully rounded variant sometimes seen */
+         input {
+            border-radius: 12px;
+            border: none;
+         }
+         
+         input:focus {
+            background: var(--md-sys-color-surface-container-high);
+            outline: 2px solid var(--md-sys-color-primary);
+            outline-offset: -2px;
+         }
+
+         /* Animation Area */
+         .instruction-animation {
+            width: 100%;
+            height: 120px;
+            background: var(--md-sys-color-surface-container-high);
+            border-radius: var(--radius-medium);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+         }
+         .instruction-animation .circle-ripple {
+            width: 24px;
+            height: 24px;
+            background: var(--md-sys-color-primary);
+            border-radius: 50%;
+            animation: pulse 1.5s cubic-bezier(0.2, 0, 0, 1) infinite;
+            box-shadow: 0 0 0 0 rgba(11, 87, 208, 0.7);
+         }
+         @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(11, 87, 208, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 60px rgba(11, 87, 208, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(11, 87, 208, 0); }
+         }
+
+         .phase-instruction {
+            font-size: 14px;
+            color: var(--md-sys-color-on-surface-variant);
+            line-height: 1.6;
+            text-align: center;
+         }
+         .phase-instruction strong {
+            color: var(--md-sys-color-on-surface);
+            display: block;
+            font-size: 18px; /* Headline Small */
+            margin-bottom: 8px;
+            font-weight: 500;
+         }
+
+         /* Alerts */
+         .phase-alert {
+            background: var(--md-sys-color-error-container);
+            color: var(--md-sys-color-on-error-container);
+            padding: 16px;
+            border-radius: var(--radius-medium);
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 16px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: none;
+         }
+         .phase-alert.visible { display: flex; }
+
+         /* Progress Stepper */
+         .step-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 12px;
+            border-radius: 12px; /* Active background radius */
+            font-size: 14px;
+            color: var(--md-sys-color-on-surface-variant);
+            font-weight: 500;
+            transition: all 0.3s;
+            border: none;
+         }
+         .step-item.active {
+            background: var(--md-sys-color-surface-container-high);
+            color: var(--md-sys-color-on-surface);
+         }
+         .step-circle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--md-sys-color-surface-container-high);
+            color: var(--md-sys-color-on-surface-variant);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+         }
+         .step-item.active .step-circle {
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+         }
+         .step-item.completed .step-circle {
+            background: var(--md-sys-color-success-container);
+            color: var(--md-sys-color-on-success-container);
+            content: "✓";
+         }
+
+         /* Status Message Box */
+         #statusMessage {
+            margin-top: 16px;
+            padding: 16px;
+            border-radius: var(--radius-medium);
+            background: var(--md-sys-color-primary-container) !important;
+            color: var(--md-sys-color-on-primary-container) !important;
+            font-weight: 500;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+         }
+
+         /* Responsive */
+         @media (max-width: 900px) {
+            body {
+               flex-direction: column;
+               overflow-y: auto;
+               height: auto;
+               padding: 12px;
+            }
+            .camera-panel {
+               height: 50vh;
+               min-height: 350px;
+               width: 100%;
+               margin: 0;
+            }
+            .control-panel {
+               width: 100%;
+               height: auto;
+               overflow: visible;
+               padding: 0;
+            }
+         }
+
+         /* AI Overlay */
+         .ai-processing-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(16px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            color: white;
+         }
+         .ai-spinner {
+            width: 56px; height: 56px;
+            border: 6px solid rgba(255, 255, 255, 0.2);
+            border-top: 6px solid var(--md-sys-color-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 24px;
+         }
+         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      </style>
 	</head>
 	<body>
 

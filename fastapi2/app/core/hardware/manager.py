@@ -919,14 +919,15 @@ class HardwareManager:
                 logger.warning("No radar data in queue — using last known")
             return latest
         
-        avg_hr = int(sum(i['radar']['heart_rate'] for i in items) / len(items))
-        avg_resp = round(sum(i['radar']['respiration_rate'] for i in items) / len(items), 1)
+        # Calculate medians for physiological stability (Replaced mean)
+        avg_hr = int(np.median([i['radar']['heart_rate'] for i in items]))
+        avg_resp = round(float(np.median([i['radar']['respiration_rate'] for i in items])), 1)
         
         result = items[-1].copy()
         result['radar']['heart_rate'] = avg_hr
         result['radar']['respiration_rate'] = avg_resp
         
-        logger.info(f"Aggregated {len(items)} radar samples. Avg HR: {avg_hr}, Avg Resp: {avg_resp}")
+        logger.info(f"Aggregated {len(items)} radar samples (Median). Avg HR: {avg_hr}, Avg Resp: {avg_resp}")
         return result
     
     def _aggregate_thermal(self) -> Optional[Dict]:
@@ -965,11 +966,12 @@ class HardwareManager:
             asymmetry_vals = [get_val(i, 'symmetry', 'cheek_asymmetry') for i in items]
             gradient_vals = [get_val(i, 'gradients', 'forehead_nose_gradient') for i in items]
             
-            avg_canthus = round(sum(canthus_valid)/len(canthus_valid), 2) if canthus_valid else 0.0
-            avg_neck = round(sum(neck_valid)/len(neck_valid), 2) if neck_valid else 0.0
-            avg_stability = round(sum(stability_vals)/len(stability_vals), 2) if stability_vals else 0.0
-            avg_asymmetry = round(sum(asymmetry_vals)/len(asymmetry_vals), 3) if asymmetry_vals else 0.0
-            avg_gradient = round(sum(gradient_vals)/len(gradient_vals), 2) if gradient_vals else 0.0
+            # Use median for core temperatures and metrics (more robust to noise)
+            avg_canthus = round(float(np.median(canthus_valid)), 2) if canthus_valid else 0.0
+            avg_neck = round(float(np.median(neck_valid)), 2) if neck_valid else 0.0
+            avg_stability = round(float(np.median(stability_vals)), 2) if stability_vals else 0.0
+            avg_asymmetry = round(float(np.median(asymmetry_vals)), 3) if asymmetry_vals else 0.0
+            avg_gradient = round(float(np.median(gradient_vals)), 2) if gradient_vals else 0.0
             
             result = {
                 'timestamp': items[-1].get('timestamp', 0),
@@ -981,17 +983,15 @@ class HardwareManager:
                 }
             }
             logger.info(
-                f"Aggregated thermal (firmware). Canthus: {avg_canthus}°C, "
+                f"Aggregated thermal (firmware - Median). Canthus: {avg_canthus}°C, "
                 f"Neck: {avg_neck}°C, Stability: {avg_stability}"
             )
             return result
         else:
-            # Legacy format
-            neck_temps = [get_val(i, 'fever', 'neck_temp') for i in items 
-                         if get_val(i, 'fever', 'neck_temp') > 0]
-            avg_neck = sum(neck_temps)/len(neck_temps) if neck_temps else 0.0
+            # Legacy format aggregation
+            avg_neck = float(np.median(neck_temps)) if neck_temps else 0.0
             stress_vals = [get_val(i, 'autonomic', 'stress_gradient') for i in items]
-            avg_stress = sum(stress_vals)/len(stress_vals) if stress_vals else 0.0
+            avg_stress = float(np.median(stress_vals)) if stress_vals else 0.0
             
             esp32_data = items[-1].copy()
             if 'fever' in esp32_data.get('thermal', {}):
@@ -999,7 +999,7 @@ class HardwareManager:
             if 'autonomic' in esp32_data.get('thermal', {}):
                 esp32_data['thermal']['autonomic']['stress_gradient'] = round(avg_stress, 2)
             
-            logger.info(f"Aggregated thermal (legacy). Avg Neck: {avg_neck:.1f}")
+            logger.info(f"Aggregated thermal (legacy - Median). Avg Neck: {avg_neck:.1f}")
             return esp32_data
     
     # ------------------------------------------------------------------
