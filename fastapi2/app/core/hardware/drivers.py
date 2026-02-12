@@ -266,6 +266,12 @@ class CameraCapture:
         self.pose_landmarker = None
         self.face_mesh = None
         
+        # Threaded Capture State
+        self.current_frame = None
+        self.frame_lock = threading.Lock()
+        self.thread_running = False
+        self.capture_thread = None
+        
         self._init_mediapipe()
     
     def _init_mediapipe(self):
@@ -316,22 +322,43 @@ class CameraCapture:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         self.cap.set(cv2.CAP_PROP_FPS, self.fps)
-        logger.info(f"Camera {self.camera_index} opened")
+        
+        # Start background capture thread
+        self.thread_running = True
+        self.capture_thread = threading.Thread(target=self._update_camera, daemon=True)
+        self.capture_thread.start()
+        
+        logger.info(f"Camera {self.camera_index} opened with threaded capture")
         return True
+    
+    def _update_camera(self):
+        """Background thread to read frames continuously."""
+        while self.thread_running and self.cap and self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if ret:
+                with self.frame_lock:
+                    self.current_frame = frame
+            else:
+                time.sleep(0.1)
+        logger.info("Camera capture thread stopped")
     
     def close(self):
         """Close camera."""
+        """Close camera and stop thread."""
+        self.thread_running = False
+        if self.capture_thread:
+            self.capture_thread.join(timeout=1.0)
+            
         if self.cap:
             self.cap.release()
             self.cap = None
             logger.info("Camera closed")
     
     def read_frame(self) -> Optional[np.ndarray]:
-        """Read a single frame from the camera. Thread-safe."""
-        if self.cap and self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if ret:
-                return frame
+        """Return the latest frame from the background thread."""
+        with self.frame_lock:
+            if self.current_frame is not None:
+                return self.current_frame.copy()
         return None
     
     def capture_and_process_frames(self, duration_seconds: int, process_func: Optional[callable] = None) -> Tuple[List[Any], int]:
@@ -454,10 +481,11 @@ class CameraCapture:
             logger.debug(f"FaceMesh error: {e}")
         return None
     
-    def detect_all(self, frame: np.ndarray) -> Dict[str, Any]:
+    def detect_all(self, frame: np.ndarray, active_models: Optional[List[str]] = None) -> Dict[str, Any]:
         """
-        Consolidate all MediaPipe processing into a single RGB conversion pass.
-        Returns a dictionary containing raw MediaPipe result objects.
+        Consolidate MediaPipe processing. 
+        Only runs models specified in `active_models`. 
+        If `active_models` is None, runs ALL (legacy behavior).
         """
         results = {
             "face_mesh": None,
@@ -467,14 +495,26 @@ class CameraCapture:
         if not MEDIAPIPE_AVAILABLE:
             return results
             
+        # Optimization: If list is empty, return early
+        if active_models is not None and not active_models:
+             return results
+
         try:
+            # Common RGB conversion
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-            if self.face_mesh:
+            # Check for specific models or default to all
+            run_mesh = active_models is None or "face_mesh" in active_models
+            run_pose = active_models is None or "pose" in active_models
+            run_det = active_models is None or "face_det" in active_models
+            
+            if self.face_mesh and run_mesh:
                 results["face_mesh"] = self.face_mesh.process(rgb_frame)
-            if self.pose_landmarker:
+            
+            if self.pose_landmarker and run_pose:
                 results["pose"] = self.pose_landmarker.process(rgb_frame)
-            if self.face_detector:
+            
+            if self.face_detector and run_det:
                 results["face_det"] = self.face_detector.process(rgb_frame)
                 
         except Exception as e:

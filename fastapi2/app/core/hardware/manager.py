@@ -53,8 +53,8 @@ class HardwareConfig:
     # Camera
     camera_index: int = 0
     camera_fps: int = 30
-    face_capture_seconds: int = 20
-    body_capture_seconds: int = 20
+    face_capture_seconds: int = 10
+    body_capture_seconds: int = 10
     
     # Serial ports
     radar_port: str = "COM7"
@@ -129,7 +129,14 @@ class HardwareManager:
         
         # Visual feedback state
         self._current_distance_warning: Optional[str] = None
-        self._enable_overlays = True  # Enable face mesh and pose skeleton drawing
+        self._enable_overlays = True
+        
+        # Inference State
+        self._last_inference_results = {
+            "face_mesh": None, "pose": None, "face_det": None
+        }
+        self._frame_counter = 0
+        self._inference_interval = 2  # Run inference every 2nd frame (15 FPS inference, 30 FPS video)
         
         # Scan state
         self._scan_active = False
@@ -323,32 +330,58 @@ class HardwareManager:
         while self._running and self.camera:
             frame = self.camera.read_frame()
             if frame is not None:
-                # Apply server-side overlays
+                self._frame_counter += 1
+                
+                # Determine active phase and required models
+                current_phase = self._scan_status.get("phase", "IDLE")
+                active_models = []
+                
+                # Phase-Gating Logic
+                if current_phase == "FACE_ANALYSIS":
+                    active_models = ["face_mesh"]
+                elif current_phase == "BODY_ANALYSIS":
+                    active_models = ["pose"]
+                elif current_phase == "IDLE" or current_phase == "INITIALIZING":
+                     # In IDLE, we only need face_det for distance warning
+                     # But we can skip it most of the time to save power
+                     active_models = ["face_det"]
+                else:
+                    active_models = [] # PROCESSING or ERROR -> No AI needed
+                
+                # Frame Skipping for Inference
+                should_run_inference = (self._frame_counter % self._inference_interval == 0)
+                
+                if should_run_inference and active_models:
+                    # Run selective inference
+                    self._last_inference_results = self.camera.detect_all(frame, active_models)
+                
+                # Apply server-side overlays using LAST KNOWN results (for smoothness)
                 if self._enable_overlays:
-                    # Consolidated MediaPipe Pass (Optimization)
-                    results = self.camera.detect_all(frame)
+                    results = self._last_inference_results
                     
-                    # 1. Overlay based on Phase (Logic Restoration)
-                    current_phase = self._scan_status.get("phase", "IDLE")
+                    # 1. Overlay based on Phase
                     if current_phase == "FACE_ANALYSIS":
                         frame = self.camera.draw_face_mesh_on_frame(frame, results)
                     elif current_phase == "BODY_ANALYSIS":
                         frame = self.camera.draw_pose_skeleton_on_frame(frame, results)
                     
-                    # 2. Calculate and draw distance warnings
-                    warning_type, face_width = self.camera.calculate_face_distance(frame, results)
-                    if warning_type:
-                        frame = self.camera.add_distance_warning_overlay(frame, warning_type)
-                    
-                    # Update status for frontend polling
-                    self._current_distance_warning = warning_type
-                    self._update_scan_status(
-                        user_warnings={
-                            "distance_warning": warning_type,
-                            "face_detected": face_width is not None,
-                            "pose_detected": results.get("pose") is not None and results["pose"].pose_landmarks is not None,
-                        }
-                    )
+                    # 2. Calculate and draw distance warnings (Throttle distance check too? No, fast feedback is good)
+                    # We reuse the same analysis results. If we skipped inference, we use old results.
+                    # Limit distance warning check to IDLE/FACE phases
+                    if current_phase in ["IDLE", "INITIALIZING", "FACE_ANALYSIS"]:
+                        warning_type, face_width = self.camera.calculate_face_distance(frame, results)
+                        if warning_type:
+                            frame = self.camera.add_distance_warning_overlay(frame, warning_type)
+                        
+                        # Update status for frontend polling
+                        self._current_distance_warning = warning_type
+                        self._update_scan_status(
+                            user_warnings={
+                                "distance_warning": warning_type,
+                                "face_detected": face_width is not None,
+                                "pose_detected": results.get("pose") is not None and results["pose"].pose_landmarks is not None,
+                            }
+                        )
                 
                 # Encode to JPEG
                 ret, jpeg = cv2.imencode('.jpg', frame, encode_params)
@@ -454,14 +487,26 @@ class HardwareManager:
         with self._scan_lock:
             self._scan_status.update(kwargs)
 
-    def _wait_for_alignment(self, target_phase: str):
-        """Busy-wait until user is correctly positioned for the phase."""
-        logger.info(f"⏳ Waiting for alignment in {target_phase}...")
+    def _wait_for_alignment(self, target_phase: str, timeout: int = None):
+        """
+        Busy-wait until user is correctly positioned for the phase.
+        If timeout is provided and reached, proceeds anyway with a warning.
+        """
+        logger.info(f"⏳ Waiting for alignment in {target_phase} (timeout={timeout}s)...")
         
         # Initial wait for first frame processing
         time.sleep(1.0)
         
+        start_time = time.time()
+        
         while self._scan_active:
+            # Timeout Check
+            if timeout and (time.time() - start_time > timeout):
+                logger.warning(f"Alignment timeout for {target_phase}. Proceeding anyway.")
+                self._update_scan_status(message="Proceeding with partial alignment...")
+                time.sleep(1.0) # Show message briefly
+                break
+
             warning = self._current_distance_warning
             
             # Achieving alignment: No distance warning AND correct detection present
@@ -487,12 +532,23 @@ class HardwareManager:
             elif warning == "too_far":
                 msg = "MOVE CLOSER - You are too far."
             elif target_phase == "BODY_ANALYSIS" and not user_warnings.get("pose_detected"):
-                msg = "STEP BACK - Full body must be visible."
+                msg = "For better results, step back to show full body."
             elif target_phase == "FACE_ANALYSIS" and not user_warnings.get("face_detected"):
                 msg = "LOOK HERE - Face not detected."
 
             self._update_scan_status(message=msg)
             time.sleep(0.2)
+
+    def _countdown(self, seconds: int, message_prefix: str, phase: str = None):
+        """Helper to update status with a visible countdown timer."""
+        for i in range(seconds, 0, -1):
+            if not self._scan_active: 
+                break
+            self._update_scan_status(
+                message=f"{message_prefix} {i}s...",
+                phase=phase if phase else self._scan_status.get("phase")
+            )
+            time.sleep(1.0)
     
     def start_scan(self, patient_id: str, screenings_dict: Dict, app_internals: Dict = None) -> bool:
         """
@@ -596,13 +652,16 @@ class HardwareManager:
                 # Wait for user to be correctly positioned
                 self._wait_for_alignment("FACE_ANALYSIS")
                 
+                # Preparation Timer (10s)
+                self._countdown(10, "Get Ready...", "FACE_ANALYSIS")
+                
                 # Start recording
                 with self._recording_lock:
                     self._recording_buffer = []
                     self._recording_active = True
                 
-                # Wait for duration
-                time.sleep(self.config.face_capture_seconds)
+                # Capture Timer (10s)
+                self._countdown(self.config.face_capture_seconds, "Scanning Face...", "FACE_ANALYSIS")
                 
                 # Stop recording
                 self._recording_active = False
@@ -644,16 +703,20 @@ class HardwareManager:
                 logger.info(f"🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
                 logger.info(f"🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
                 
-                # Wait for user to be correctly positioned
-                self._wait_for_alignment("BODY_ANALYSIS")
+                # Wait for user to be correctly positioned (max 5 seconds, then proceed)
+                # This makes it "less strict" - it warns but doesn't block forever
+                self._wait_for_alignment("BODY_ANALYSIS", timeout=5)
+                
+                # Preparation Timer (10s)
+                self._countdown(10, "Get Ready...", "BODY_ANALYSIS")
                 
                 # Start recording
                 with self._recording_lock:
                     self._recording_buffer = []
                     self._recording_active = True
                 
-                # Wait for duration
-                time.sleep(self.config.body_capture_seconds)
+                # Capture Timer (10s)
+                self._countdown(self.config.body_capture_seconds, "Scanning Body...", "BODY_ANALYSIS")
                 
                 # Stop recording
                 self._recording_active = False
@@ -692,6 +755,7 @@ class HardwareManager:
             # Build screening request (run all 8 extractors)
             # ============================================================
             self._update_scan_status(
+                phase="PROCESSING",
                 message="Running biomarker extraction...",
                 progress=80,
             )

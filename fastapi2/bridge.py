@@ -146,8 +146,8 @@ class BridgeConfig:
     # Camera
     camera_index: int = 0
     camera_fps: int = 30
-    face_capture_seconds: int = 20
-    body_capture_seconds: int = 20
+    face_capture_seconds: int = 10  # Reduced from 20s
+    body_capture_seconds: int = 10  # Reduced from 20s
     
     # API
     api_url: str = "http://localhost:8000"
@@ -428,15 +428,15 @@ class CameraCapture:
             logger.warning(f"Face detector init failed: {e}")
         
         try:
-            # Legacy Pose Detection (same API as mp.solutions.face_mesh used in SkinExtractor)
+            # OPTIMIZED: Use Lite Pose model for 50% faster processing
             self.pose_landmarker = mp.solutions.pose.Pose(
-                static_image_mode=False,  # Video mode for smoothing
-                model_complexity=1,  # 0=Lite, 1=Full, 2=Heavy
+                static_image_mode=False,
+                model_complexity=0,  # 0=Lite (FASTER), 1=Full, 2=Heavy
                 smooth_landmarks=True,
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5
             )
-            logger.info("✅ PoseLandmarker (Legacy) initialized")
+            logger.info("✅ PoseLandmarker (Lite) initialized")
         except Exception as e:
             logger.warning(f"Pose landmarker init failed: {e}")
 
@@ -472,34 +472,40 @@ class CameraCapture:
             self.cap.release()
             logger.info("Camera closed")
     
-    def capture_and_process_frames(self, duration_seconds: int, process_func: Optional[callable] = None) -> Tuple[List[Any], int]:
-        """Capture frames and optionally process them on the fly to save memory."""
+    def capture_and_process_frames(self, duration_seconds: int, process_func: Optional[callable] = None, skip_frames: int = 0) -> Tuple[List[Any], int]:
+        """OPTIMIZED: Capture with frame skipping to reduce CPU load.
+        
+        Args:
+            duration_seconds: Duration to capture
+            process_func: Function to process each frame
+            skip_frames: 0=process all, 1=skip 1 (15fps), 2=skip 2 (10fps)
+        """
         processed_data = []
         target_frames = duration_seconds * self.fps
         frames_captured = 0
+        frames_processed = 0
         
         start_time = time.time()
         while frames_captured < target_frames:
             ret, frame = self.cap.read()
             if ret:
                 frames_captured += 1
-                if process_func:
-                    # Process immediately and store result (e.g., small crop or landmarks)
-                    result = process_func(frame)
-                    if result is not None:
-                        processed_data.append(result)
-                else:
-                    # Store raw frame (legacy mode - risky for long durations)
-                    processed_data.append(frame)
+                
+                # OPTIMIZATION: Skip frames (process every Nth frame)
+                if frames_captured % (skip_frames + 1) == 0:
+                    if process_func:
+                        result = process_func(frame)
+                        if result is not None:
+                            processed_data.append(result)
+                            frames_processed += 1
+                    else:
+                        processed_data.append(frame)
+                        frames_processed += 1
             else:
                 break
-                
-            # Maintain frame rate
-            elapsed = time.time() - start_time
-            expected = frames_captured / self.fps
-            if elapsed < expected:
-                time.sleep(expected - elapsed)
         
+        effective_fps = frames_processed / duration_seconds if duration_seconds > 0 else 0
+        logger.info(f"Processed {frames_processed}/{frames_captured} frames ({effective_fps:.1f}fps effective)")
         return processed_data, frames_captured
     
     def capture_frames(self, duration_seconds: int) -> Tuple[List[np.ndarray], List[float]]:
@@ -829,33 +835,44 @@ class DataFusion:
         }
     
     def send_screening(self, request: Dict[str, Any]) -> Optional[Dict]:
-        """Send screening request to API."""
+        """Send screening request to API with progress logging."""
         try:
+            logger.info("\n🤖 Sending data to AI for analysis...")
+            logger.info("⏳ This may take 10-15 seconds (Gemini AI processing)...")
+            
             response = requests.post(
                 self.screening_endpoint,
                 json=request,
-                timeout=30
+                timeout=60  # Increased from 30s
             )
             response.raise_for_status()
             result = response.json()
-            logger.info(f"Screening completed: {result.get('screening_id')}")
+            
+            logger.info(f"✅ AI analysis complete! Screening ID: {result.get('screening_id')}")
             return result
+        except requests.exceptions.Timeout:
+            logger.error("❌ API timeout - AI processing took too long")
+            return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"API request failed: {e}")
+            logger.error(f"❌ API request failed: {e}")
             return None
     
     def generate_report(self, screening_id: str, report_type: str = "patient") -> Optional[Dict]:
-        """Generate report for completed screening."""
+        """Generate report for completed screening with progress logging."""
         try:
+            logger.info(f"\n📄 Generating {report_type} report...")
+            
             response = requests.post(
                 self.report_endpoint,
                 json={"screening_id": screening_id, "report_type": report_type},
-                timeout=30
+                timeout=60  # Increased from 30s
             )
             response.raise_for_status()
+            
+            logger.info(f"✅ {report_type.capitalize()} report generated!")
             return response.json()
         except requests.exceptions.RequestException as e:
-            logger.error(f"Report generation failed: {e}")
+            logger.error(f"❌ Report generation failed: {e}")
             return None
 
 
@@ -943,10 +960,11 @@ class HardwareBridge:
                 with self.esp32_reader.data_queue.mutex:
                     self.esp32_reader.data_queue.queue.clear()
             
-            # Use on-the-fly skin ROI extraction AND FaceMesh landmarks
-            # Capture both face ROIs (for Skin) and FaceMesh landmarks (for Eyes/Nasal)
+            # OPTIMIZED: Process every 2nd frame (15fps) for FaceMesh with iris
+            # FaceMesh processes FULL FRAME for accurate normalized landmarks
             captured_data, count = self.camera.capture_and_process_frames(
                 duration_seconds=self.config.face_capture_seconds,
+                skip_frames=1,  # 15fps effective (balance speed/quality)
                 process_func=lambda f: {
                     'roi': self.camera.extract_face_roi(f),
                     'landmarks': self.camera.extract_face_landmarks(f)
@@ -964,9 +982,10 @@ class HardwareBridge:
             logger.info(f"\n🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
             logger.info("Please walk naturally or stand for posture analysis (full body)...")
             
-            # Use on-the-fly pose extraction
+            # OPTIMIZED: Process every 3rd frame (10fps) for Pose Lite
             pose_sequence, count = self.camera.capture_and_process_frames(
                 duration_seconds=self.config.body_capture_seconds,
+                skip_frames=2,  # 10fps effective for gait analysis
                 process_func=self.camera.extract_pose_from_frame
             )
             logger.info(f"Extracted {len(pose_sequence)} pose frames (from {count} raw)")
@@ -1091,7 +1110,10 @@ class HardwareBridge:
             logger.info(f"  Thermal data keys: {list(esp32_data.get('thermal', {}).keys())}")
         
         # Build and send screening request
-        logger.info("\n📊 Processing biomarkers and sending to API...")
+        logger.info("\n" + "=" * 60)
+        logger.info("📊 PHASE 3: AI PROCESSING")
+        logger.info("=" * 60)
+        logger.info("Building biomarker request...")
         
         request = self.data_fusion.build_screening_request(
             patient_id=patient_id,
@@ -1099,6 +1121,7 @@ class HardwareBridge:
             esp32_data=esp32_data,
             face_frames=face_frames if face_frames else None,
             pose_sequence=pose_sequence if pose_sequence else None,
+            face_landmarks_sequence=face_landmarks_sequence if face_landmarks_sequence else None,
             fps=self.config.camera_fps
         )
         

@@ -414,17 +414,19 @@
 			}
 
 			.phase-alert {
-				background: #fee7e6;
-				border: 1px solid var(--error);
-				color: var(--error);
-				padding: 14px;
+				background: var(--error);
+				border: none;
+				color: white;
+				padding: 16px;
 				border-radius: 12px;
-				font-size: 13px;
-				font-weight: 600;
+				font-size: 14px;
+				font-weight: 700;
 				margin-top: 16px;
 				display: none;
 				align-items: center;
-				gap: 8px;
+				justify-content: center;
+				gap: 10px;
+				box-shadow: 0 4px 12px rgba(217, 48, 37, 0.2);
 			}
 			.phase-alert.visible {
 				display: flex;
@@ -447,6 +449,38 @@
 					padding: 24px;
 				}
 			}
+
+			/* AI Processing Overlay */
+			.ai-processing-overlay {
+				position: absolute;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.6);
+				backdrop-filter: blur(12px);
+				-webkit-backdrop-filter: blur(12px);
+				display: none;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				z-index: 50;
+				color: white;
+				text-align: center;
+			}
+			.ai-spinner {
+				width: 50px;
+				height: 50px;
+				border: 4px solid rgba(255, 255, 255, 0.3);
+				border-top: 4px solid var(--accent-blue);
+				border-radius: 50%;
+				animation: spin 1s linear infinite;
+				margin-bottom: 20px;
+			}
+			@keyframes spin {
+				0% { transform: rotate(0deg); }
+				100% { transform: rotate(360deg); }
+			}
 		</style>
 	</head>
 	<body>
@@ -460,6 +494,12 @@
 				<span class="icon">📷</span>
 				<h2>Camera Feed Loading</h2>
 				<p>Connecting to backend camera...</p>
+			</div>
+			
+			<div class="ai-processing-overlay" id="aiOverlay">
+				<div class="ai-spinner"></div>
+				<h2 style="font-size: 24px; margin-bottom: 8px;">AI Analysis In Progress</h2>
+				<p style="opacity: 0.9; font-size: 14px;">Generating comprehensive health report...</p>
 			</div>
 
 			<img
@@ -522,7 +562,31 @@
 				</button>
 			</div>
 
-			<!-- 2. SCREENING GUIDE -->
+			<!-- 2. CONFIGURATION FORM -->
+			<div class="card" id="configCard">
+				<h2 class="card-title">Configuration</h2>
+				<form id="screeningForm">
+					<div class="form-group">
+						<label>Patient ID</label>
+						<input type="text" id="patientId" value="PATIENT_001" />
+					</div>
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+						<div class="form-group">
+							<label>Radar Port</label>
+							<input type="text" id="radarPort" value="COM7" />
+						</div>
+						<div class="form-group">
+							<label>Thermal Port</label>
+							<input type="text" id="esp32Port" value="COM6" />
+						</div>
+					</div>
+					<button type="submit" class="btn-primary" id="startBtn">
+						Start Screening Flow
+					</button>
+				</form>
+			</div>
+
+			<!-- 3. SCREENING GUIDE -->
 			<div class="card instruction-card">
 				<h2 class="card-title">Screening Guide</h2>
 
@@ -545,30 +609,6 @@
 					id="activeBiomarkers"
 					style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px"
 				></div>
-			</div>
-
-			<!-- 3. CONFIGURATION FORM -->
-			<div class="card" id="configCard">
-				<h2 class="card-title">Configuration</h2>
-				<form id="screeningForm">
-					<div class="form-group">
-						<label>Patient ID</label>
-						<input type="text" id="patientId" value="PATIENT_001" />
-					</div>
-					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
-						<div class="form-group">
-							<label>Radar Port</label>
-							<input type="text" id="radarPort" value="COM7" />
-						</div>
-						<div class="form-group">
-							<label>Thermal Port</label>
-							<input type="text" id="esp32Port" value="COM6" />
-						</div>
-					</div>
-					<button type="submit" class="btn-primary" id="startBtn">
-						Start Screening Flow
-					</button>
-				</form>
 			</div>
 
 			<!-- 4. STATUS & RESULTS -->
@@ -763,8 +803,18 @@
 					el.className = "step-item";
 					if (i < activeIdx || phase === "COMPLETE")
 						el.classList.add("completed");
+					if (i < activeIdx || phase === "COMPLETE")
+						el.classList.add("completed");
 					else if (i === activeIdx) el.classList.add("active");
 				});
+				
+				// Toggle AI Overlay
+				const aiOverlay = document.getElementById("aiOverlay");
+				if (phase === "PROCESSING") {
+					aiOverlay.style.display = "flex";
+				} else {
+					aiOverlay.style.display = "none";
+				}
 			}
 
 			// ===== START SCREENING =====

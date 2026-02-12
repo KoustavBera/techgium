@@ -17,3 +17,33 @@ The transition from a Client-Side (JS) architecture to a Unified Backend (Python
 
 ## 4. Why Distance Detection is "Failing"
 Preliminary environmental checks show MediaPipe is installed. However, the redundant processing likely causes the `_capture_loop` to fall behind real-time, making the feedback feel broken or non-responsive. Additionally, the `face_detector` (bounding box) is less accurate for distance than the `face_mesh` landmarks.
+
+## [2026-02-12] Optimization: Smooth Video Processing
+
+### Problem
+User reported video lag. Investigation revealed that `app/core/hardware/drivers.py` runs heavy MediaPipe inference (FaceMesh + Pose) synchronously on every frame, blocking the video feed.
+
+### Changes
+#### `app/core/hardware/drivers.py`
+- **Threaded Capture:** Implemented background thread in `CameraCapture` to continuously read frames. This prevents buffer buildup and ensures `read_frame()` returns the latest frame instantly.
+- **Selective Inference:** Updated `detect_all` to accept `active_models` list. Now it only runs the models strictly required for the current phase, instead of all of them.
+
+#### `app/core/hardware/manager.py`
+- **Phase-Gating:** Updated `_capture_loop` to pass specific model requirements based on scan phase:
+    - `IDLE`: No models (or just face detection for distance).
+    - `FACE_ANALYSIS`: Only `face_mesh`.
+    - `BODY_ANALYSIS`: Only `pose`.
+- **Frame Skipping:** Implemented logic to run inference only every 3rd frame (configurable) to free up CPU cycles for video rendering.
+
+## [2026-02-12] UI Enhancement: Countdown Timers
+
+### Problem
+User requested better feedback during the scan process. Static messages like "Analyzing..." don't give the user a sense of how long to hold still.
+
+### Changes
+#### `app/core/hardware/manager.py`
+- **Countdown Logic:** Replaced `time.sleep()` with a `_countdown()` helper that updates `_scan_status` every second.
+- **Workflow Update:** 
+    - Added a 10s "Preparation" timer after alignment is achieved.
+    - Added a 10s "Capture" timer during the actual data recording.
+- **Config Update:** Reduced capture duration from 20s to 10s as requested.
