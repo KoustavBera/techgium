@@ -234,7 +234,6 @@ class CardiovascularExtractor(BaseExtractor):
         """
         if len(face_frames) < int(fps * 10):  # Need at least 10 seconds
             logger.warning("rPPG: Insufficient frames, need at least 10 seconds")
-            self._generate_simulated_biomarkers(biomarker_set)
             return
         
         try:
@@ -314,11 +313,15 @@ class CardiovascularExtractor(BaseExtractor):
                 description="HRV (RMSSD) from rPPG"
             )
             
+            # QUALITY GUARD: Only add biomarkers if quality is sufficient
+            if quality < 0.4:
+                logger.warning(f"rPPG: Signal quality too low ({quality:.2f}), skipping")
+                return
+
             logger.info(f"rPPG extraction: HR={hr:.1f}bpm, HRV={hrv:.1f}ms, quality={quality:.2f}")
             
         except Exception as e:
             logger.error(f"rPPG extraction failed: {e}")
-            self._generate_simulated_biomarkers(biomarker_set)
     
 
     def extract(self, data: Dict[str, Any]) -> BiomarkerSet:
@@ -398,7 +401,7 @@ class CardiovascularExtractor(BaseExtractor):
             temp_set = self._create_biomarker_set()
             self._extract_from_motion(data["pose_sequence"], temp_set)
             hr_bm = next((bm for bm in temp_set.biomarkers if bm.name == "heart_rate"), None)
-            if hr_bm:
+            if hr_bm and hr_bm.confidence > 0.4:
                 candidate_sources.append(("motion", hr_bm.confidence, temp_set))
         
         # Select best quality source
@@ -419,9 +422,7 @@ class CardiovascularExtractor(BaseExtractor):
                         bm.name = f"heart_rate_{source_name}"
                     biomarker_set.add(bm)
         
-        # Fallback: Simulated values
-        if not any("heart_rate" in bm.name for bm in biomarker_set.biomarkers):
-            self._generate_simulated_biomarkers(biomarker_set)
+        # No fallback: Simulated values removed
         
         # NEW: Extract thermal asymmetry from thermal camera (ESP32)
         if "thermal_data" in data:
@@ -607,7 +608,6 @@ class CardiovascularExtractor(BaseExtractor):
         pose_array = np.array(pose_sequence)
         
         if pose_array.shape[0] < 30 or pose_array.shape[1] < 12:
-            self._generate_simulated_biomarkers(biomarker_set)
             return
         
         # Chest landmarks: shoulders (11, 12)
@@ -741,17 +741,5 @@ class CardiovascularExtractor(BaseExtractor):
         base_hrv = 60 - 0.5 * (hr - 60)
         noise = np.random.normal(0, 5)
         return float(np.clip(base_hrv + noise, 15, 90))
-    
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
-        """Generate simulated cardiovascular biomarkers."""
-        self._add_biomarker(biomarker_set, "heart_rate",
-                           np.random.uniform(65, 85), "bpm",
-                           0.5, (60, 100), "Simulated heart rate")
-        self._add_biomarker(biomarker_set, "hrv_rmssd",
-                           np.random.uniform(30, 60), "ms",
-                           0.5, (20, 80), "Simulated HRV")
-        self._add_biomarker(biomarker_set, "chest_micro_motion",
-                           np.random.uniform(0.002, 0.006), "normalized_amplitude",
-                           0.5, (0.001, 0.01), "Simulated chest motion")
                            
                            

@@ -51,7 +51,7 @@ class GastrointestinalExtractor(BaseExtractor):
             has_data = True
         
         if not has_data:
-            self._generate_simulated_biomarkers(biomarker_set)
+            logger.warning("GastrointestinalExtractor: No data sources available.")
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
         self._extraction_count += 1
@@ -189,15 +189,3 @@ class GastrointestinalExtractor(BaseExtractor):
             resp_rate = 15
         
         return float(np.clip(resp_rate, 8, 30))
-    
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
-        """Generate simulated GI biomarkers."""
-        self._add_biomarker(biomarker_set, "abdominal_rhythm_score",
-                           np.random.uniform(0.5, 0.75), "score_0_1",
-                           0.5, (0.4, 0.9), "Simulated rhythm score")
-        self._add_biomarker(biomarker_set, "visceral_motion_variance",
-                           np.random.uniform(30, 70), "variance",
-                           0.5, (10, 100), "Simulated visceral variance")
-        self._add_biomarker(biomarker_set, "abdominal_respiratory_rate",
-                           np.random.uniform(14, 18), "breaths_per_min",
-                           0.5, (12, 20), "Simulated respiratory rate")

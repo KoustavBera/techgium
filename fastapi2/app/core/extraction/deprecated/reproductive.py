@@ -58,9 +58,11 @@ class ReproductiveExtractor(BaseExtractor):
             has_data = True
         
         if not has_data:
-            self._generate_simulated_biomarkers(biomarker_set)
+            logger.warning("ReproductiveExtractor: No data sources available.")
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
+
+    # SIMULATION METHOD REMOVED
         self._extraction_count += 1
         
         return biomarker_set
@@ -204,17 +206,3 @@ class ReproductiveExtractor(BaseExtractor):
         
         return float(thermo_proxy)
     
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
-        """Generate simulated reproductive proxy biomarkers."""
-        self._add_biomarker(biomarker_set, "autonomic_imbalance_index",
-                           np.random.uniform(-0.15, 0.15), "index",
-                           0.5, (-0.3, 0.3), "Simulated autonomic balance")
-        self._add_biomarker(biomarker_set, "stress_response_proxy",
-                           np.random.uniform(30, 50), "score_0_100",
-                           0.5, (20, 60), "Simulated stress level")
-        self._add_biomarker(biomarker_set, "regional_flow_variability",
-                           np.random.uniform(0.03, 0.07), "coefficient_of_variation",
-                           0.5, (0.01, 0.1), "Simulated flow variability")
-        self._add_biomarker(biomarker_set, "thermoregulation_proxy",
-                           np.random.uniform(0.45, 0.55), "normalized",
-                           0.5, (0.4, 0.6), "Simulated thermoregulation")

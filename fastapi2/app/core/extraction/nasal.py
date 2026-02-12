@@ -83,9 +83,11 @@ class NasalExtractor(BaseExtractor):
             has_data = True
         
         if not has_data:
-            self._generate_simulated_biomarkers(biomarker_set)
+            logger.warning("NasalExtractor: No data sources available.")
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
+
+    # SIMULATION METHOD REMOVED
         self._extraction_count += 1
         
         return biomarker_set
@@ -344,26 +346,4 @@ class NasalExtractor(BaseExtractor):
         x, y = points[:, 0], points[:, 1]
         return 0.5 * abs(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
     
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
-        """Generate simulated nasal biomarkers for testing."""
-        self._add_biomarker(
-            biomarker_set, "nostril_occlusion_score",
-            np.random.uniform(0.75, 0.95), "score_0_1",
-            0.5, (0.7, 1.0), "Simulated nostril symmetry"
-        )
-        self._add_biomarker(
-            biomarker_set, "respiratory_effort_index",
-            np.random.uniform(0.8, 1.2), "ratio",
-            0.5, (0.5, 1.5), "Simulated nostril flare"
-        )
-        self._add_biomarker(
-            biomarker_set, "nasal_cycle_balance",
-            np.random.uniform(0.7, 0.9), "score_0_1",
-            0.5, (0.6, 1.0), "Simulated nasal cycle"
-        )
-        self._add_biomarker(
-            biomarker_set, "respiratory_rate",
-            np.random.uniform(14, 18), "breaths_per_min",
-            0.5, (12, 20), "Simulated respiratory rate"
-        )
                            

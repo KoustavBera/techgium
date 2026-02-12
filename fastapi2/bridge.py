@@ -52,7 +52,7 @@ Key Design Points:
 - MLX90640 thermal camera connects to ESP32 via I2C
 
 Usage:
-    python bridge.py --radar-port COM3 --port COM4 --camera 0
+    python bridge.py --radar-port COM7 --port COM6 --camera 0
     python bridge.py --simulate  # Test without any hardware
 """
 
@@ -88,7 +88,23 @@ from app.core.extraction.skeletal import SkeletalExtractor
 from app.core.extraction.skin import SkinExtractor
 from app.core.extraction.pulmonary import PulmonaryExtractor
 from app.core.extraction.renal import RenalExtractor
+from app.core.extraction.eyes import EyeExtractor
+from app.core.extraction.nasal import NasalExtractor
 from app.core.extraction.base import BiomarkerSet
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles numpy types."""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 
 # Optional serial import (may not be available on all systems)
 try:
@@ -102,7 +118,7 @@ except ImportError:
 try:
     import mediapipe as mp
     from mediapipe.tasks import python as mp_python
-    from mediapipe.tasks.python import vision as mp_vision
+    from mediapipe.tasks.python import vision
     MEDIAPIPE_AVAILABLE = True
 except ImportError:
     MEDIAPIPE_AVAILABLE = False
@@ -120,7 +136,7 @@ class BridgeConfig:
     """Configuration for the hardware bridge (Split-USB Architecture)."""
     
     # Serial - ESP32 NodeMCU (Thermal Data)
-    serial_port: str = "COM4"  # Windows: COM4, Linux: /dev/ttyUSB1
+    serial_port: str = "COM6"  # Windows: COM6, Linux: /dev/ttyUSB1
     serial_baud: int = 115200
     
     # Serial - Seeed Radar Kit (Breathing/Heartbeat Data)
@@ -130,8 +146,8 @@ class BridgeConfig:
     # Camera
     camera_index: int = 0
     camera_fps: int = 30
-    face_capture_seconds: int = 10
-    body_capture_seconds: int = 10
+    face_capture_seconds: int = 20
+    body_capture_seconds: int = 20
     
     # API
     api_url: str = "http://localhost:8000"
@@ -397,35 +413,45 @@ class CameraCapture:
         self._init_mediapipe()
     
     def _init_mediapipe(self):
-        """Initialize MediaPipe models."""
+        """Initialize MediaPipe using legacy solutions API (compatible with all versions)."""
         if not MEDIAPIPE_AVAILABLE:
             return
             
         try:
-            # Face detection for rPPG
-            base_options = mp_python.BaseOptions(
-                model_asset_path='face_detection_short_range.task'
+            # Legacy Face Detection (same as used successfully elsewhere)
+            self.face_detector = mp.solutions.face_detection.FaceDetection(
+                model_selection=0,  # 0 = short range (2m), 1 = full range (5m)
+                min_detection_confidence=0.5
             )
-            options = mp_vision.FaceDetectorOptions(
-                base_options=base_options,
-                running_mode=mp_vision.RunningMode.IMAGE
-            )
-            self.face_detector = mp_vision.FaceDetector.create_from_options(options)
+            logger.info("✅ FaceDetector (Legacy) initialized")
         except Exception as e:
             logger.warning(f"Face detector init failed: {e}")
         
         try:
-            # Pose landmarker
-            base_options = mp_python.BaseOptions(
-                model_asset_path='pose_landmarker.task'
+            # Legacy Pose Detection (same API as mp.solutions.face_mesh used in SkinExtractor)
+            self.pose_landmarker = mp.solutions.pose.Pose(
+                static_image_mode=False,  # Video mode for smoothing
+                model_complexity=1,  # 0=Lite, 1=Full, 2=Heavy
+                smooth_landmarks=True,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
             )
-            options = mp_vision.PoseLandmarkerOptions(
-                base_options=base_options,
-                running_mode=mp_vision.RunningMode.IMAGE
-            )
-            self.pose_landmarker = mp_vision.PoseLandmarker.create_from_options(options)
+            logger.info("✅ PoseLandmarker (Legacy) initialized")
         except Exception as e:
             logger.warning(f"Pose landmarker init failed: {e}")
+
+        try:
+            # FaceMesh (for Eyes & Nasal) - 468/478 landmarks
+            self.face_mesh = mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=False,
+                max_num_faces=1,
+                refine_landmarks=True,  # Enables iris tracking (478 landmarks)
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5
+            )
+            logger.info("✅ FaceMesh initialized (478 landmarks)")
+        except Exception as e:
+            logger.warning(f"FaceMesh init failed: {e}")
     
     def open(self) -> bool:
         """Open camera."""
@@ -484,26 +510,36 @@ class CameraCapture:
         return frames, timestamps
     
     def extract_face_roi(self, frame: np.ndarray) -> np.ndarray:
-        """Extract face ROI from a single frame."""
+        """Extract face ROI from a single frame using legacy API."""
         if not self.face_detector:
              # Fallback
             fh, fw = frame.shape[:2]
             return frame[fh//4:3*fh//4, fw//4:3*fw//4]
             
         try:
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-            result = self.face_detector.detect(mp_image)
+            # CRITICAL: OpenCV captures in BGR, MediaPipe Legacy API expects RGB
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = self.face_detector.process(rgb_frame)
             
             if result.detections:
-                bbox = result.detections[0].bounding_box
-                x, y, w, h = bbox.origin_x, bbox.origin_y, bbox.width, bbox.height
+                detection = result.detections[0]
+                bbox = detection.location_data.relative_bounding_box
+                h, w = frame.shape[:2]
                 
-                pad = int(max(w, h) * 0.2)
+                # Convert normalized coordinates to pixels
+                x = int(bbox.xmin * w)
+                y = int(bbox.ymin * h)
+                box_w = int(bbox.width * w)
+                box_h = int(bbox.height * h)
+                
+                # Add padding
+                pad = int(max(box_w, box_h) * 0.2)
                 x1, y1 = max(0, x - pad), max(0, y - pad)
-                x2, y2 = min(frame.shape[1], x + w + pad), min(frame.shape[0], y + h + pad)
+                x2, y2 = min(w, x + box_w + pad), min(h, y + box_h + pad)
+                # Return the crop from ORIGINAL BGR frame (for cv2 compatibility downstream)
                 return frame[y1:y2, x1:x2]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Face detection error: {e}")
             
         fh, fw = frame.shape[:2]
         return frame[fh//4:3*fh//4, fw//4:3*fw//4]
@@ -513,16 +549,17 @@ class CameraCapture:
         return [self.extract_face_roi(f) for f in frames]
     
     def extract_pose_from_frame(self, frame: np.ndarray) -> Optional[np.ndarray]:
-        """Extract pose landmarks from a single frame with validation."""
+        """Extract pose landmarks from a single frame using legacy API."""
         if not self.pose_landmarker:
-            return None
+            return None  # Silent fail - will log first occurrence only
             
         try:
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-            result = self.pose_landmarker.detect(mp_image)
+            # CRITICAL: OpenCV captures in BGR, MediaPipe Legacy API expects RGB
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = self.pose_landmarker.process(rgb_frame)
             
             if result.pose_landmarks:
-                landmarks = result.pose_landmarks[0]
+                landmarks = result.pose_landmarks.landmark
                 landmark_array = np.array([
                     [lm.x, lm.y, lm.z, lm.visibility]
                     for lm in landmarks
@@ -533,8 +570,9 @@ class CameraCapture:
                     return landmark_array
                 else:
                     logger.warning(f"Invalid pose shape: {landmark_array.shape}")
+            # else: No pose detected in this frame (normal for some frames)
         except Exception as e:
-            logger.debug(f"Pose detection error: {e}")
+            logger.error(f"Pose detection error: {e}")
         return None
 
     def extract_pose_sequence(self, frames: List[np.ndarray]) -> List[np.ndarray]:
@@ -546,6 +584,28 @@ class CameraCapture:
             if pose is not None:
                 sequence.append(pose)
         return sequence
+
+    def extract_face_landmarks(self, frame: np.ndarray) -> Optional[np.ndarray]:
+        """Extract 468-point FaceMesh landmarks for Eyes & Nasal analysis."""
+        if not hasattr(self, 'face_mesh') or self.face_mesh is None:
+            return None
+            
+        try:
+            # Color conversion critical for MediaPipe
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = self.face_mesh.process(rgb_frame)
+            
+            if result.multi_face_landmarks:
+                landmarks = result.multi_face_landmarks[0].landmark
+                # Convert to numpy array (x, y, z, visibility=1.0)
+                # FaceMesh landmarks don't provide visibility score, defaulting to 1.0
+                return np.array([
+                    [lm.x, lm.y, lm.z, 1.0]
+                    for lm in landmarks
+                ])
+        except Exception as e:
+            logger.debug(f"FaceMesh error: {e}")
+        return None
 
 
 # ==============================================================================
@@ -568,6 +628,15 @@ class DataFusion:
         self.skin_extractor = SkinExtractor()
         self.pulmonary_extractor = PulmonaryExtractor()
         self.renal_extractor = RenalExtractor()
+        
+        # New Extractors (Augmented with FaceMesh)
+        self.eye_extractor = EyeExtractor(
+            sample_rate=30.0,
+            frame_width=1280,
+            frame_height=720
+        )
+        self.nasal_extractor = NasalExtractor()
+        
         logger.info("Core Extractors initialized in DataFusion")
         
     def _transform_biomarker_set(self, bm_set: BiomarkerSet) -> Dict[str, Any]:
@@ -584,6 +653,7 @@ class DataFusion:
         esp32_data: Optional[Dict] = None,
         face_frames: Optional[List[np.ndarray]] = None,
         pose_sequence: Optional[List[np.ndarray]] = None,
+        face_landmarks_sequence: Optional[List[np.ndarray]] = None,  # NEW: For Eyes/Nasal
         fps: float = 30.0
     ) -> Dict[str, Any]:
         """Build complete screening request using unified core extractors."""
@@ -599,27 +669,85 @@ class DataFusion:
         if radar_data:
             raw_data_context["radar_data"] = radar_data
         
+        if face_landmarks_sequence:
+            raw_data_context["face_landmarks_sequence"] = face_landmarks_sequence  # For Eyes/Nasal
+        
         # Flatten ESP32 thermal data for distribution to multiple extractors
+        # Supports BOTH real firmware format (core_regions/stability_metrics/symmetry/gradients)
+        # and legacy simulation format (fever/inflammation/cardiovascular/diabetes/autonomic)
         if esp32_data and 'thermal' in esp32_data:
             thermal = esp32_data['thermal']
-            raw_data_context['thermal_data'] = {
-                # For SkinExtractor
-                'fever_neck_temp': thermal.get('fever', {}).get('neck_temp'),
-                'fever_canthus_temp': thermal.get('fever', {}).get('canthus_temp'),
-                'inflammation_pct': thermal.get('inflammation', {}).get('hot_pixel_pct'),
-                'face_mean_temp': thermal.get('inflammation', {}).get('face_mean_temp'),
-                # For CardiovascularExtractor
-                'thermal_asymmetry': thermal.get('cardiovascular', {}).get('thermal_asymmetry'),
-                'left_cheek_temp': thermal.get('cardiovascular', {}).get('left_cheek_temp'),
-                'right_cheek_temp': thermal.get('cardiovascular', {}).get('right_cheek_temp'),
-                # For RenalExtractor (diabetes/microcirculation)
-                'diabetes_canthus_temp': thermal.get('diabetes', {}).get('canthus_temp'),
-                'diabetes_risk_flag': thermal.get('diabetes', {}).get('risk_flag', 0) == 1,
-                # For CNSExtractor (autonomic stress)
-                'stress_gradient': thermal.get('autonomic', {}).get('stress_gradient'),
-                'nose_temp': thermal.get('autonomic', {}).get('nose_temp'),
-                'forehead_temp': thermal.get('autonomic', {}).get('forehead_temp'),
-            }
+            
+            # Detect firmware format: real hardware uses 'core_regions'
+            is_firmware_format = 'core_regions' in thermal
+            
+            if is_firmware_format:
+                # REAL FIRMWARE FORMAT from esp32_thermal_bridge.ino
+                core = thermal.get('core_regions', {})
+                stability = thermal.get('stability_metrics', {})
+                symmetry = thermal.get('symmetry', {})
+                gradients = thermal.get('gradients', {})
+                
+                canthus_mean = core.get('canthus_mean')
+                neck_mean = core.get('neck_mean')
+                face_max = core.get('face_max')  # NEW
+                canthus_range = stability.get('canthus_range')
+                
+                # Calculate face_mean_temp from available core temperatures
+                face_mean_temp = None
+                if canthus_mean is not None and neck_mean is not None:
+                    face_mean_temp = (canthus_mean + neck_mean) / 2.0
+                elif canthus_mean is not None:
+                    face_mean_temp = canthus_mean
+                elif neck_mean is not None:
+                    face_mean_temp = neck_mean
+                
+                # Estimate inflammation from thermal stability (high variance may indicate hot spots)
+                # Normal canthus_range is < 0.8°C, higher values suggest inflammation
+                inflammation_pct = None
+                if canthus_range is not None:
+                    # Convert range to percentage scale (0-10%)
+                    # 0.8°C range = 0%, 2.0°C range = 10%
+                    inflammation_pct = min(10.0, max(0.0, (canthus_range - 0.8) * 8.33))
+                
+                raw_data_context['thermal_data'] = {
+                    # For SkinExtractor
+                    'fever_neck_temp': neck_mean,
+                    'fever_canthus_temp': canthus_mean,
+                    'fever_face_max': face_max,  # NEW
+                    'thermal_stability': canthus_range,
+                    'inflammation_pct': inflammation_pct,  # Calculated from thermal variance
+                    'face_mean_temp': face_mean_temp,      # Calculated from available temps
+                    # For CardiovascularExtractor
+                    'thermal_asymmetry': symmetry.get('cheek_asymmetry'),
+                    'left_cheek_temp': None,    # Only asymmetry delta available
+                    'right_cheek_temp': None,
+                    # For RenalExtractor (diabetes/microcirculation)
+                    'diabetes_canthus_temp': canthus_mean,
+                    'diabetes_risk_flag': (canthus_mean is not None and canthus_mean < 35.5),
+                    # For CNSExtractor (autonomic stress)
+                    'stress_gradient': abs(gradients.get('forehead_nose_gradient', 0)) if gradients.get('forehead_nose_gradient') is not None else None,
+                    'nose_temp': None,          # Only gradient available
+                    'forehead_temp': None,
+                }
+            else:
+                # LEGACY SIMULATION FORMAT (fever/inflammation/cardiovascular/etc.)
+                raw_data_context['thermal_data'] = {
+                    'fever_neck_temp': thermal.get('fever', {}).get('neck_temp'),
+                    'fever_canthus_temp': thermal.get('fever', {}).get('canthus_temp'),
+                    'thermal_stability': None,
+                    'inflammation_pct': thermal.get('inflammation', {}).get('hot_pixel_pct'),
+                    'face_mean_temp': thermal.get('inflammation', {}).get('face_mean_temp'),
+                    'thermal_asymmetry': thermal.get('cardiovascular', {}).get('thermal_asymmetry'),
+                    'left_cheek_temp': thermal.get('cardiovascular', {}).get('left_cheek_temp'),
+                    'right_cheek_temp': thermal.get('cardiovascular', {}).get('right_cheek_temp'),
+                    'diabetes_canthus_temp': thermal.get('diabetes', {}).get('canthus_temp'),
+                    'diabetes_risk_flag': thermal.get('diabetes', {}).get('risk_flag', 0) == 1,
+                    'stress_gradient': thermal.get('autonomic', {}).get('stress_gradient'),
+                    'nose_temp': thermal.get('autonomic', {}).get('nose_temp'),
+                    'forehead_temp': thermal.get('autonomic', {}).get('forehead_temp'),
+                }
+            
             raw_data_context['esp32_data'] = esp32_data  # Keep original too
         elif esp32_data:
             raw_data_context['esp32_data'] = esp32_data
@@ -677,6 +805,22 @@ class DataFusion:
                 systems.append(self._transform_biomarker_set(renal_set))
         except Exception as e:
             logger.error(f"Renal extraction failed: {e}")
+
+        # 7. Eyes (FaceMesh)
+        try:
+            eye_set = self.eye_extractor.extract(raw_data_context)
+            if eye_set.biomarkers:
+                systems.append(self._transform_biomarker_set(eye_set))
+        except Exception as e:
+            logger.error(f"Eye extraction failed: {e}")
+
+        # 8. Nasal (FaceMesh + Radar + Thermal)
+        try:
+            nasal_set = self.nasal_extractor.extract(raw_data_context)
+            if nasal_set.biomarkers:
+                systems.append(self._transform_biomarker_set(nasal_set))
+        except Exception as e:
+            logger.error(f"Nasal extraction failed: {e}")
         
         return {
             "patient_id": patient_id,
@@ -786,10 +930,10 @@ class HardwareBridge:
             logger.info("Starting ESP32 thermal data collection (COM_B)...")
             self.esp32_reader.start_reading()
         
-        # Phase 1: Face capture for rPPG
+        # Phase 1: Face capture (10s)
         if self.camera:
             logger.info(f"\n📷 Phase 1: Face capture ({self.config.face_capture_seconds}s)")
-            logger.info("Please look directly at the camera...")
+            logger.info("Please look directly at the camera (close-up)...")
             
             # Clear sensor queues to sync with video start
             if self.radar_reader:
@@ -799,17 +943,26 @@ class HardwareBridge:
                 with self.esp32_reader.data_queue.mutex:
                     self.esp32_reader.data_queue.queue.clear()
             
-            # Use on-the-fly extraction to save memory
-            face_frames, count = self.camera.capture_and_process_frames(
+            # Use on-the-fly skin ROI extraction AND FaceMesh landmarks
+            # Capture both face ROIs (for Skin) and FaceMesh landmarks (for Eyes/Nasal)
+            captured_data, count = self.camera.capture_and_process_frames(
                 duration_seconds=self.config.face_capture_seconds,
-                process_func=self.camera.extract_face_roi
+                process_func=lambda f: {
+                    'roi': self.camera.extract_face_roi(f),
+                    'landmarks': self.camera.extract_face_landmarks(f)
+                }
             )
-            logger.info(f"Captured {len(face_frames)} face frames (from {count} raw)")
+            
+            # Unpack results
+            face_frames = [d['roi'] for d in captured_data if d['roi'] is not None]
+            face_landmarks_sequence = [d['landmarks'] for d in captured_data if d['landmarks'] is not None]
+            
+            logger.info(f"Captured {len(face_frames)} face frames and {len(face_landmarks_sequence)} landmark sets (from {count} raw)")
         
-        # Phase 2: Body capture for gait/posture
+        # Phase 2: Body capture for gait/posture (10s)
         if self.camera:
             logger.info(f"\n🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
-            logger.info("Please walk naturally or stand for posture analysis...")
+            logger.info("Please walk naturally or stand for posture analysis (full body)...")
             
             # Use on-the-fly pose extraction
             pose_sequence, count = self.camera.capture_and_process_frames(
@@ -850,35 +1003,92 @@ class HardwareBridge:
             while not self.esp32_reader.data_queue.empty():
                 thermal_items.append(self.esp32_reader.data_queue.get())
             
+            logger.info(f"📊 Collected {len(thermal_items)} thermal samples from ESP32 queue")
+            
             if thermal_items:
-                # Average key thermal metrics
-                # Note: Thermal structures are deep, so we focus on key physiological indicators
+                # Average key thermal metrics across all collected frames.
+                # Supports REAL firmware format (core_regions/stability_metrics/symmetry/gradients)
                 
-                # Helper to extract deep value safely
-                def get_val(item, category, field):
-                    return item.get('thermal', {}).get(category, {}).get(field, 0.0)
+                def get_val(item, category, field, default=0.0):
+                    """Extract deep value safely from thermal JSON."""
+                    return item.get('thermal', {}).get(category, {}).get(field, default)
 
-                # 1. Average Neck Temp (Fever)
-                neck_temps = [get_val(i, 'fever', 'neck_temp') for i in thermal_items if get_val(i, 'fever', 'neck_temp') > 0]
-                avg_neck = sum(neck_temps)/len(neck_temps) if neck_temps else 0.0
+                # Detect format from first item
+                is_firmware = 'core_regions' in thermal_items[0].get('thermal', {})
                 
-                # 2. Average Stress (Autonomic)
-                stress_vals = [get_val(i, 'autonomic', 'stress_gradient') for i in thermal_items]
-                avg_stress = sum(stress_vals)/len(stress_vals) if stress_vals else 0.0
-
-                # Use latest as base
-                esp32_data = thermal_items[-1]
-                
-                # Inject averages
-                if 'fever' in esp32_data.get('thermal', {}):
-                    esp32_data['thermal']['fever']['neck_temp'] = round(avg_neck, 2)
-                if 'autonomic' in esp32_data.get('thermal', {}):
-                    esp32_data['thermal']['autonomic']['stress_gradient'] = round(avg_stress, 2)
+                if is_firmware:
+                    # REAL FIRMWARE: average all 5 ROI measurements
+                    canthus_vals = [get_val(i, 'core_regions', 'canthus_mean') for i in thermal_items]
+                    neck_vals = [get_val(i, 'core_regions', 'neck_mean') for i in thermal_items]
+                    stability_vals = [get_val(i, 'stability_metrics', 'canthus_range') for i in thermal_items]
+                    asymmetry_vals = [get_val(i, 'symmetry', 'cheek_asymmetry') for i in thermal_items]
+                    gradient_vals = [get_val(i, 'gradients', 'forehead_nose_gradient') for i in thermal_items]
                     
-                logger.info(f"Aggregated {len(thermal_items)} thermal samples. Avg Neck: {avg_neck:.1f}, Avg Stress: {avg_stress:.1f}")
+                    # Filter out zeros for temp values (sensor may not have face lock)
+                    canthus_valid = [v for v in canthus_vals if v > 25.0]
+                    neck_valid = [v for v in neck_vals if v > 25.0]
+                    
+                    avg_canthus = round(sum(canthus_valid)/len(canthus_valid), 2) if canthus_valid else 0.0
+                    avg_neck = round(sum(neck_valid)/len(neck_valid), 2) if neck_valid else 0.0
+                    avg_stability = round(sum(stability_vals)/len(stability_vals), 2) if stability_vals else 0.0
+                    avg_asymmetry = round(sum(asymmetry_vals)/len(asymmetry_vals), 3) if asymmetry_vals else 0.0
+                    avg_gradient = round(sum(gradient_vals)/len(gradient_vals), 2) if gradient_vals else 0.0
+                    
+                    # Build aggregated data in firmware format
+                    esp32_data = {
+                        'timestamp': thermal_items[-1].get('timestamp', 0),
+                        'thermal': {
+                            'core_regions': {
+                                'canthus_mean': avg_canthus,
+                                'neck_mean': avg_neck
+                            },
+                            'stability_metrics': {
+                                'canthus_range': avg_stability
+                            },
+                            'symmetry': {
+                                'cheek_asymmetry': avg_asymmetry
+                            },
+                            'gradients': {
+                                'forehead_nose_gradient': avg_gradient
+                            }
+                        }
+                    }
+                    
+                    logger.info(
+                        f"Aggregated {len(thermal_items)} thermal samples (firmware). "
+                        f"Canthus: {avg_canthus}°C, Neck: {avg_neck}°C, "
+                        f"Stability: {avg_stability}, Asymmetry: {avg_asymmetry}, "
+                        f"Gradient: {avg_gradient}"
+                    )
+                else:
+                    # LEGACY FORMAT: average fever.neck_temp and autonomic.stress_gradient
+                    neck_temps = [get_val(i, 'fever', 'neck_temp') for i in thermal_items if get_val(i, 'fever', 'neck_temp') > 0]
+                    avg_neck = sum(neck_temps)/len(neck_temps) if neck_temps else 0.0
+                    stress_vals = [get_val(i, 'autonomic', 'stress_gradient') for i in thermal_items]
+                    avg_stress = sum(stress_vals)/len(stress_vals) if stress_vals else 0.0
+                    
+                    esp32_data = thermal_items[-1]
+                    if 'fever' in esp32_data.get('thermal', {}):
+                        esp32_data['thermal']['fever']['neck_temp'] = round(avg_neck, 2)
+                    if 'autonomic' in esp32_data.get('thermal', {}):
+                        esp32_data['thermal']['autonomic']['stress_gradient'] = round(avg_stress, 2)
+                    
+                    logger.info(f"Aggregated {len(thermal_items)} thermal samples (legacy). Avg Neck: {avg_neck:.1f}, Avg Stress: {avg_stress:.1f}")
             else:
                 esp32_data = self.esp32_reader.get_latest_data()
                 logger.warning("No thermal data collected during video - using last known")
+        else:
+            logger.warning("⚠️ ESP32 reader not initialized - NO THERMAL DATA AVAILABLE")
+        
+        # Log final data status
+        logger.info("\n📊 Final Data Summary:")
+        logger.info(f"  Radar data: {'✓ Available' if radar_data else '✗ Not available'}")
+        logger.info(f"  ESP32 data: {'✓ Available' if esp32_data else '✗ Not available'}")
+        logger.info(f"  Face frames: {len(face_frames) if face_frames else 0}")
+        logger.info(f"  Pose sequence: {len(pose_sequence) if pose_sequence else 0}")
+        
+        if esp32_data:
+            logger.info(f"  Thermal data keys: {list(esp32_data.get('thermal', {}).keys())}")
         
         # Build and send screening request
         logger.info("\n📊 Processing biomarkers and sending to API...")
@@ -938,9 +1148,9 @@ def generate_simulated_radar_data() -> Dict[str, Any]:
     return {
         "timestamp": int(time.time()),
         "radar": {
-            "respiration_rate": round(np.random.uniform(12, 18), 1),
+            "respiration_rate": round(float(np.random.uniform(12, 18)), 1),
             "heart_rate": int(np.random.uniform(65, 85)),
-            "breathing_depth": round(np.random.uniform(0.5, 0.9), 2),
+            "breathing_depth": round(float(np.random.uniform(0.5, 0.9)), 2),
             "presence_detected": True
         }
     }
@@ -949,45 +1159,31 @@ def generate_simulated_radar_data() -> Dict[str, Any]:
 def generate_simulated_esp32_data() -> Dict[str, Any]:
     """Generate realistic simulated ESP32 thermal data.
     
-    Matches the structure defined in HARDWARE.md for MLX90640 thermal camera
-    output via ESP32 NodeMCU, including clinical biomarkers for multiple systems.
+    Matches the REAL firmware JSON schema from esp32_thermal_bridge.ino.
+    Uses core_regions/stability_metrics/symmetry/gradients structure.
     """
-    base_temp = np.random.uniform(36.2, 36.8)
+    # Realistic ROI temperatures for a healthy face
+    canthus_mean = round(float(np.random.uniform(31.5, 33.0)), 2)  # Inner eye corner
+    neck_mean = round(float(np.random.uniform(29.0, 31.0)), 2)      # Neck region
+    canthus_range = round(float(np.random.uniform(0.3, 0.7)), 2)    # Temporal stability
+    cheek_asymmetry = round(float(np.random.uniform(0.1, 0.3)), 3)  # Left-right delta
+    forehead_nose_gradient = round(float(np.random.uniform(-2.5, -1.0)), 2)  # Typically negative
     
     return {
         "timestamp": int(time.time()),
         "thermal": {
-            "fever": {
-                "canthus_temp": round(base_temp + np.random.uniform(-0.2, 0.3), 2),
-                "neck_temp": round(base_temp + np.random.uniform(0.2, 0.6), 2),
-                "neck_stability": round(np.random.uniform(0.3, 0.6), 2),
-                "fever_risk": 0
+            "core_regions": {
+                "canthus_mean": canthus_mean,
+                "neck_mean": neck_mean
             },
-            "diabetes": {
-                "canthus_temp": round(base_temp + np.random.uniform(-0.2, 0.3), 2),
-                "canthus_stability": round(np.random.uniform(0.2, 0.5), 2),
-                "risk_flag": 0
+            "stability_metrics": {
+                "canthus_range": canthus_range
             },
-            "cardiovascular": {
-                "thermal_asymmetry": round(np.random.uniform(0.1, 0.4), 3),
-                "left_cheek_temp": round(base_temp - np.random.uniform(0.3, 0.6), 2),
-                "right_cheek_temp": round(base_temp - np.random.uniform(0.2, 0.5), 2),
-                "risk_flag": 0
+            "symmetry": {
+                "cheek_asymmetry": cheek_asymmetry
             },
-            "inflammation": {
-                "hot_pixel_pct": round(np.random.uniform(1.0, 5.0), 2),
-                "face_mean_temp": round(base_temp - np.random.uniform(0.5, 1.0), 2),
-                "detected": 0
-            },
-            "autonomic": {
-                "nose_temp": round(base_temp - np.random.uniform(1.5, 2.5), 2),
-                "forehead_temp": round(base_temp - np.random.uniform(0.3, 0.8), 2),
-                "stress_gradient": round(np.random.uniform(0.8, 1.8), 2),
-                "stress_flag": 0
-            },
-            "metadata": {
-                "face_detected": 1,
-                "valid_rois": 7
+            "gradients": {
+                "forehead_nose_gradient": forehead_nose_gradient
             }
         }
     }
@@ -1004,19 +1200,19 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python bridge.py --radar-port COM7 --port COM4 --camera 0
+  python bridge.py --radar-port COM6 --port COM5 --camera 0
   python bridge.py --simulate
   python bridge.py --simulate --patient-id PATIENT_123
 
 Split-USB Architecture:
   - Radar (Seeed MR60BHA2): --radar-port (default: COM7)
-  - ESP32 Thermal: --port (default: COM4)
+  - ESP32 Thermal: --port (default: COM6)
   - Webcam: --camera (default: 0)
         """
     )
     parser.add_argument("--radar-port", default="COM7", 
                         help="Serial port for Seeed Radar Kit (COM_A)")
-    parser.add_argument("--port", default="COM4", 
+    parser.add_argument("--port", default="COM6", 
                         help="Serial port for ESP32 NodeMCU thermal (COM_B)")
     parser.add_argument("--camera", type=int, default=0, 
                         help="Camera index for OpenCV")
@@ -1056,9 +1252,9 @@ Split-USB Architecture:
             simulated_thermal = generate_simulated_esp32_data()
             
             print(f"\nSimulated Radar Data:")
-            print(json.dumps(simulated_radar, indent=2))
+            print(json.dumps(simulated_radar, indent=2, cls=NumpyEncoder))
             print(f"\nSimulated Thermal Data:")
-            print(json.dumps(simulated_thermal, indent=2))
+            print(json.dumps(simulated_thermal, indent=2, cls=NumpyEncoder))
             
             # Send directly using DataFusion
             fusion = DataFusion(config.api_url)

@@ -89,12 +89,16 @@ def simulate_healthy_screening():
         "biomarkers": skeletal_biomarkers
     })
 
-    # 6. Eyes (Webcam)
+    # 6. Eyes (Webcam) - Testing new calibrated ranges
     print("  - Generating Eye data (Webcam Face)...")
     eye_biomarkers = [
-        create_biomarker("blink_rate", 15.0, "bpm", [10.0, 30.0]),
-        create_biomarker("gaze_stability", 0.98, "score", [0.9, 1.0])
+        create_biomarker("blink_rate", 24.0, "bpm", [12.0, 35.0]),
+        create_biomarker("fixation_duration", 75.0, "ms", [60.0, 400.0]),
+        create_biomarker("gaze_stability_score", 75.0, "score", [70.0, 100.0]),
+        create_biomarker("saccade_frequency", 4.5, "saccades/sec", [2.0, 5.0]),
+        create_biomarker("eye_symmetry", 0.99, "ratio", [0.9, 1.0])
     ]
+
     systems_data.append({
         "system": "eyes",
         "biomarkers": eye_biomarkers

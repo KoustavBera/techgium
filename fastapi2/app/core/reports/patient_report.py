@@ -21,6 +21,14 @@ from app.core.agents.medical_agents import ConsensusResult
 from app.core.llm.gemini_client import GeminiClient, GeminiConfig
 from app.utils import get_logger
 
+# Optional explanation generator (for offline fallback)
+try:
+    from app.core.inference.explanation import ExplanationGenerator
+    EXPLANATION_GENERATOR_AVAILABLE = True
+except ImportError:
+    EXPLANATION_GENERATOR_AVAILABLE = False
+    ExplanationGenerator = None
+
 logger = get_logger(__name__)
 
 # Import reportlab
@@ -104,17 +112,19 @@ BIOMARKER_NAMES = {
     "reaction_time": "Reaction Time",
     "glucose": "Blood Sugar Estimate",
     "cholesterol": "Lipid Profile Estimate",
-    # Thermal biomarkers (ESP32 thermal camera)
+    # Skin biomarkers (Thermal: ESP32 thermal camera, Visual: texture/color analysis)
     "skin_temperature": "Body Temperature",
-    "skin_temperature_max": "Peak Skin Temperature",
+    "skin_temperature_max": "Max Facial Temp (Fever Check)",
     "inflammation_index": "Inflammation Level",
     "face_mean_temperature": "Facial Temperature",
-    "thermal_asymmetry": "Facial Thermal Balance",
-    "facial_perfusion_temp": "Facial Blood Flow",
-    "microcirculation_temp": "Microcirculation",
-    "thermal_stress_gradient": "Stress Response",
-    "forehead_temperature": "Forehead Temperature",
-    "cold_extremity_flag": "Cold Extremity Indicator",
+    "thermal_stability": "Temperature Stability",
+    "texture_roughness": "Skin Texture",
+    "skin_redness": "Skin Redness",
+    "skin_yellowness": "Skin Yellowness",
+    "color_uniformity": "Skin Tone Uniformity",
+    "lesion_count": "Skin Lesions",
+    "blink_rate": "Eye Blink Rate",
+    "blink_count": "Total Blinks",
 }
 
 
@@ -485,7 +495,10 @@ class EnhancedPatientReportGenerator:
         
         # Generate PDF
         if REPORTLAB_AVAILABLE:
-            pdf_path = self._generate_pdf(report, system_results, trust_envelope)
+            # PRE-COMPUTE: Generate ALL biomarker explanations in ONE API call
+            global_explanations = self._generate_all_biomarkers_explanations_global(report.system_summaries)
+            
+            pdf_path = self._generate_pdf(report, system_results, trust_envelope, global_explanations)
             report.pdf_path = pdf_path
         else:
             msg = f"PDF generation skipped - reportlab not available. Details: {REPORTLAB_ERROR}"
@@ -533,7 +546,8 @@ class EnhancedPatientReportGenerator:
             RiskLevel.LOW: "Good",
             RiskLevel.MODERATE: "Attention Recommended",
             RiskLevel.HIGH: "Consult Doctor",
-            RiskLevel.CRITICAL: "Urgent Care Needed"
+            RiskLevel.CRITICAL: "Urgent Care Needed",
+            RiskLevel.UNKNOWN: "Device Required"
         }
         return statuses.get(level, "Unknown")
     
@@ -567,7 +581,7 @@ class EnhancedPatientReportGenerator:
             "normalized_amplitude": "norm.",
             "normalized_units_per_frame": "units/frame",
             "breaths_per_min": "brpm",
-            "blinks_per_min": "bpm",
+            "blinks_per_min": "blinks/min",
             "saccades_per_sec": "sacc/s",
             "score_0_100": "score",
             "score_0_1": "score",
@@ -582,6 +596,11 @@ class EnhancedPatientReportGenerator:
         name = self._simplify_biomarker_name(biomarker_name)
         
         explanations = {
+            "blink_rate": {
+                "normal": "<b>Meaning:</b> Your blinking frequency is normal (12-20 blinks/min).<br/><b>Details:</b> Regular blinking keeps the eyes lubricated and protects them from strain.<br/><b>Guidance:</b> If you use screens often, follow the 20-20-20 rule (every 20 mins, look 20 feet away for 20 secs).",
+                "low": "<b>Meaning:</b> You are blinking less frequently than average.<br/><b>Potential Causes:</b> Intense focus (screen use), dry eyes, or a short scan duration.<br/><b>Guidance:</b> Try to blink consciously when using digital devices to prevent eye fatigue.",
+                "high": "<b>Meaning:</b> Your blink rate is higher than average (>20 blinks/min).<br/><b>Potential Causes:</b> Eye irritation, stress, fatigue, or dry air.<br/><b>Guidance:</b> Use lubricating eye drops if eyes feel dry, and ensure you are getting enough sleep."
+            },
             "heart_rate": {
                 "normal": "<b>Meaning:</b> Your heart rate is within the healthy range (60-100 bpm).<br/><b>Details:</b> This indicates efficient heart function and good cardiovascular fitness.<br/><b>Guidance:</b> Maintain this with regular cardio exercise like walking or swimming.",
                 "low": "<b>Meaning:</b> Your heart rate is lower than average (<60 bpm).<br/><b>Potential Causes:</b> This is common in athletes (a sign of efficiency) but can also be due to medications or electrical issues.<br/><b>Guidance:</b> If you feel dizzy or faint, consult a doctor. Otherwise, keep monitoring.",
@@ -599,32 +618,56 @@ class EnhancedPatientReportGenerator:
             },
             "gait_variability": {
                 "normal": "<b>Meaning:</b> Your walking pattern is steady and rhythmic.<br/><b>Details:</b> This indicates good balance and neurological control.<br/><b>Guidance:</b> Maintain activity levels to preserve this mobility.",
-                "high": "<b>Meaning:</b> Your steps vary significantly in timing or length.<br/><b>Potential Causes:</b> Fatigue, joint pain, muscle weakness, or potential neurological concerns.<br/><b>Guidance:</b> Focus on strength training for legs/core. Wear supportive shoes. Consider a gait analysis if falls are a concern."
+                "high": "<b>Meaning:</b> Your steps vary significantly in timing or length.<br/><b>Potential Causes:</b> Fatigue, joint pain, muscle weakness, or potential neurological concerns.<br/><b>Guidance:</b> Focus on strength training for legs/core. Wear supportive shoes. Consider a gait analysis if falls are a concern.",
+                "not_assessed": "<b>Meaning:</b> Gait was not assessed because you were stationary during the scan.<br/><b>Details:</b> You appeared to be sitting or standing still. Walking analysis requires movement across the camera frame.<br/><b>Guidance:</b> For future screenings, ensure you walk naturally in front of the camera for at least 10 seconds to enable gait assessment."
             },
             "balance_score": {
                 "normal": "<b>Meaning:</b> You have good stability.<br/><b>Details:</b> Your body effectively maintains posture against gravity.<br/><b>Guidance:</b> Yoga or Tai Chi are great for maintaining this.",
                 "low": "<b>Meaning:</b> Your stability is reduced.<br/><b>Potential Causes:</b> Inner ear issues, muscle weakness, vision problems, or medication side effects.<br/><b>Guidance:</b> Clear walking paths at home. Incorporate balance exercises (e.g., standing on one leg with support)."
             },
-            # Thermal biomarker explanations
+            # Skin system biomarker explanations (thermal & visual)
             "skin_temperature": {
                 "normal": "<b>Meaning:</b> Your body temperature is in the normal range (36-37.5°C).<br/><b>Details:</b> This indicates healthy thermoregulation and no signs of fever.<br/><b>Guidance:</b> No action needed. Stay hydrated.",
+                "low": "<b>Meaning:</b> Your skin temperature is lower than average.<br/><b>Potential Causes:</b> Cold environment, poor circulation, or measurement error.<br/><b>Guidance:</b> Ensure room temperature is comfortable. If you feel cold or have pale skin, consult a doctor.",
                 "high": "<b>Meaning:</b> Your temperature is elevated, which may indicate fever.<br/><b>Potential Causes:</b> Infection, inflammation, recent physical activity, or warm environment.<br/><b>Guidance:</b> Rest, hydrate, and monitor. If fever persists over 38°C with symptoms, see a doctor."
+            },
+            "skin_temperature_max": {
+                 "normal": "<b>Meaning:</b> Your inner eye temperature (core proxy) is normal.<br/><b>Details:</b> This is a reliable indicator of core body temperature.<br/><b>Guidance:</b> Maintain hydration.",
+                 "low": "<b>Meaning:</b> Inner eye temperature reading is low.<br/><b>Potential Causes:</b> Sensor positioning, cold exposure.<br/><b>Guidance:</b> Ensure the sensor had a clear view of your face.",
+                 "high": "<b>Meaning:</b> Possible fever detected at the inner eye.<br/><b>Potential Causes:</b> Infection or inflammation.<br/><b>Guidance:</b> Monitor temperature with a thermometer."
             },
             "inflammation_index": {
                 "normal": "<b>Meaning:</b> No significant inflammation detected in the facial region.<br/><b>Details:</b> Normal thermal distribution across your face suggests healthy blood flow.<br/><b>Guidance:</b> Maintain a healthy lifestyle with anti-inflammatory foods.",
                 "high": "<b>Meaning:</b> Elevated inflammation markers detected via thermal imaging.<br/><b>Potential Causes:</b> Localized inflammation, allergies, skin conditions, or early signs of infection.<br/><b>Guidance:</b> If you notice swelling or pain, consult a doctor. Consider reducing processed foods."
             },
-            "thermal_asymmetry": {
-                "normal": "<b>Meaning:</b> Your facial thermal pattern is symmetric.<br/><b>Details:</b> Balanced blood perfusion on both sides suggests healthy circulation.<br/><b>Guidance:</b> Continue cardiovascular exercise to maintain good circulation.",
-                "high": "<b>Meaning:</b> There's a temperature difference between left and right sides of your face.<br/><b>Potential Causes:</b> Vascular issues, nerve problems, or localized inflammation.<br/><b>Guidance:</b> If asymmetry is noticeable visually or you have numbness, consult a doctor."
+            "face_mean_temperature": {
+                "normal": "<b>Meaning:</b> Your average facial temperature is within normal range.<br/><b>Details:</b> This indicates healthy blood circulation and no localized hot spots.<br/><b>Guidance:</b> No action needed.",
+                "low": "<b>Meaning:</b> Your facial temperature is lower than average.<br/><b>Potential Causes:</b> Cold exposure, reduced circulation.<br/><b>Guidance:</b> Ensure warm environment during future screenings.",
+                "high": "<b>Meaning:</b> Your facial temperature is elevated.<br/><b>Potential Causes:</b> Warm environment, recent activity, or inflammation.<br/><b>Guidance:</b> Rest in a cool environment and recheck if concerned."
             },
-            "thermal_stress_gradient": {
-                "normal": "<b>Meaning:</b> Your autonomic stress response is balanced.<br/><b>Details:</b> The temperature pattern between forehead and nose is healthy.<br/><b>Guidance:</b> Continue stress-management practices like meditation or exercise.",
-                "high": "<b>Meaning:</b> Signs of elevated stress detected via thermal gradient.<br/><b>Potential Causes:</b> Psychological stress, anxiety, or autonomic nervous system activation.<br/><b>Guidance:</b> Try relaxation techniques. If chronic, consider speaking with a counselor."
+            "thermal_stability": {
+                "normal": "<b>Meaning:</b> Your skin temperature is stable over time.<br/><b>Details:</b> Consistent temperature readings indicate reliable measurement and stable physiology.<br/><b>Guidance:</b> No action needed.",
+                "high": "<b>Meaning:</b> Temperature fluctuated during the scan.<br/><b>Potential Causes:</b> Movement, changing environment, or vascular instability.<br/><b>Guidance:</b> Try to remain still during future screenings."
             },
-            "microcirculation_temp": {
-                "normal": "<b>Meaning:</b> Your microcirculation temperature indicates healthy small vessel blood flow.<br/><b>Details:</b> Good microvascular function is important for metabolic health.<br/><b>Guidance:</b> Maintain blood sugar levels and exercise regularly.",
-                "low": "<b>Meaning:</b> Reduced temperature in areas indicating potential microvascular issues.<br/><b>Potential Causes:</b> Early diabetes indicators, circulatory issues, or cold exposure.<br/><b>Guidance:</b> Monitor blood sugar. Consider a diabetes screening if you have risk factors."
+            "texture_roughness": {
+                "normal": "<b>Meaning:</b> Your skin texture appears smooth and healthy.<br/><b>Details:</b> Normal texture suggests good skin hydration and minimal sun damage.<br/><b>Guidance:</b> Continue your skincare routine and use sun protection.",
+                "high": "<b>Meaning:</b> Your skin texture shows increased roughness.<br/><b>Potential Causes:</b> Dehydration, sun damage, aging, or dry skin conditions.<br/><b>Guidance:</b> Moisturize regularly and consider using gentle exfoliants. Consult a dermatologist if concerned."
+            },
+            "skin_redness": {
+                "normal": "<b>Meaning:</b> Your skin redness is within normal range.<br/><b>Details:</b> This suggests normal blood flow and no significant inflammation.<br/><b>Guidance:</b> Continue normal skincare.",
+                "high": "<b>Meaning:</b> Increased skin redness detected.<br/><b>Potential Causes:</b> Rosacea, sunburn, allergic reaction, or inflammation.<br/><b>Guidance:</b> Use gentle skincare products. If persistent or accompanied by itching, see a dermatologist."
+            },
+            "skin_yellowness": {
+                "normal": "<b>Meaning:</b> Your skin tone balance is normal.<br/><b>Details:</b> No signs of jaundice or pigmentation issues.<br/><b>Guidance:</b> No action needed.",
+                "high": "<b>Meaning:</b> Increased skin yellowness detected.<br/><b>Potential Causes:</b> Carotenoid-rich diet, jaundice (liver issues), or natural skin tone variation.<br/><b>Guidance:</b> If eyes also appear yellow or you have abdominal symptoms, consult a doctor for liver function tests."
+            },
+            "color_uniformity": {
+                "normal": "<b>Meaning:</b> Your skin tone is uniform and consistent.<br/><b>Details:</b> This suggests healthy melanin distribution and no significant pigmentation issues.<br/><b>Guidance:</b> Continue sun protection to maintain uniformity.",
+                "low": "<b>Meaning:</b> Your skin shows uneven pigmentation.<br/><b>Potential Causes:</b> Sun damage, post-inflammatory hyperpigmentation, melasma, or aging.<br/><b>Guidance:</b> Use broad-spectrum sunscreen daily. Consider vitamin C serums or consult a dermatologist."
+            },
+            "lesion_count": {
+                "normal": "<b>Meaning:</b> No concerning skin lesions detected.<br/><b>Details:</b> Regular skin checks are still important for early detection.<br/><b>Guidance:</b> Perform monthly self-exams and annual dermatology visits.",
+                "high": "<b>Meaning:</b> Multiple skin lesions detected.<br/><b>Potential Causes:</b> Moles, age spots, or other benign lesions. Requires professional evaluation.<br/><b>Guidance:</b> Schedule a dermatology appointment for professional skin examination."
             },
         }
         
@@ -780,11 +823,101 @@ Keep explanations encouraging but realistic. Avoid medical jargon."""
         
         return explanations
     
+    def _generate_all_biomarkers_explanations_global(
+        self,
+        system_summaries: Dict[PhysiologicalSystem, Dict[str, Any]]
+    ) -> Dict[str, str]:
+        """
+        Generate AI explanations for ALL abnormal biomarkers across ALL systems in ONE API call.
+        
+        This replaces the old pattern of calling _generate_batched_ai_explanations per system.
+        Returns a flat dict: {"biomarker_name": "explanation text"}
+        """
+        # Collect all abnormal biomarkers from all systems
+        all_abnormal = {}
+        for system, summary in system_summaries.items():
+            biomarkers = summary.get("biomarkers", {})
+            for bm_name, bm_data in biomarkers.items():
+                status = bm_data.get("status", "not_assessed")
+                # Only use AI for abnormal readings (high/low)
+                if status in ["high", "low"]:
+                    all_abnormal[bm_name] = bm_data
+        
+        # If no abnormal biomarkers, return empty dict
+        if not all_abnormal or not self.gemini_client or not self.gemini_client.is_available:
+            logger.info("Skipping global AI explanations (no abnormal biomarkers or Gemini unavailable)")
+            return {}
+        
+        # Build a single consolidated prompt
+        prompt = """Generate patient-friendly explanations for the following abnormal health screening biomarkers.
+
+For each biomarker, provide a concise explanation in this format:
+<b>Meaning:</b> What this result means<br/><b>Potential Causes:</b> Common reasons for this reading<br/><b>Guidance:</b> What the patient should do
+
+Return JSON only:
+{
+  "biomarker_name_1": "explanation text",
+  "biomarker_name_2": "explanation text",
+  ...
+}
+
+BIOMARKERS:
+"""
+        
+        for bm_name, bm_data in all_abnormal.items():
+            friendly_name = self._simplify_biomarker_name(bm_name)
+            value = bm_data.get("value", 0)
+            unit = bm_data.get("unit", "")
+            status = bm_data.get("status", "unknown")
+            prompt += f"\n- {friendly_name}: {value} {unit} (Status: {status.upper()})"
+        
+        prompt += "\n\nProvide explanations in JSON format as described above."
+        
+        try:
+            logger.info(f"Generating global AI explanations for {len(all_abnormal)} abnormal biomarkers in ONE call")
+            response = self.gemini_client.generate(
+                prompt,
+                system_instruction="You are a medical explanation assistant. Provide clear, patient-friendly explanations."
+            )
+            
+            # Parse JSON response
+            import json
+            text = response.text.strip()
+            
+            # Try direct parse
+            if text.startswith("{"):
+                explanations = json.loads(text)
+                logger.info(f"Successfully parsed {len(explanations)} AI explanations")
+                return explanations
+            
+            # Try extracting from code block
+            if "```json" in text:
+                start = text.find("```json") + 7
+                end = text.find("```", start)
+                explanations = json.loads(text[start:end].strip())
+                logger.info(f"Successfully parsed {len(explanations)} AI explanations from code block")
+                return explanations
+            
+            if "```" in text:
+                start = text.find("```") + 3
+                end = text.find("```", start)
+                explanations = json.loads(text[start:end].strip())
+                logger.info(f"Successfully parsed {len(explanations)} AI explanations from generic code block")
+                return explanations
+            
+            logger.warning("Failed to parse global AI response as JSON")
+            return {}
+            
+        except Exception as e:
+            logger.warning(f"Global AI explanation failed: {e}")
+            return {}
+    
     def _generate_pdf(
         self,
         report: PatientReport,
         system_results: Dict[PhysiologicalSystem, SystemRiskResult],
-        trust_envelope: Optional[TrustEnvelope]
+        trust_envelope: Optional[TrustEnvelope],
+        global_explanations: Dict[str, str]
     ) -> str:
         """Generate the actual enhanced PDF file."""
         filename = f"{report.report_id}.pdf"
@@ -848,6 +981,11 @@ Keep explanations encouraging but realistic. Avoid medical jargon."""
             system_name = system.value.replace("_", " ").title()
             risk_level = summary["risk_level"]
             biomarkers = summary.get("biomarkers", {})
+            try: 
+                logger.info(f"Generating PDF report for system: {system_name} with biomarkers: {list(biomarkers.keys())}")
+            except Exception:
+                pass
+
             
             # 1. Header and Table Group (KeepTogether)
             header_group = []
@@ -877,7 +1015,15 @@ Keep explanations encouraging but realistic. Avoid medical jargon."""
                 table_data = [["What We Measured", "Your Value", "Normal Range", "Status"]]
                 
                 for bm_name, bm_data in biomarkers.items():
+                    # CONTEXT-AWARE: Check for stationary gait BEFORE simplification
+                    is_stationary_gait = (bm_name == "gait_variability" and bm_data.get('status') == 'not_assessed')
+                    
                     friendly_name = self._simplify_biomarker_name(bm_name)
+                    
+                    # Add (Stationary) suffix for stationary gait
+                    if is_stationary_gait:
+                        friendly_name += " (Stationary)"
+                    
                     # Round value to 2 decimal places
                     value = bm_data['value']
                     if isinstance(value, (int, float)):
@@ -889,6 +1035,10 @@ Keep explanations encouraging but realistic. Avoid medical jargon."""
                     normal_range = self._format_normal_range(bm_data.get('normal_range'))
                     status = bm_data.get('status', 'not_assessed')
                     status_icon = self._get_biomarker_status_icon(status)
+                    
+                    # Update status label for stationary gait
+                    if is_stationary_gait:
+                        status_icon = "Not Assessed (Stationary)"
                     
                     table_data.append([friendly_name, value_str, normal_range, status_icon])
                 
@@ -955,15 +1105,15 @@ Keep explanations encouraging but realistic. Avoid medical jargon."""
                 ))
                 story.append(Spacer(1, 6))
                 
-                # BATCHED AI: Generate all explanations for this system in ONE API call
-                batched_explanations = self._generate_batched_ai_explanations(system_name, biomarkers)
-                
+                # Use PRE-COMPUTED global explanations instead of per-system batched calls
                 for bm_name, bm_data in biomarkers.items():
                     status = bm_data.get('status', 'not_assessed')
-                    if status != 'not_assessed':
-                        # Use pre-computed batched explanation
-                        explanation = batched_explanations.get(
-                            bm_name, 
+                    
+                    # CONTEXT-AWARE: Include explanation for stationary gait
+                    if status != 'not_assessed' or bm_name == 'gait_variability':
+                        # Try global AI explanation first, fallback to hardcoded
+                        explanation = global_explanations.get(
+                            bm_name,
                             self._get_biomarker_explanation(bm_name, bm_data['value'], status)
                         )
                         friendly_name = self._simplify_biomarker_name(bm_name)

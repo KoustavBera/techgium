@@ -43,6 +43,7 @@ RISK_BG_COLORS = {
     RiskLevel.MODERATE: HexColor("#FEF3C7") if REPORTLAB_AVAILABLE else "#FEF3C7",  # Pale Amber
     RiskLevel.HIGH: HexColor("#FEE2E2") if REPORTLAB_AVAILABLE else "#FEE2E2",      # Pale Rose
     RiskLevel.CRITICAL: HexColor("#FEF2F2") if REPORTLAB_AVAILABLE else "#FEF2F2",  # Very Pale Red
+    RiskLevel.UNKNOWN: HexColor("#F3F4F6") if REPORTLAB_AVAILABLE else "#F3F4F6",   # Light Gray
 }
 
 RISK_TEXT_COLORS = {
@@ -50,6 +51,7 @@ RISK_TEXT_COLORS = {
     RiskLevel.MODERATE: HexColor("#92400E") if REPORTLAB_AVAILABLE else "#92400E",
     RiskLevel.HIGH: HexColor("#B91C1C") if REPORTLAB_AVAILABLE else "#B91C1C",
     RiskLevel.CRITICAL: HexColor("#7F1D1D") if REPORTLAB_AVAILABLE else "#7F1D1D",
+    RiskLevel.UNKNOWN: HexColor("#6B7280") if REPORTLAB_AVAILABLE else "#6B7280",   # Gray
 }
 
 
@@ -554,6 +556,8 @@ class DoctorReportGenerator:
     
     def _score_status(self, score: float) -> str:
         """Convert score to status text."""
+        if score < 0:
+            return "∅ No Data"
         if score >= 0.9:
             return "✓ Excellent"
         elif score >= 0.7:

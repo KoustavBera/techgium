@@ -69,9 +69,11 @@ class TestBridgeAggregation(unittest.TestCase):
         self.assertEqual(radar_arg['radar']['respiration_rate'], 15.0)
 
     def test_esp32_aggregation(self):
-        # Neck temps: 36.0, 37.0 -> Avg 36.5
-        data1 = {"thermal": {"fever": {"neck_temp": 36.0}, "autonomic": {"stress_gradient": 1.0}}}
-        data2 = {"thermal": {"fever": {"neck_temp": 37.0}, "autonomic": {"stress_gradient": 2.0}}}
+        # Real firmware format: core_regions/stability_metrics/symmetry/gradients
+        # Canthus temps: 32.0, 33.0 -> Avg 32.5
+        # Neck temps: 30.0, 31.0 -> Avg 30.5 
+        data1 = {"thermal": {"core_regions": {"canthus_mean": 32.0, "neck_mean": 30.0}, "stability_metrics": {"canthus_range": 0.4}, "symmetry": {"cheek_asymmetry": 0.2}, "gradients": {"forehead_nose_gradient": -2.0}}}
+        data2 = {"thermal": {"core_regions": {"canthus_mean": 33.0, "neck_mean": 31.0}, "stability_metrics": {"canthus_range": 0.6}, "symmetry": {"cheek_asymmetry": 0.3}, "gradients": {"forehead_nose_gradient": -1.0}}}
         
         def side_effect(*args, **kwargs):
             self.bridge.esp32_reader.data_queue.put(data1)
@@ -87,8 +89,11 @@ class TestBridgeAggregation(unittest.TestCase):
         
         print(f"Aggregated Thermal Data: {esp32_arg}")
         
-        self.assertEqual(esp32_arg['thermal']['fever']['neck_temp'], 36.5)
-        self.assertEqual(esp32_arg['thermal']['autonomic']['stress_gradient'], 1.5)
+        self.assertEqual(esp32_arg['thermal']['core_regions']['canthus_mean'], 32.5)
+        self.assertEqual(esp32_arg['thermal']['core_regions']['neck_mean'], 30.5)
+        self.assertEqual(esp32_arg['thermal']['stability_metrics']['canthus_range'], 0.5)
+        self.assertEqual(esp32_arg['thermal']['symmetry']['cheek_asymmetry'], 0.25)
+        self.assertEqual(esp32_arg['thermal']['gradients']['forehead_nose_gradient'], -1.5)
 
 if __name__ == '__main__':
     unittest.main()

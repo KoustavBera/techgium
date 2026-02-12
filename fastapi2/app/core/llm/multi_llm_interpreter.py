@@ -168,13 +168,17 @@ Provide clear, educational, and thorough explanations. Avoid being vague. Explai
         # Build primary prompt
         prompt = self._build_primary_prompt(system_results, composite_risk, trust_envelope)
         
+        
         # SMART CUTOFF: Determine pipeline mode
         score = composite_risk.score
-        use_full_pipeline = score < 30 or score > 80
+        
+        # FORCE VALIDATION: Ensure Intelligent Internet (Phase 2) always runs
+        # use_full_pipeline = score < 30 or score > 80  # Old logic
+        use_full_pipeline = True  # User requested full validation for all reports
         
         if use_full_pipeline:
             result.pipeline_mode = "full_pipeline"
-            logger.info(f"Risk score {score:.1f} triggers FULL 3-LLM pipeline")
+            logger.info(f"Risk score {score:.1f} triggers FULL 3-LLM pipeline (forced)")
         else:
             result.pipeline_mode = "single"
             logger.info(f"Risk score {score:.1f} uses SINGLE Gemini (fast path)")

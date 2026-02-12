@@ -27,11 +27,12 @@ except ImportError:
 
 class GeminiModel(str, Enum):
     """Available Gemini models."""
-    FLASH_LATEST = "gemini-2.5-flash"  # Latest Flash model
+    FLASH_1_5_LATEST = "gemini-1.5-flash-latest"  # User requested
+    FLASH_2_0_LITE = "gemini-2.0-flash-lite"  # 10 RPM free tier (Best for explanations)
+    FLASH_LATEST = "gemini-2.5-flash"  # 5 RPM free tier
     FLASH_8B = "gemini-1.5-flash-8b"  # Cheapest & Fastest (Keep if available, else update)
     FLASH_1_5 = "gemini-2.0-flash"  # Fallback to 2.0
     FLASH_2_0 = "gemini-2.0-flash"  # New Flash model
-    FLASH_2_0_LITE = "gemini-2.0-flash-lite"  # Experimental
     PRO_1_5 = "gemini-1.5-pro"  # Legacy
 
 
@@ -39,7 +40,7 @@ class GeminiModel(str, Enum):
 class GeminiConfig:
     """Configuration for Gemini client."""
     api_key: Optional[str] = None
-    model: GeminiModel = GeminiModel.FLASH_LATEST
+    model: GeminiModel = GeminiModel.FLASH_1_5_LATEST
     temperature: float = 0.7  # Gemini 1.5 defaults
     max_output_tokens: int = 2048
     top_p: float = 0.8
@@ -104,6 +105,8 @@ class GeminiClient:
         self._request_count = 0
         self._last_request_time = None
         self._initialized = False
+        self._cache = {}  # Simple in-memory cache: {cache_key: response_text}
+        self._cache_ttl_seconds = 300  # 5 minutes cache TTL
         
         self._initialize()
     
@@ -120,29 +123,18 @@ class GeminiClient:
             return
         
         try:
-            # Prepare generation config
-            gen_config = {
-                "temperature": self.config.temperature,
-                "top_p": self.config.top_p,
-                "top_k": self.config.top_k,
-                "max_output_tokens": self.config.max_output_tokens,
-            }
-            
-            # Add structured output config if provided
-            if self.config.response_mime_type:
-                gen_config["response_mime_type"] = self.config.response_mime_type
-            if self.config.response_schema:
-                gen_config["response_schema"] = self.config.response_schema
-
             # Initialize LangChain ChatGoogleGenerativeAI
             self._llm = ChatGoogleGenerativeAI(
                 model=self.config.model.value,
                 temperature=self.config.temperature,
-                max_tokens=self.config.max_output_tokens,
+                max_output_tokens=self.config.max_output_tokens,
+                top_p=self.config.top_p,
+                top_k=self.config.top_k,
                 timeout=self.config.request_timeout_seconds,
                 max_retries=2,
                 google_api_key=self.config.api_key,
-                generation_config=gen_config
+                response_mime_type=self.config.response_mime_type,
+                response_schema=self.config.response_schema
             )
             
             self._initialized = True
@@ -160,7 +152,8 @@ class GeminiClient:
     def generate(
         self,
         prompt: str,
-        system_instruction: Optional[str] = None
+        system_instruction: Optional[str] = None,
+        use_cache: bool = True
     ) -> GeminiResponse:
         """
         Generate a response from Gemini using LangChain.
@@ -176,6 +169,21 @@ class GeminiClient:
         
         if not self.is_available:
             return self._mock_response(prompt)
+        
+        # Check cache if enabled
+        cache_key = None
+        if use_cache:
+            cache_key = self._get_cache_key(prompt, system_instruction)
+            cached = self._get_from_cache(cache_key)
+            if cached:
+                logger.info(f"Cache hit for prompt hash {hash(cache_key) % 10000}")
+                return GeminiResponse(
+                    text=cached,
+                    model=f"{self.config.model.value} (cached)",
+                    finish_reason="CACHED",
+                    latency_ms=1.0,
+                    is_mock=False
+                )
         
         try:
             # Build full prompt with system instruction if provided
@@ -201,6 +209,10 @@ class GeminiClient:
             
             self._request_count += 1
             self._last_request_time = datetime.now()
+            
+            # Store in cache
+            if use_cache and cache_key:
+                self._add_to_cache(cache_key, text)
             
             return GeminiResponse(
                 text=text,
@@ -270,6 +282,33 @@ class GeminiClient:
             latency_ms=10.0,
             is_mock=True
         )
+    
+    def _get_cache_key(self, prompt: str, system_instruction: Optional[str]) -> str:
+        """Generate cache key from prompt and system instruction."""
+        import hashlib
+        content = f"{system_instruction or ''}|||{prompt}"
+        return hashlib.md5(content.encode()).hexdigest()
+    
+    def _get_from_cache(self, cache_key: str) -> Optional[str]:
+        """Retrieve from cache if still valid."""
+        if cache_key in self._cache:
+            cached_time, cached_text = self._cache[cache_key]
+            age = (datetime.now() - cached_time).total_seconds()
+            if age < self._cache_ttl_seconds:
+                return cached_text
+            else:
+                # Expired, remove
+                del self._cache[cache_key]
+        return None
+    
+    def _add_to_cache(self, cache_key: str, text: str):
+        """Add response to cache."""
+        self._cache[cache_key] = (datetime.now(), text)
+        # Simple cache size limit
+        if len(self._cache) > 100:
+            # Remove oldest entry
+            oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][0])
+            del self._cache[oldest_key]
     
     def get_stats(self) -> Dict[str, Any]:
         """Get client statistics."""

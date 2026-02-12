@@ -53,9 +53,7 @@ class PulmonaryExtractor(BaseExtractor):
              self._extract_from_radar(data, biomarker_set)
              sources_processed.append("radar")
              
-        # Fallback: Simulated (only if no sources found)
-        if not sources_processed:
-            self._generate_simulated_biomarkers(biomarker_set)
+        # No fallback: Simulated removed
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
         self._extraction_count += 1
@@ -172,12 +170,4 @@ class PulmonaryExtractor(BaseExtractor):
         except Exception as e:
             logger.error(f"Pulmonary: Failed to add biomarker {name}: {e}")
 
-    def _generate_simulated_biomarkers(self, biomarker_set: BiomarkerSet) -> None:
-        """Generate simulated pulmonary biomarkers."""
-        self._add_biomarker(biomarker_set, "respiration_rate",
-                           np.random.uniform(14, 18), "breaths/min",
-                           0.5, (12, 20), "Simulated respiration rate")
-        self._add_biomarker(biomarker_set, "breathing_depth",
-                           np.random.uniform(0.6, 0.9), "normalized_amplitude",
-                           0.5, (0.5, 1.0), "Simulated breathing depth")
-                           
+    # SIMULATION METHOD REMOVED
