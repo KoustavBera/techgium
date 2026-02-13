@@ -203,8 +203,10 @@ class RadarReader(BaseSerialReader):
                         
                         if rr_match:
                             resp_rate = float(rr_match.group(1))
-                            if 5 <= resp_rate <= 40:
-                                self.last_data['radar']['respiration_rate'] = round(resp_rate, 1)
+                            # Apply -10% calibration correction for sensor error
+                            resp_rate_corrected = resp_rate * 0.9
+                            if 5 <= resp_rate_corrected <= 40:
+                                self.last_data['radar']['respiration_rate'] = round(resp_rate_corrected, 1)
                                 self.last_data['timestamp'] = int(time.time())
                         
                         # Update queue with latest data
@@ -243,8 +245,10 @@ class RadarReader(BaseSerialReader):
         
         if rr_match:
             resp_rate = float(rr_match.group(1))
-            if 5 <= resp_rate <= 40:
-                result['radar']['respiration_rate'] = round(resp_rate, 1)
+            # Apply -10% calibration correction for sensor error
+            resp_rate_corrected = resp_rate * 0.9
+            if 5 <= resp_rate_corrected <= 40:
+                result['radar']['respiration_rate'] = round(resp_rate_corrected, 1)
         
         return result
 
