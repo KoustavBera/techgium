@@ -61,7 +61,7 @@ RISK_COLORS = {
     RiskLevel.LOW: HexColor("#D1FAE5") if REPORTLAB_AVAILABLE else "#D1FAE5",       # Mint Green (Light)
     RiskLevel.MODERATE: HexColor("#FEF3C7") if REPORTLAB_AVAILABLE else "#FEF3C7",  # Pale Amber
     RiskLevel.HIGH: HexColor("#FEE2E2") if REPORTLAB_AVAILABLE else "#FEE2E2",      # Pale Rose
-    RiskLevel.CRITICAL: HexColor("#FEF2F2") if REPORTLAB_AVAILABLE else "#FEF2F2", # Very Pale Red
+    RiskLevel.ACTION_REQUIRED: HexColor("#FFEDD5") if REPORTLAB_AVAILABLE else "#FFEDD5", # Alert Amber (Pastel)
 }
 
 # Chart specific solid colors for the Pie slices (Visual Pop)
@@ -69,7 +69,7 @@ CHART_COLORS = {
     RiskLevel.LOW: HexColor("#10B981"),       # Emerald 500
     RiskLevel.MODERATE: HexColor("#F59E0B"),  # Amber 500
     RiskLevel.HIGH: HexColor("#EF4444"),      # Red 500
-    RiskLevel.CRITICAL: HexColor("#B91C1C"),  # Red 700
+    RiskLevel.ACTION_REQUIRED: HexColor("#D97706"),  # Amber 600
 }
 
 # Risk text colors (Darker for contrast)
@@ -77,7 +77,7 @@ RISK_TEXT_COLORS = {
     RiskLevel.LOW: HexColor("#065F46") if REPORTLAB_AVAILABLE else "#065F46",       # Dark Emerald
     RiskLevel.MODERATE: HexColor("#92400E") if REPORTLAB_AVAILABLE else "#92400E",  # Dark Amber
     RiskLevel.HIGH: HexColor("#B91C1C") if REPORTLAB_AVAILABLE else "#B91C1C",      # Dark Red
-    RiskLevel.CRITICAL: HexColor("#7F1D1D") if REPORTLAB_AVAILABLE else "#7F1D1D",  # Deep Red
+    RiskLevel.ACTION_REQUIRED: HexColor("#92400E") if REPORTLAB_AVAILABLE else "#92400E", # Dark Amber
 }
 
 STATUS_COLORS = {
@@ -91,7 +91,7 @@ RISK_LABELS = {
     RiskLevel.LOW: "Low Risk • Healthy",
     RiskLevel.MODERATE: "Moderate Risk • Monitor",
     RiskLevel.HIGH: "High Risk • Consult Doctor",
-    RiskLevel.CRITICAL: "Critical • Immediate Care",
+    RiskLevel.ACTION_REQUIRED: "Action Required • Consult Provider",
 }
 
 # Simplified biomarker names
@@ -213,7 +213,7 @@ if REPORTLAB_AVAILABLE:
                 RiskLevel.LOW: 0,
                 RiskLevel.MODERATE: 0,
                 RiskLevel.HIGH: 0,
-                RiskLevel.CRITICAL: 0
+                RiskLevel.ACTION_REQUIRED: 0
             }
             
             for s in self.system_summaries.values():
@@ -226,8 +226,8 @@ if REPORTLAB_AVAILABLE:
             labels = []
             colors = []
             
-            # Order: Low, Moderate, High, Critical
-            order = [RiskLevel.LOW, RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.CRITICAL]
+            # Order: Low, Moderate, High, Action Required
+            order = [RiskLevel.LOW, RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.ACTION_REQUIRED]
             
             for lvl in order:
                 count = stats[lvl]
@@ -288,13 +288,29 @@ if REPORTLAB_AVAILABLE:
             legend.colorNamePairs = list(zip(colors, labels))
             d.add(legend)
             
-            # Add "Health Score" or "Total Systems" text overlay or on side
-            # Let's add a summary text summary on the right
-            d.add(String(180, 50, "System Health Breakdown", fontName="Helvetica-Bold", fontSize=12, fillColor=HexColor("#374151")))
-            d.add(String(180, 35, f"Total Body Systems Assessed: {sum(data)}", fontName="Helvetica", fontSize=10, fillColor=HexColor("#6B7280")))
-            
             # Render drawing onto canvas
             d.drawOn(self.canv, 0, 0)
+
+    class ConfidenceMeter(Flowable):
+        """Visual bar for assessment confidence."""
+        def __init__(self, confidence: float, width: float = 250, height: float = 12):
+            Flowable.__init__(self)
+            self.confidence = confidence
+            self.width = width
+            self.height = height
+            
+        def draw(self):
+            # Draw outline/bg
+            self.canv.setStrokeColor(HexColor("#E5E7EB"))
+            self.canv.setFillColor(HexColor("#F3F4F6"))
+            self.canv.roundRect(0, 0, self.width, self.height, self.height/2, fill=1, stroke=1)
+            
+            # Draw fill based on confidence percentage
+            if self.confidence > 0.0:
+                # Color logic: Green for high confidence, Amber for low
+                fill_color = HexColor("#10B981") if self.confidence >= 0.8 else HexColor("#F59E0B")
+                self.canv.setFillColor(fill_color)
+                self.canv.roundRect(0, 0, self.width * self.confidence, self.height, self.height/2, fill=1, stroke=0)
 else:
     # Dummy class when reportlab not available
     class RiskIndicator:
@@ -546,7 +562,7 @@ class EnhancedPatientReportGenerator:
             RiskLevel.LOW: "Good",
             RiskLevel.MODERATE: "Attention Recommended",
             RiskLevel.HIGH: "Consult Doctor",
-            RiskLevel.CRITICAL: "Urgent Care Needed",
+            RiskLevel.ACTION_REQUIRED: "Action Required",
             RiskLevel.UNKNOWN: "Device Required"
         }
         return statuses.get(level, "Unknown")
@@ -926,10 +942,10 @@ BIOMARKERS:
         doc = SimpleDocTemplate(
             filepath,
             pagesize=letter,
-            rightMargin=0.75*inch,
-            leftMargin=0.75*inch,
-            topMargin=0.75*inch,
-            bottomMargin=0.75*inch
+            rightMargin=1.0*inch,
+            leftMargin=1.0*inch,
+            topMargin=1.0*inch,
+            bottomMargin=1.0*inch
         )
         
         story = []
@@ -963,7 +979,9 @@ BIOMARKERS:
         
         confidence_text = f"Assessment Confidence: <b>{report.overall_confidence:.0%}</b>"
         story.append(Paragraph(confidence_text, self._styles['BodyText']))
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 4))
+        story.append(ConfidenceMeter(report.overall_confidence, width=300))
+        story.append(Spacer(1, 15))
         
         # Overall summary
         story.append(Paragraph(
@@ -979,6 +997,12 @@ BIOMARKERS:
         
         for system, summary in report.system_summaries.items():
             system_name = system.value.replace("_", " ").title()
+            
+            # Phase 2: Add Experimental tag for specific systems
+            is_experimental = system in [PhysiologicalSystem.NASAL, PhysiologicalSystem.RENAL]
+            if is_experimental:
+                system_name += " (Experimental)"
+            
             risk_level = summary["risk_level"]
             biomarkers = summary.get("biomarkers", {})
             try: 

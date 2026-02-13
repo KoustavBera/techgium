@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.core.extraction.base import PhysiologicalSystem, BiomarkerSet, Biomarker
 from app.core.inference.risk_engine import RiskEngine, CompositeRiskCalculator, SystemRiskResult, RiskScore
 from app.core.llm.multi_llm_interpreter import MultiLLMInterpreter
+from app.core.validation.signal_quality import SignalQualityAssessor, Modality
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class ScreeningService:
         self.risk_engine = risk_engine or RiskEngine()
         self.interpreter = interpreter or MultiLLMInterpreter()
         self.composite_calc = CompositeRiskCalculator()
+        self.quality_assessor = SignalQualityAssessor()
 
     async def process_screening(
         self, 
@@ -143,6 +145,56 @@ class ScreeningService:
             "validation_status": validation_status,
             "requires_review": requires_review
         }
+
+    async def assess_data_quality(self, data: Optional[Dict[str, Any]], systems_input: List[Dict[str, Any]]) -> float:
+        """
+        Assess overall data quality from raw sensor data or biomarker confidence.
+        Returns a score from 0 to 1.
+        """
+        # Case 1: We have raw sensor metadata
+        if data:
+            try:
+                # Modality map for assessor
+                quality_scores = {}
+                
+                # Check for camera/frames
+                if "camera" in data:
+                    quality_scores[Modality.CAMERA] = self.quality_assessor.assess_camera(
+                        data["camera"].get("frames", []), 
+                        data["camera"].get("timestamps")
+                    )
+                
+                # Check for radar
+                if "radar" in data:
+                    quality_scores[Modality.RADAR] = self.quality_assessor.assess_radar(data["radar"])
+                
+                # Check for thermal
+                if "thermal" in data:
+                    quality_scores[Modality.THERMAL] = self.quality_assessor.assess_thermal(data["thermal"])
+                
+                if quality_scores:
+                    overall = sum(s.overall_quality for s in quality_scores.values()) / len(quality_scores)
+                    logger.info(f"Data quality assessment (Raw): {overall:.2f}")
+                    return overall
+            except Exception as e:
+                logger.warning(f"Raw data quality assessment failed: {e}")
+
+        # Case 2: Fallback to checking biomarker confidence if raw data is missing
+        if systems_input:
+            confidences = []
+            for sys in systems_input:
+                for bm in sys.get("biomarkers", []):
+                    conf = bm.get("confidence")
+                    if conf is not None:
+                        confidences.append(float(conf))
+            
+            if confidences:
+                avg_conf = sum(confidences) / len(confidences)
+                logger.info(f"Data quality assessment (Biomarker Fallback): {avg_conf:.2f}")
+                return avg_conf
+
+        logger.warning("No data available for quality assessment - defaulting to low quality (0.0)")
+        return 0.0
 
     def _parse_system(self, system_name: str) -> PhysiologicalSystem:
         """Helper to parse system name string to PhysiologicalSystem enum."""

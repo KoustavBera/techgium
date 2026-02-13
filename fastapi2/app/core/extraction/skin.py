@@ -7,9 +7,11 @@ Extracts skin health indicators from camera data:
 - Lesion morphology detection (Interface only)
 """
 from typing import Dict, Any, List, Tuple, Optional
+from dataclasses import dataclass
 import numpy as np
 import cv2
 import mediapipe as mp
+from mediapipe.python.solutions import face_mesh
 from skimage.feature import graycomatrix, graycoprops
 from skimage import exposure
 
@@ -31,6 +33,25 @@ FALLBACK_VALUES = {
 }
 
 
+@dataclass
+class SessionBaseline:
+    """Session-specific environmental baseline (not stored after scan)."""
+    baseline_facial_temp: float = 36.0
+    baseline_redness: float = 0.0  # CIELab *a
+    baseline_yellowness: float = 0.0  # CIELab *b
+    ambient_background_temp: float = 25.0  # Room temp from thermal camera
+    ambient_light_level: float = 120.0  # Average RGB intensity
+
+    def to_dict(self) -> Dict[str, float]:
+        return {
+            "baseline_facial_temp": self.baseline_facial_temp,
+            "baseline_redness": self.baseline_redness,
+            "baseline_yellowness": self.baseline_yellowness,
+            "ambient_background_temp": self.ambient_background_temp,
+            "ambient_light_level": self.ambient_light_level
+        }
+
+
 class SkinExtractor(BaseExtractor):
     """
     Extracts skin biomarkers from visual data.
@@ -46,7 +67,7 @@ class SkinExtractor(BaseExtractor):
     def __init__(self):
         super().__init__()
         # Initialize MediaPipe Face Mesh
-        self.mp_face_mesh = mp.solutions.face_mesh
+        self.mp_face_mesh = face_mesh
         self.face_mesh = self.mp_face_mesh.FaceMesh(
             static_image_mode=True,
             max_num_faces=1,
@@ -75,18 +96,31 @@ class SkinExtractor(BaseExtractor):
         - frames: List of video frames (HxWx3 arrays, BGR format)
         - esp32_data: Dict containing thermal metrics from MLX90640
         - systems: List of pre-processed systems from bridge
+        - session_baseline: Optional baseline context for normalization
         """
         import time
         start_time = time.time()
         
         biomarker_set = self._create_biomarker_set()
+        session_baseline = data.get("session_baseline")
         
         # Priority 1: Hardware Thermal Data (ESP32/MLX90640)
         has_thermal = False
         
         # NEW FORMAT: Flattened thermal_data from bridge.py
         if "thermal_data" in data:
-            self._extract_from_thermal_v2(data["thermal_data"], biomarker_set)
+            # Try to get landmarks from frames for pose gating
+            pose_landmarks = None
+            frames = data.get("frames", data.get("face_frames", []))
+            if frames:
+                _, _, pose_landmarks = self._get_face_mask(frames[0])
+                
+            self._extract_from_thermal_v2(
+                data["thermal_data"], 
+                biomarker_set, 
+                session_baseline,
+                pose_landmarks=pose_landmarks
+            )
             has_thermal = True
         # OLD FORMAT: Nested esp32_data
         elif "esp32_data" in data:
@@ -112,7 +146,7 @@ class SkinExtractor(BaseExtractor):
         frames = data.get("frames", data.get("face_frames", []))
         if len(frames) > 0:
             frame = np.array(frames[0]) if not isinstance(frames[0], np.ndarray) else frames[0]
-            self._extract_from_frame(frame, biomarker_set)
+            self._extract_from_frame(frame, biomarker_set, session_baseline)
         elif not has_thermal:
             logger.warning("SkinExtractor: No data sources available.")
         
@@ -124,7 +158,8 @@ class SkinExtractor(BaseExtractor):
     def _extract_from_frame(
         self,
         frame: np.ndarray,
-        biomarker_set: BiomarkerSet
+        biomarker_set: BiomarkerSet,
+        session_baseline: Optional[SessionBaseline] = None
     ) -> None:
         """Extract skin metrics from a video frame."""
         
@@ -132,7 +167,7 @@ class SkinExtractor(BaseExtractor):
             return
         
         # 1. Face Segmentation (MediaPipe)
-        face_mask, face_roi_crop = self._get_face_mask(frame)
+        face_mask, face_roi_crop, landmarks = self._get_face_mask(frame)
         
         if face_mask is None:
             logger.warning("Skin: No face detected.")
@@ -151,7 +186,7 @@ class SkinExtractor(BaseExtractor):
         )
         
         # 3. Color Analysis (CIELab on Masked Face)
-        color_metrics = self._analyze_skin_color_lab(frame, face_mask)
+        color_metrics = self._analyze_skin_color_lab(frame, face_mask, session_baseline)
         
         self._add_biomarker(
             biomarker_set,
@@ -159,8 +194,8 @@ class SkinExtractor(BaseExtractor):
             value=color_metrics["redness"],
             unit="lab_deviation",
             confidence=0.85,
-            normal_range=(0.0, 25.0),  # Calibrated: Low redness = healthy, high = inflammation
-            description="Skin redness (Hemoglobin proxy, Lab a* deviation)"
+            normal_range=(-10.0, 10.0) if session_baseline else (0.0, 25.0),
+            description="Skin redness (Lab a* deviation from session baseline)" if session_baseline else "Skin redness (Lab a* deviation from neutral)"
         )
         
         self._add_biomarker(
@@ -169,8 +204,8 @@ class SkinExtractor(BaseExtractor):
             value=color_metrics["yellowness"],
             unit="lab_deviation",
             confidence=0.80,
-            normal_range=(0.0, 25.0),  # Calibrated: Low yellowness = healthy, high = jaundice proxy
-            description="Skin yellowness (Bilirubin proxy, Lab b* deviation)"
+            normal_range=(-10.0, 10.0) if session_baseline else (0.0, 25.0),
+            description="Skin yellowness (Lab b* deviation from session baseline)" if session_baseline else "Skin yellowness (Lab b* deviation from neutral)"
         )
         
         self._add_biomarker(
@@ -193,11 +228,16 @@ class SkinExtractor(BaseExtractor):
             normal_range=(0, 5),
             description="Skin lesions (Disabled: Requires ML Model)"
         )
+        
+        # 5. Head Pose Logging (Informational)
+        if landmarks:
+            yaw, pitch = self._estimate_head_pose(landmarks)
+            logger.info(f"Skin: Visual head pose estimation - Yaw: {yaw:.1f}°, Pitch: {pitch:.1f}°")
     
-    def _get_face_mask(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    def _get_face_mask(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[List[Any]]]:
         """
         Generate a binary mask for the face skin using MediaPipe Face Mesh.
-        Returns: (full_frame_mask, face_crop_roi)
+        Returns: (full_frame_mask, face_crop_roi, landmarks)
         """
         h, w = frame.shape[:2]
         
@@ -215,7 +255,7 @@ class SkinExtractor(BaseExtractor):
         results = self.face_mesh.process(rgb_frame)
         
         if not results.multi_face_landmarks:
-            return None, None
+            return None, None, None
             
         landmarks = results.multi_face_landmarks[0].landmark
         
@@ -243,7 +283,7 @@ class SkinExtractor(BaseExtractor):
                 points.append((int(pt.x * w), int(pt.y * h)))
             
         if len(points) < 10:
-            return None, None
+            return None, None, None
             
         # Create mask using convex hull for better coverage
         hull = cv2.convexHull(np.array(points))
@@ -268,7 +308,7 @@ class SkinExtractor(BaseExtractor):
         # Apply mask to crop (black out non-face)
         processed_crop = cv2.bitwise_and(crop, crop, mask=mask_crop)
         
-        return mask, processed_crop
+        return mask, processed_crop, landmarks
 
     def _analyze_texture_glcm(self, face_crop: np.ndarray, mask: Optional[np.ndarray] = None) -> float:
         """
@@ -303,15 +343,61 @@ class SkinExtractor(BaseExtractor):
         # Return raw contrast value (no arbitrary scaling)
         return float(contrast)
 
-    def _analyze_skin_color_lab(self, frame: np.ndarray, mask: np.ndarray) -> Dict[str, float]:
+    def _estimate_head_pose(self, landmarks: List[Any]) -> Tuple[float, float]:
+        """
+        Estimate head orientation (Yaw, Pitch) from landmarks.
+        Yaw: Rotation left/right (0 = center)
+        Pitch: Rotation up/down (0 = center)
+        """
+        if not landmarks or len(landmarks) < 468:
+            return 0.0, 0.0
+
+        # Point Indices:
+        # 1: Nose Tip
+        # 33, 133: Left Eye Outer/Inner
+        # 362, 263: Right Eye Inner/Outer
+        # 152: Chin
+        # 10: Forehead/Top of Face
+        
+        nose_tip = landmarks[1]
+        left_eye = landmarks[33]
+        right_eye = landmarks[263]
+        chin = landmarks[152]
+        forehead = landmarks[10]
+
+        # 1. Yaw Estimation (Horizontal Rotation)
+        # Ratio of distances from nose tip to eye outer corners
+        dist_left = abs(nose_tip.x - left_eye.x)
+        dist_right = abs(nose_tip.x - right_eye.x)
+        
+        if dist_right == 0: dist_right = 0.01
+        yaw_ratio = dist_left / dist_right
+        
+        # Logarithmic mapping: ratio=1.0 -> 0°, ratio=2.0 -> ~20°
+        yaw = np.degrees(np.log(yaw_ratio)) * 20.0
+
+        # 2. Pitch Estimation (Vertical Rotation)
+        # Ratio of (Nose-Forehead) / (Nose-Chin)
+        dist_up = abs(nose_tip.y - forehead.y)
+        dist_down = abs(nose_tip.y - chin.y)
+        
+        if dist_down == 0: dist_down = 0.01
+        pitch_ratio = dist_up / dist_down
+        
+        # Baseline vertical ratio for frontal face is approx 1.0
+        pitch = np.degrees(np.log(pitch_ratio)) * 15.0
+        
+        return float(yaw), float(pitch)
+
+    def _analyze_skin_color_lab(self, frame: np.ndarray, mask: np.ndarray, session_baseline: Optional[SessionBaseline] = None) -> Dict[str, float]:
         """
         Analyze skin color in CIELab space using the face mask.
         - L: Lightness (Ignored for color metrics to reduce lighting bias)
-        - a*: Green-Red component (Redness) - Scaled as deviation from neutral
-        - b*: Blue-Yellow component (Yellowness) - Scaled as deviation from neutral
+        - a*: Green-Red component (Redness)
+        - b*: Blue-Yellow component (Yellowness)
         
-        OpenCV Lab uses 0-255 range where 128 is neutral gray.
-        We convert to deviation scale: (mean - 128) * 2
+        If session_baseline is provided, metrics are returned as deviations from baseline.
+        Otherwise, they are deviations from neutral gray (128).
         """
         if frame.size == 0:
             return {
@@ -338,13 +424,17 @@ class SkinExtractor(BaseExtractor):
             }
 
         # Calculate metrics with deviation scaling
-        # OpenCV Lab: 128 is neutral, so we subtract 128 and scale by 2
-        # Result: Typical skin redness/yellowness in range 15-40 for Fitzpatrick I-VI
+        # If baseline exists, compute deviation from baseline
+        # Otherwise, 128 is neutral, so we subtract 128 and scale by 2
         raw_a_mean = np.mean(skin_pixels_a)
         raw_b_mean = np.mean(skin_pixels_b)
         
-        redness = (raw_a_mean - 128.0) * 2.0
-        yellowness = (raw_b_mean - 128.0) * 2.0
+        if session_baseline:
+            redness = float(raw_a_mean - session_baseline.baseline_redness)
+            yellowness = float(raw_b_mean - session_baseline.baseline_yellowness)
+        else:
+            redness = float((raw_a_mean - 128.0) * 2.0)
+            yellowness = float((raw_b_mean - 128.0) * 2.0)
         
         # Uniformity: Entropy of the a* channel (pigmentation variation)
         # Lower entropy = Higher uniformity
@@ -416,7 +506,77 @@ class SkinExtractor(BaseExtractor):
                 description="Thermal asymmetry (Left vs Right)"
             )
 
-    def _extract_from_thermal_v2(self, thermal_data: Dict[str, Any], biomarker_set: BiomarkerSet) -> None:
+    def capture_session_baseline(
+        self, 
+        thermal_frames: List[Dict[str, Any]], 
+        rgb_frames: List[np.ndarray]
+    ) -> SessionBaseline:
+        """
+        Capture environmental baseline from initial data.
+        
+        Args:
+            thermal_frames: List of thermal data dicts
+            rgb_frames: List of RGB frames
+        """
+        logger.info(f"Skin: Capturing session baseline from {len(thermal_frames)} thermal and {len(rgb_frames)} RGB frames")
+        
+        # 1. Thermal Baseline
+        facial_temps = []
+        background_temps = []
+        CALIBRATION_OFFSET = 0.8
+        
+        for data in thermal_frames:
+            face_max = data.get('fever_face_max')
+            if face_max is not None:
+                facial_temps.append(face_max + CALIBRATION_OFFSET)
+            
+            bg_temp = data.get('background_temp')
+            if bg_temp is not None:
+                background_temps.append(bg_temp)
+                
+        baseline_temp = np.median(facial_temps) if facial_temps else 36.0
+        ambient_temp = np.median(background_temps) if background_temps else 25.0
+        
+        # 2. RGB Baseline
+        redness_values = []
+        yellowness_values = []
+        light_levels = []
+        
+        for frame in rgb_frames:
+            if frame is None or frame.size == 0:
+                continue
+            
+            mask, _, _ = self._get_face_mask(frame)
+            if mask is not None:
+                lab = cv2.cvtColor(frame, cv2.COLOR_BGR2Lab)
+                a_chan = lab[:, :, 1]
+                b_chan = lab[:, :, 2]
+                redness_values.append(np.mean(a_chan[mask == 255]))
+                yellowness_values.append(np.mean(b_chan[mask == 255]))
+                light_levels.append(np.mean(frame))
+        
+        baseline_redness = np.median(redness_values) if redness_values else 128.0
+        baseline_yellowness = np.median(yellowness_values) if yellowness_values else 128.0
+        baseline_light = np.median(light_levels) if light_levels else 120.0
+        
+        baseline = SessionBaseline(
+            baseline_facial_temp=float(baseline_temp),
+            baseline_redness=float(baseline_redness),
+            baseline_yellowness=float(baseline_yellowness),
+            ambient_background_temp=float(ambient_temp),
+            ambient_light_level=float(baseline_light)
+        )
+        
+        logger.info(f"Skin: Session baseline established: {baseline.to_dict()}")
+        return baseline
+
+    def _extract_from_thermal_v2(
+        self, 
+        thermal_data: Dict[str, Any], 
+        biomarker_set: BiomarkerSet,
+        session_baseline: Optional[SessionBaseline] = None,
+        pose_landmarks: Optional[List[Any]] = None
+    ) -> None:
         """Extract skin metrics from flattened thermal data (NEW FORMAT v2)."""
         # THERMAL CALIBRATION: Hardware consistently reads ~0.8°C lower than actual
         # Applying offset to bring readings into clinical range
@@ -453,15 +613,36 @@ class SkinExtractor(BaseExtractor):
                 )
         
         if final_skin_temp is not None:
-             self._add_biomarker_safe(
-                biomarker_set,
-                name="skin_temperature",
-                value=float(final_skin_temp),
-                unit="celsius",
-                confidence=0.92 if canthus_temp is not None else 0.70,  # Canthus = high, Neck = lower
-                normal_range=(35.5, 37.5),
-                description="Body temperature (Inner canthus - medical standard)"
-            )
+            if session_baseline:
+                thermal_deviation = final_skin_temp - session_baseline.baseline_facial_temp
+                
+                # Adjust normal range based on ambient temperature
+                if session_baseline.ambient_background_temp < 22.0:
+                    adjusted_range = (-1.5, 1.0)
+                elif session_baseline.ambient_background_temp > 28.0:
+                    adjusted_range = (-1.0, 2.0)
+                else:
+                    adjusted_range = (-1.0, 1.0)
+                
+                self._add_biomarker_safe(
+                    biomarker_set,
+                    name="skin_temperature_deviation",
+                    value=float(thermal_deviation),
+                    unit="delta_celsius",
+                    confidence=0.92 if canthus_temp is not None else 0.70,
+                    normal_range=adjusted_range,
+                    description=f"Skin temp deviation from session baseline ({session_baseline.baseline_facial_temp:.1f}°C)"
+                )
+            else:
+                 self._add_biomarker_safe(
+                    biomarker_set,
+                    name="skin_temperature",
+                    value=float(final_skin_temp),
+                    unit="celsius",
+                    confidence=0.92 if canthus_temp is not None else 0.70,
+                    normal_range=(35.5, 37.5),
+                    description="Body temperature (Inner canthus - medical standard)"
+                )
         
         # Max Temperature from inner canthus or face_max (most accurate core temp proxy)
         # Use face_max if available (firmware 2.0), otherwise fallback to canthus
@@ -513,6 +694,37 @@ class SkinExtractor(BaseExtractor):
                 confidence=0.80,
                 normal_range=(0.0, 0.8),
                 description="Thermal measurement stability (canthus range, MLX90640)"
+            )
+            
+        # NEW Phase 1.3: Thermal Asymmetry with Pose Gating
+        if thermal_data.get('thermal_asymmetry') is not None:
+            asymmetry_val = float(thermal_data['thermal_asymmetry'])
+            confidence = 0.85
+            description = "Thermal asymmetry (Left vs Right)"
+            
+            # GATING: If pose is provided, check frontal alignment
+            if pose_landmarks:
+                yaw, pitch = self._estimate_head_pose(pose_landmarks)
+                
+                # Loose thresholds for consumer hardware/movement
+                if abs(yaw) > 12.0 or abs(pitch) > 12.0:
+                    logger.warning(
+                        f"Skin: High head rotation detected (Yaw: {yaw:.1f}°, Pitch: {pitch:.1f}°). "
+                        f"Reducing asymmetry confidence."
+                    )
+                    confidence *= 0.3 # Heavy penalty for non-frontal pose
+                    description += f" (Warning: High head rotation {yaw:.1f}°/{pitch:.1f}°)"
+                else:
+                    confidence = 0.95 # Bonus for confirmed frontal pose
+            
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="thermal_asymmetry",
+                value=asymmetry_val,
+                unit="delta_celsius",
+                confidence=confidence,
+                normal_range=(0.0, 0.5),
+                description=description
             )
 
     def _add_biomarker_safe(

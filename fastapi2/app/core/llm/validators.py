@@ -193,7 +193,7 @@ class LLMValidator:
         reassuring_count = self._count_keywords_with_negation(text_lower, self.REASSURING_KEYWORDS)
         
         # High/Critical risk should have urgent language
-        if risk_level in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
+        if risk_level in [RiskLevel.HIGH, RiskLevel.ACTION_REQUIRED]:
             if urgent_count == 0:
                 errors.append(
                     f"HIGH/CRITICAL risk ({risk_score:.0f}) but no urgent language found"

@@ -23,6 +23,7 @@ class ScreeningRequest(BaseModel):
     patient_id: str = Field(default="ANONYMOUS")
     systems: List[SystemInput]
     include_validation: bool = Field(default=True, description="Include agentic validation")
+    data: Optional[Dict[str, Any]] = Field(default=None, description="Raw sensor metadata for quality checks")
 
 class RiskResultResponse(BaseModel):
     """Response for risk result."""
@@ -46,6 +47,8 @@ class ScreeningResponse(BaseModel):
     system_results: List[RiskResultResponse]
     validation_status: Optional[str] = None
     requires_review: bool = False
+    status: str = "success"
+    message: Optional[str] = None
 
 class ReportRequest(BaseModel):
     """Request for report generation."""

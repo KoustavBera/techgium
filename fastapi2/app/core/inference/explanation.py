@@ -162,7 +162,7 @@ class ExplanationGenerator:
                     "Recommend neurological evaluation",
                     "Document any tremor or gait changes"
                 ],
-                RiskLevel.CRITICAL: [
+                RiskLevel.ACTION_REQUIRED: [
                     "Urgent neurological consultation recommended",
                     "Avoid activities requiring fine motor control until evaluated"
                 ]
@@ -180,7 +180,7 @@ class ExplanationGenerator:
                     "Schedule cardiovascular evaluation",
                     "Review diet and exercise habits"
                 ],
-                RiskLevel.CRITICAL: [
+                RiskLevel.ACTION_REQUIRED: [
                     "Seek immediate cardiovascular assessment",
                     "Monitor for chest pain or shortness of breath"
                 ]
@@ -421,7 +421,7 @@ class ExplanationGenerator:
         elif level == RiskLevel.HIGH:
             summary = f"{system_name} assessment indicates elevated risk markers. "
             summary += "Professional evaluation is recommended."
-        else:  # CRITICAL
+        else:  # ACTION_REQUIRED
             summary = f"{system_name} assessment shows concerning indicators. "
             summary += "Prompt professional evaluation is strongly recommended."
         
@@ -437,7 +437,7 @@ class ExplanationGenerator:
         
         # Add sub-risk findings
         for sub_risk in risk_result.sub_risks:
-            if sub_risk.level in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
+            if sub_risk.level in [RiskLevel.HIGH, RiskLevel.ACTION_REQUIRED]:
                 findings.append(sub_risk.explanation)
             elif sub_risk.level == RiskLevel.MODERATE:
                 findings.append(f"{sub_risk.name}: borderline value noted")

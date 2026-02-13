@@ -42,7 +42,7 @@ RISK_BG_COLORS = {
     RiskLevel.LOW: HexColor("#D1FAE5") if REPORTLAB_AVAILABLE else "#D1FAE5",       # Mint Green
     RiskLevel.MODERATE: HexColor("#FEF3C7") if REPORTLAB_AVAILABLE else "#FEF3C7",  # Pale Amber
     RiskLevel.HIGH: HexColor("#FEE2E2") if REPORTLAB_AVAILABLE else "#FEE2E2",      # Pale Rose
-    RiskLevel.CRITICAL: HexColor("#FEF2F2") if REPORTLAB_AVAILABLE else "#FEF2F2",  # Very Pale Red
+    RiskLevel.ACTION_REQUIRED: HexColor("#FFEDD5") if REPORTLAB_AVAILABLE else "#FFEDD5", # Alert Amber (Pastel)
     RiskLevel.UNKNOWN: HexColor("#F3F4F6") if REPORTLAB_AVAILABLE else "#F3F4F6",   # Light Gray
 }
 
@@ -50,7 +50,7 @@ RISK_TEXT_COLORS = {
     RiskLevel.LOW: HexColor("#065F46") if REPORTLAB_AVAILABLE else "#065F46",
     RiskLevel.MODERATE: HexColor("#92400E") if REPORTLAB_AVAILABLE else "#92400E",
     RiskLevel.HIGH: HexColor("#B91C1C") if REPORTLAB_AVAILABLE else "#B91C1C",
-    RiskLevel.CRITICAL: HexColor("#7F1D1D") if REPORTLAB_AVAILABLE else "#7F1D1D",
+    RiskLevel.ACTION_REQUIRED: HexColor("#92400E") if REPORTLAB_AVAILABLE else "#92400E", # Dark Amber
     RiskLevel.UNKNOWN: HexColor("#6B7280") if REPORTLAB_AVAILABLE else "#6B7280",   # Gray
 }
 

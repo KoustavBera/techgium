@@ -599,6 +599,37 @@ class HardwareManager:
         logger.info(f"Thread started: {self._scan_thread.is_alive()}")
         logger.info("Scan thread launched successfully")
         return True
+
+    def _get_calibration_data(self, duration_seconds: int = 5) -> Tuple[List[Dict[str, Any]], List[np.ndarray]]:
+        """Collect raw data for baseline calibration."""
+        thermal_frames = []
+        rgb_frames = []
+        
+        # Start recording for RGB
+        with self._recording_lock:
+            self._recording_buffer = []
+            self._recording_active = True
+            
+        # Collect for duration
+        start_t = time.time()
+        while time.time() - start_t < duration_seconds:
+            if not self._scan_active: break
+            
+            # Collect thermal
+            if self.thermal:
+                while not self.thermal.data_queue.empty():
+                    try:
+                        thermal_frames.append(self.thermal.data_queue.get_nowait())
+                    except:
+                        break
+            
+            time.sleep(0.1) # 10Hz sampling
+            
+        self._recording_active = False
+        with self._recording_lock:
+            rgb_frames = [item['frame'] for item in self._recording_buffer]
+            
+        return thermal_frames, rgb_frames
     
     def _run_scan(self, patient_id: str, screenings_dict: Dict, app_internals: Dict = None):
         """
@@ -644,6 +675,46 @@ class HardwareManager:
                     except:
                         break
                 logger.info("Thermal queue cleared.")
+
+            # ============================================================
+            # Phase 0: Baseline Calibration (NEW)
+            # ============================================================
+            self._update_scan_status(
+                phase="BASELINE_CALIBRATION",
+                message="Calibrating environment... Stay still",
+                progress=7,
+            )
+            logger.info("🎯 Phase 0: Baseline Calibration (5s)")
+            
+            # Wait for initial alignment if possible, but don't block too long
+            self._wait_for_alignment("FACE_ANALYSIS", timeout=3)
+            
+            thermal_baseline_frames, rgb_baseline_frames = self._get_calibration_data(duration_seconds=5)
+            
+            session_baseline = None
+            if self.skin_extractor:
+                try:
+                    # Filter and flatten thermal frames for baseline
+                    system_thermal = []
+                    for raw in thermal_baseline_frames:
+                        # Extract the inner 'thermal' part if it exists (standard ESP32Reader format)
+                        # We need 'fever_face_max' and 'background_temp'
+                        # Flatten it like _build_screening_request does
+                        t_data = raw.get('thermal', {})
+                        core = t_data.get('core_regions', {})
+                        stability = t_data.get('stability_metrics', {})
+                        
+                        system_thermal.append({
+                            'fever_face_max': core.get('face_max'),
+                            'background_temp': t_data.get('ambient_temp') or 25.0
+                        })
+                    
+                    session_baseline = self.skin_extractor.capture_session_baseline(
+                        thermal_frames=system_thermal,
+                        rgb_frames=rgb_baseline_frames
+                    )
+                except Exception as e:
+                    logger.error(f"Baseline capture failed: {e}")
             
             # ============================================================
             # Phase 1: Face capture
@@ -774,7 +845,8 @@ class HardwareManager:
                 face_frames=face_frames if face_frames else None,
                 pose_sequence=pose_sequence if pose_sequence else None,
                 face_landmarks_sequence=face_landmarks_sequence if face_landmarks_sequence else None,
-                fps=self.config.camera_fps
+                fps=self.config.camera_fps,
+                session_baseline=session_baseline # NEW
             )
             
             logger.info(f"Screening request: {len(request_payload['systems'])} systems")
@@ -1021,7 +1093,8 @@ class HardwareManager:
         face_frames: Optional[List[np.ndarray]] = None,
         pose_sequence: Optional[List[np.ndarray]] = None,
         face_landmarks_sequence: Optional[List[np.ndarray]] = None,
-        fps: float = 30.0
+        fps: float = 30.0,
+        session_baseline: Optional[Any] = None # NEW
     ) -> Dict[str, Any]:
         """Build complete screening request using all 8 extractors.
         
@@ -1106,6 +1179,9 @@ class HardwareManager:
             raw_data_context["face_frames"] = face_frames
         if pose_sequence:
             raw_data_context["pose_sequence"] = pose_sequence
+        
+        if session_baseline: # NEW
+            raw_data_context["session_baseline"] = session_baseline
         
         # Run all 8 extractors (same order as bridge.py DataFusion)
         extractor_map = [

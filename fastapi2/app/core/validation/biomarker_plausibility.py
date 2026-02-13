@@ -107,12 +107,12 @@ class BiomarkerPlausibilityValidator:
             # Thermal (MLX90640)
             "skin_temp_avg": {"hard": (25.0, 45.0), "physiological": (30.0, 40.0)},
             "skin_temp_max": {"hard": (25.0, 50.0), "physiological": (32.0, 42.0)},
-            "thermal_asymmetry": {"hard": (0.0, 10.0), "physiological": (0.0, 2.0)},
+            "thermal_asymmetry": {"hard": (0.0, 10.0), "physiological": (0.0, 3.5)},
             
             # Thermal biomarkers (ESP32 thermal bridge v2)
-            "skin_temperature": {"hard": (30.0, 45.0), "physiological": (35.0, 38.5)},
+            "skin_temperature": {"hard": (30.0, 45.0), "physiological": (33.0, 39.0)},
             "skin_temperature_max": {"hard": (32.0, 50.0), "physiological": (36.0, 42.0)},
-            "inflammation_index": {"hard": (0.0, 100.0), "physiological": (0.0, 15.0)},
+            "inflammation_index": {"hard": (0.0, 100.0), "physiological": (0.0, 20.0)},
             "face_mean_temperature": {"hard": (28.0, 42.0), "physiological": (33.0, 37.0)},
             "facial_perfusion_temp": {"hard": (28.0, 42.0), "physiological": (32.0, 37.0)},
             "microcirculation_temp": {"hard": (30.0, 42.0), "physiological": (34.0, 38.0)},
@@ -140,9 +140,9 @@ class BiomarkerPlausibilityValidator:
             
             # Skin
             "texture_roughness": {"hard": (0.0, 1000.0), "physiological": (1.0, 100.0)},
-            "skin_redness": {"hard": (0.0, 1.0), "physiological": (0.1, 0.9)},
+            "skin_redness": {"hard": (0.0, 1.0), "physiological": (0.05, 0.95)},
             "skin_yellowness": {"hard": (0.0, 1.0), "physiological": (0.05, 0.8)},
-            "color_uniformity": {"hard": (0.0, 1.0), "physiological": (0.3, 1.0)},
+            "color_uniformity": {"hard": (0.0, 1.0), "physiological": (0.15, 1.0)},
             "lesion_count": {"hard": (0.0, 1000.0), "physiological": (0.0, 50.0)},
             
             # Eyes

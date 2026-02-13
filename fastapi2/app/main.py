@@ -226,6 +226,24 @@ async def run_screening(request: ScreeningRequest):
                 "biomarkers": [bm.dict() for bm in sys_input.biomarkers]
             })
         
+        # NEW Phase 1.4: Minimum Data Quality Gate
+        # Check overall data quality BEFORE processing risk
+        quality_score = await _screening_service.assess_data_quality(request.data, systems_input)
+        
+        if quality_score < 0.5:
+            logger.warning(f"Screening aborted: Insufficient data quality ({quality_score:.2f})")
+            return ScreeningResponse(
+                screening_id=f"REJ-{datetime.now().strftime('%H%M%S')}",
+                patient_id=request.patient_id,
+                timestamp=datetime.now().isoformat(),
+                overall_risk_level="unknown",
+                overall_risk_score=0.0,
+                overall_confidence=quality_score,
+                system_results=[],
+                status="INSUFFICIENT_DATA",
+                message="Screening aborted due to poor data quality. Please ensure face is clearly visible, lighting is sufficient, and you remain stable during capture."
+            )
+
         # Call service
         result = await _screening_service.process_screening(
             patient_id=request.patient_id,

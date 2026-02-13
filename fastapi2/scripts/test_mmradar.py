@@ -44,7 +44,9 @@ def run_test():
             elif "Real-time respiratory rate" in line and "Sending state" in line:
                 try:
                     rr = float(line.split("Sending state")[1].split()[0])
-                    latest['respiratory_rate'] = rr
+                    # Apply -10% calibration correction for sensor error
+                    rr_corrected = rr * 0.9
+                    latest['respiratory_rate'] = rr_corrected
                 except:
                     pass
             

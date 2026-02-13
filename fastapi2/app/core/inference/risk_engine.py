@@ -35,7 +35,7 @@ class RiskLevel(str, Enum):
     LOW = "low"
     MODERATE = "moderate"
     HIGH = "high"
-    CRITICAL = "critical"
+    ACTION_REQUIRED = "action_required"  # Softened from CRITICAL
     UNKNOWN = "unknown"
     
     @classmethod
@@ -50,7 +50,7 @@ class RiskLevel(str, Enum):
         elif score < 75:
             return cls.HIGH
         else:
-            return cls.CRITICAL
+            return cls.ACTION_REQUIRED
 
 
 @dataclass
@@ -583,6 +583,12 @@ class CompositeRiskCalculator:
             PhysiologicalSystem.NASAL: 0.8,
             PhysiologicalSystem.REPRODUCTIVE: 0.7,
         }
+        
+        # Phase 2: Experimental systems with reduced impact
+        self.experimental_systems = {
+            PhysiologicalSystem.NASAL,
+            PhysiologicalSystem.RENAL
+        }
     
     def compute_composite_risk(
         self,
@@ -612,34 +618,44 @@ class CompositeRiskCalculator:
         
         for system, result in system_results.items():
             weight = self.system_weights.get(system, 1.0)
+            
+            # Reduce impact of experimental systems by 50%
+            if system in self.experimental_systems:
+                weight *= 0.5
+                logger.debug(f"Reduced weight for experimental system: {system.name}")
+
             weighted_scores.append(result.overall_risk.score * weight)
             weighted_confidences.append(result.overall_risk.confidence * weight)
             
-            if result.overall_risk.level in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
+            if result.overall_risk.level in [RiskLevel.HIGH, RiskLevel.ACTION_REQUIRED]:
                 contributing.append(system.value)
             
             all_alerts.extend(result.alerts)
         
         total_weight = sum(
-            self.system_weights.get(s, 1.0) for s in system_results.keys()
+            (self.system_weights.get(s, 1.0) * (0.5 if s in self.experimental_systems else 1.0)) 
+            for s in system_results.keys()
         )
         
         composite_score = sum(weighted_scores) / total_weight
         composite_confidence = sum(weighted_confidences) / total_weight
         
-        # Critical override: if any system is CRITICAL, boost composite to at least HIGH
-        # If any system is HIGH, boost composite to at least MODERATE
+        # Critical override: if any system is ACTION_REQUIRED, boost composite to at least HIGH
+        # NOTE: Experimental systems are skipped for override to strictly follow reduced weight impact
         max_level = RiskLevel.LOW
-        for result in system_results.values():
-            if result.overall_risk.level == RiskLevel.CRITICAL:
-                max_level = RiskLevel.CRITICAL
+        for system, result in system_results.items():
+            if system in self.experimental_systems:
+                continue
+                
+            if result.overall_risk.level == RiskLevel.ACTION_REQUIRED:
+                max_level = RiskLevel.ACTION_REQUIRED
                 break
-            elif result.overall_risk.level == RiskLevel.HIGH and max_level != RiskLevel.CRITICAL:
+            elif result.overall_risk.level == RiskLevel.HIGH and max_level != RiskLevel.ACTION_REQUIRED:
                 max_level = RiskLevel.HIGH
         
-        # Apply critical override boost (escalate composite to match worst system)
-        if max_level == RiskLevel.CRITICAL and composite_score < 75:
-            composite_score = 75.0  # Boost to CRITICAL threshold when any system is CRITICAL
+        # Apply critical override boost (escalate composite to match worst non-experimental system)
+        if max_level == RiskLevel.ACTION_REQUIRED and composite_score < 75:
+            composite_score = 75.0  # Boost to ACTION_REQUIRED threshold
         elif max_level == RiskLevel.HIGH and composite_score < 50:
             composite_score = 50.0  # Boost to HIGH threshold when any system is HIGH
         

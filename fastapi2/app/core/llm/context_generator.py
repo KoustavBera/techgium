@@ -118,8 +118,8 @@ class MedicalContextGenerator:
             "A HIGH risk level indicates parameters that require attention. "
             "Consultation with a healthcare professional is recommended."
         ),
-        RiskLevel.CRITICAL: (
-            "A CRITICAL risk level indicates significant abnormalities. "
+        RiskLevel.ACTION_REQUIRED: (
+            "An ACTION_REQUIRED risk level indicates significant abnormalities. "
             "Prompt medical evaluation is strongly recommended."
         ),
     }

@@ -416,7 +416,7 @@ class CrossSystemConsistencyChecker:
             cns = levels[PhysiologicalSystem.CNS]
             cardio = levels[PhysiologicalSystem.CARDIOVASCULAR]
             
-            if cns == RiskLevel.CRITICAL and cardio == RiskLevel.LOW:
+            if cns == RiskLevel.ACTION_REQUIRED and cardio == RiskLevel.LOW:
                 inconsistencies.append(CrossSystemInconsistency(
                     systems=(PhysiologicalSystem.CNS.value, PhysiologicalSystem.CARDIOVASCULAR.value),
                     inconsistency_type=InconsistencyType.RISK_LEVEL_CONFLICT,
