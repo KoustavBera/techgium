@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Chiranjeevi Health Screening</title>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+		rel="stylesheet" />
+	<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="common-styles.css">
+	<!-- No client-side MediaPipe needed — all processing is backend -->
+	<style>
+		:root {
+			/* --- MATERIAL 3 COLOR TOKENS (Blue Theme) --- */
+			/* Backgrounds */
+			--md-sys-color-surface: #FDFBFF;
+			--md-sys-color-surface-container-low: #F0F4F8;
+			--md-sys-color-surface-container: #EAEFF5;
+			--md-sys-color-surface-container-high: #E2E7ED;
+
+			/* Primary (Action) */
+			--md-sys-color-primary: #0B57D0;
+			--md-sys-color-on-primary: #FFFFFF;
+			--md-sys-color-primary-container: #D3E3FD;
+			--md-sys-color-on-primary-container: #041E49;
+
+			/* Secondary (Tonal Elements) */
+			--md-sys-color-secondary-container: #C2E7FF;
+			--md-sys-color-on-secondary-container: #001D35;
+
+			/* Error / Status */
+			--md-sys-color-error: #D97706;
+			/* Alert Amber instead of aggressive red */
+			--md-sys-color-error-container: #FFEDD5;
+			/* Lighter Amber container */
+			--md-sys-color-on-error-container: #92400E;
+			--md-sys-color-success-container: #C4EED0;
+			--md-sys-color-on-success-container: #0F5223;
+
+			/* Text */
+			--md-sys-color-on-surface: #1B1B1F;
+			--md-sys-color-on-surface-variant: #444746;
+			--md-sys-color-outline: #747775;
+			--md-sys-color-outline-variant: #C4C7C5;
+
+			/* Layout values */
+			--radius-large: 28px;
+			--radius-medium: 16px;
+			--radius-full: 999px;
+			/* Stadium shape */
+		}
+
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: 'Google Sans', 'Roboto', sans-serif;
+			background: var(--md-sys-color-surface);
+			color: var(--md-sys-color-on-surface);
+			height: 100vh;
+			width: 100vw;
+			overflow: hidden;
+			display: flex;
+			padding: 16px;
+			gap: 16px;
+		}
+
+		/* ========================================= */
+		/* LEFT PANEL: CAMERA                        */
+		/* ========================================= */
+		.camera-panel {
+			flex: 1;
+			position: relative;
+			background: #000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			overflow: hidden;
+			border-radius: var(--radius-large);
+			/* M3 uses tonal difference, but black needs no border */
+		}
+
+		.camera-panel img {
+			position: absolute;
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			transform: scaleX(-1);
+		}
+
+		.camera-overlay-message {
+			position: absolute;
+			z-index: 20;
+			color: var(--md-sys-color-surface-container-low);
+			text-align: center;
+			pointer-events: none;
+			background: rgba(30, 30, 30, 0.6);
+			padding: 32px;
+			border-radius: var(--radius-large);
+			backdrop-filter: blur(8px);
+		}
+
+		.camera-overlay-message .icon {
+			font-size: 48px;
+			margin-bottom: 16px;
+			display: block;
+			opacity: 0.8;
+		}
+
+		/* Camera Badge */
+		.camera-badge {
+			position: absolute;
+			top: 24px;
+			left: 24px;
+			z-index: 30;
+			background: var(--md-sys-color-error);
+			color: white;
+			font-size: 12px;
+			font-weight: 500;
+			padding: 8px 16px;
+			border-radius: var(--radius-full);
+			display: none;
+			align-items: center;
+			gap: 8px;
+			letter-spacing: 0.5px;
+			box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+		}
+
+		.camera-badge.live {
+			display: flex;
+		}
+
+		.live-dot {
+			width: 8px;
+			height: 8px;
+			background: white;
+			border-radius: 50%;
+			animation: blink 1s infinite;
+		}
+
+		@keyframes blink {
+			50% {
+				opacity: 0.5;
+			}
+		}
+
+		/* ========================================= */
+		/* RIGHT PANEL: CONTROLS & INFO              */
+		/* ========================================= */
+		.control-panel {
+			width: 420px;
+			padding: 8px;
+			/* Internal padding handled by cards */
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+			overflow-y: auto;
+			gap: 16px;
+			/* Hide scrollbar for cleaner look */
+			scrollbar-width: none;
+		}
+
+		.control-panel::-webkit-scrollbar {
+			display: none;
+		}
+
+		header {
+			margin: 8px 4px 16px 4px;
+		}
+
+		.logo {
+			font-size: 11px;
+			font-weight: 700;
+			letter-spacing: 1.5px;
+			text-transform: uppercase;
+			color: var(--md-sys-color-primary);
+			margin-bottom: 8px;
+			background: var(--md-sys-color-primary-container);
+			color: var(--md-sys-color-on-primary-container);
+			display: inline-block;
+			padding: 4px 12px;
+			border-radius: var(--radius-full);
+		}
+
+		h1 {
+			font-family: 'Google Sans', sans-serif;
+			font-size: 32px;
+			font-weight: 400;
+			color: var(--md-sys-color-on-surface);
+			letter-spacing: -0.5px;
+			line-height: 1.2;
+		}
+
+		.subtitle {
+			font-size: 16px;
+			color: var(--md-sys-color-on-surface-variant);
+			margin-top: 8px;
+			font-weight: 400;
+		}
+
+		/* M3 Cards (Filled Card Variant) */
+		.card {
+			background: var(--md-sys-color-surface-container);
+			border: none;
+			/* Removed border */
+			padding: 24px;
+			border-radius: var(--radius-large);
+			transition: background 0.2s;
+		}
+
+		.card-title {
+			font-size: 20px;
+			/* Title Large */
+			font-weight: 400;
+			margin-bottom: 24px;
+			color: var(--md-sys-color-on-surface);
+			display: flex;
+			align-items: center;
+			gap: 12px;
+		}
+
+		/* Removed the blue pill bar before title for cleaner M3 look */
+		.card-title::before {
+			display: none;
+		}
+
+		/* Sensor Grid */
+		.sensor-grid {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 8px;
+		}
+
+		/* Sensor Chips */
+		.sensor-card {
+			background: var(--md-sys-color-surface);
+			/* Contrast against card bg */
+			border: 1px solid transparent;
+			padding: 16px 8px;
+			text-align: center;
+			border-radius: var(--radius-medium);
+			transition: all 0.3s cubic-bezier(0.2, 0.0, 0, 1.0);
+		}
+
+		/* Connected State = Primary Container */
+		.sensor-card.connected {
+			background: var(--md-sys-color-success-container);
+			color: var(--md-sys-color-on-success-container);
+		}
+
+		.sensor-card.disconnected {
+			background: var(--md-sys-color-surface-container-high);
+			color: var(--md-sys-color-on-surface-variant);
+			opacity: 1;
+			/* M3 doesn't use opacity for disabled usually */
+		}
+
+		.sensor-icon {
+			font-size: 24px;
+			display: block;
+			margin-bottom: 8px;
+		}
+
+		.sensor-name {
+			font-size: 11px;
+			font-weight: 700;
+			letter-spacing: 0.5px;
+			text-transform: uppercase;
+		}
+
+		.status-label {
+			font-size: 12px;
+			font-weight: 500;
+			margin-top: 4px;
+		}
+
+		/* Buttons */
+		.camera-controls {
+			display: flex;
+			gap: 12px;
+			margin-bottom: 16px;
+		}
+
+		/* M3 Segmented Button / Tonal Button Style */
+		.btn-camera {
+			flex: 1;
+			padding: 0 24px;
+			height: 48px;
+			font-size: 14px;
+			font-weight: 500;
+			border: none;
+			background: var(--md-sys-color-secondary-container);
+			color: var(--md-sys-color-on-secondary-container);
+			cursor: pointer;
+			border-radius: var(--radius-full);
+			transition: background 0.2s;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+		}
+
+		.btn-camera:hover {
+			box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+		}
+
+		.btn-camera-stop {
+			background: var(--md-sys-color-error-container);
+			color: var(--md-sys-color-on-error-container);
+		}
+
+		/* Filled Button (Primary) */
+		.btn-primary {
+			width: 100%;
+			height: 48px;
+			padding: 0 24px;
+			background: var(--md-sys-color-primary);
+			color: var(--md-sys-color-on-primary);
+			border: none;
+			font-family: 'Google Sans', sans-serif;
+			font-weight: 500;
+			font-size: 14px;
+			letter-spacing: 0.25px;
+			border-radius: var(--radius-full);
+			cursor: pointer;
+			margin-top: 24px;
+			box-shadow: none;
+			/* M3 relies on color weight mostly */
+			transition: box-shadow 0.2s ease;
+		}
+
+		.btn-primary:hover {
+			box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+			background: #004A77;
+			/* Slight darken manually or use state layer */
+		}
+
+		/* Outlined Button */
+		.btn-outline {
+			background: transparent;
+			color: var(--md-sys-color-primary);
+			border: 1px solid var(--md-sys-color-outline);
+			margin-top: 16px;
+		}
+
+		.btn-outline:hover {
+			background: var(--md-sys-color-surface-container-high);
+			border-color: var(--md-sys-color-primary);
+		}
+
+		/* Form Controls (M3 Text Fields) */
+		.form-group {
+			margin-bottom: 20px;
+			position: relative;
+		}
+
+		label {
+			font-size: 12px;
+			font-weight: 500;
+			color: var(--md-sys-color-on-surface-variant);
+			margin-bottom: 8px;
+			display: block;
+			margin-left: 4px;
+		}
+
+		input {
+			width: 100%;
+			height: 56px;
+			padding: 8px 16px;
+			background: var(--md-sys-color-surface-container-high);
+			border: 1px solid transparent;
+			/* Filled text field style */
+			border-bottom: 1px solid var(--md-sys-color-outline);
+			color: var(--md-sys-color-on-surface);
+			font-family: inherit;
+			font-size: 16px;
+			border-radius: 4px 4px 0 0;
+			/* Traditional M3 Filled Input radius */
+			transition: all 0.2s;
+		}
+
+		/* To make it "Expressive", let's use the fully rounded variant sometimes seen */
+		input {
+			border-radius: 12px;
+			border: none;
+		}
+
+		input:focus {
+			background: var(--md-sys-color-surface-container-high);
+			outline: 2px solid var(--md-sys-color-primary);
+			outline-offset: -2px;
+		}
+
+		/* Animation Area */
+		.instruction-animation {
+			width: 100%;
+			height: 120px;
+			background: var(--md-sys-color-surface-container-high);
+			border-radius: var(--radius-medium);
+			margin-bottom: 24px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			overflow: hidden;
+		}
+
+		.instruction-animation .circle-ripple {
+			width: 24px;
+			height: 24px;
+			background: var(--md-sys-color-primary);
+			border-radius: 50%;
+			animation: pulse 1.5s cubic-bezier(0.2, 0, 0, 1) infinite;
+			box-shadow: 0 0 0 0 rgba(11, 87, 208, 0.7);
+		}
+
+		@keyframes pulse {
+			0% {
+				transform: scale(0.95);
+				box-shadow: 0 0 0 0 rgba(11, 87, 208, 0.7);
+			}
+
+			70% {
+				transform: scale(1);
+				box-shadow: 0 0 0 60px rgba(11, 87, 208, 0);
+			}
+
+			100% {
+				transform: scale(0.95);
+				box-shadow: 0 0 0 0 rgba(11, 87, 208, 0);
+			}
+		}
+
+		.phase-instruction {
+			font-size: 14px;
+			color: var(--md-sys-color-on-surface-variant);
+			line-height: 1.6;
+			text-align: center;
+		}
+
+		.phase-instruction strong {
+			color: var(--md-sys-color-on-surface);
+			display: block;
+			font-size: 18px;
+			/* Headline Small */
+			margin-bottom: 8px;
+			font-weight: 500;
+		}
+
+		/* Alerts */
+		.phase-alert {
+			background: var(--md-sys-color-error-container);
+			color: var(--md-sys-color-on-error-container);
+			padding: 16px;
+			border-radius: var(--radius-medium);
+			font-size: 14px;
+			font-weight: 500;
+			margin-top: 16px;
+			display: none;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			box-shadow: none;
+		}
+
+		.phase-alert.visible {
+			display: flex;
+		}
+
+		/* Progress Stepper */
+		.step-item {
+			display: flex;
+			align-items: center;
+			gap: 16px;
+			padding: 16px 12px;
+			border-radius: 12px;
+			/* Active background radius */
+			font-size: 14px;
+			color: var(--md-sys-color-on-surface-variant);
+			font-weight: 500;
+			transition: all 0.3s;
+			border: none;
+		}
+
+		.step-item.active {
+			background: var(--md-sys-color-surface-container-high);
+			color: var(--md-sys-color-on-surface);
+		}
+
+		.step-circle {
+			width: 28px;
+			height: 28px;
+			border-radius: 50%;
+			background: var(--md-sys-color-surface-container-high);
+			color: var(--md-sys-color-on-surface-variant);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 12px;
+			font-weight: 700;
+		}
+
+		.step-item.active .step-circle {
+			background: var(--md-sys-color-primary);
+			color: var(--md-sys-color-on-primary);
+		}
+
+		.step-item.completed .step-circle {
+			background: var(--md-sys-color-success-container);
+			color: var(--md-sys-color-on-success-container);
+			content: "✓";
+		}
+
+		/* Status Message Box */
+		#statusMessage {
+			margin-top: 16px;
+			padding: 16px;
+			border-radius: var(--radius-medium);
+			background: var(--md-sys-color-primary-container) !important;
+			color: var(--md-sys-color-on-primary-container) !important;
+			font-weight: 500;
+			font-size: 14px;
+			display: flex;
+			align-items: center;
+			gap: 12px;
+		}
+
+		/* Responsive */
+		@media (max-width: 900px) {
+			body {
+				flex-direction: column;
+				overflow-y: auto;
+				height: auto;
+				padding: 12px;
+			}
+
+			.camera-panel {
+				height: 50vh;
+				min-height: 350px;
+				width: 100%;
+				margin: 0;
+			}
+
+			.control-panel {
+				width: 100%;
+				height: auto;
+				overflow: visible;
+				padding: 0;
+			}
+		}
+
+		/* AI Overlay */
+		.ai-processing-overlay {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: rgba(0, 0, 0, 0.7);
+			backdrop-filter: blur(16px);
+			display: none;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			z-index: 50;
+			color: white;
+		}
+
+		.ai-spinner {
+			width: 56px;
+			height: 56px;
+			border: 6px solid rgba(255, 255, 255, 0.2);
+			border-top: 6px solid var(--md-sys-color-primary);
+			border-radius: 50%;
+			animation: spin 1s linear infinite;
+			margin-bottom: 24px;
+		}
+
+		@keyframes spin {
+			0% {
+				transform: rotate(0deg);
+			}
+
+			100% {
+				transform: rotate(360deg);
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<!-- SIDEBAR -->
+	<aside class="app-sidebar">
+		<div class="logo-container">
+			<div class="logo">Chiranjeevi</div>
+		</div>
+		
+		<nav class="nav-menu">
+			<a href="index.html" class="nav-item">
+				<span class="nav-icon">🏠</span>
+				<span class="nav-text">Home</span>
+			</a>
+			<a href="old_index.html" class="nav-item active">
+				<span class="nav-icon">🔬</span>
+				<span class="nav-text">Screening</span>
+			</a>
+			<a href="chatbot.html" class="nav-item">
+				<span class="nav-icon">💬</span>
+				<span class="nav-text">CHIRANJEEVAI</span>
+			</a>
+		</nav>
+
+		<div class="sidebar-footer">
+			v2.0 • Unified Platform
+		</div>
+	</aside>
+
+	<!-- MAIN CONTENT -->
+	<main class="main-content" style="padding: 16px; display: flex; gap: 16px;">
+	<!-- LEFT: CAMERA PANEL -->
+	<div class="camera-panel" id="cameraPanel">
+		<div class="camera-badge" id="liveBadge">
+			<span class="live-dot"></span> LIVE
+		</div>
+
+		<div class="camera-overlay-message" id="cameraPlaceholder">
+			<span class="icon">📷</span>
+			<h2>Camera Feed Loading</h2>
+			<p>Connecting to backend camera...</p>
+		</div>
+
+		<div class="ai-processing-overlay" id="aiOverlay">
+			<div class="ai-spinner"></div>
+			<h2 style="font-size: 24px; margin-bottom: 8px;">AI Analysis In Progress</h2>
+			<p style="opacity: 0.9; font-size: 14px;">Generating comprehensive health report...</p>
+		</div>
+
+		<img id="cameraFeed" src="http://localhost:8000/api/v1/hardware/video-feed" style="display: none"
+			alt="Live Camera Feed" />
+	</div>
+
+	<!-- RIGHT: CONTROLS PANEL -->
+	<div class="control-panel">
+		<header>
+			<div class="logo">Chiranjeevi</div>
+			<h1>Health Screening</h1>
+			<p class="subtitle">Non-invasive AI health analysis</p>
+		</header>
+
+		<!-- DEBUG CONSOLE -->
+
+
+		<!-- 1. SENSORS & CAMERA CONTROLS -->
+		<div class="card">
+			<h2 class="card-title">System Controls</h2>
+
+			<div class="camera-controls">
+				<button class="btn-camera btn-camera-start" id="startCameraBtn" onclick="toggleCamera()">
+					▶ Show Camera
+				</button>
+			</div>
+
+			<div class="sensor-grid">
+				<div class="sensor-card disconnected" id="sensorCamera">
+					<span class="sensor-icon">📷</span>
+					<div class="sensor-name">RGB</div>
+					<div class="status-label">Disc.</div>
+				</div>
+				<div class="sensor-card disconnected" id="sensorEsp32">
+					<span class="sensor-icon">🌡️</span>
+					<div class="sensor-name">Thermal</div>
+					<div class="status-label">Disc.</div>
+				</div>
+				<div class="sensor-card disconnected" id="sensorRadar">
+					<span class="sensor-icon">📡</span>
+					<div class="sensor-name">Radar</div>
+					<div class="status-label">Disc.</div>
+				</div>
+			</div>
+
+			<button class="btn-primary btn-outline" id="checkSensorsBtn" onclick="checkSensors()">
+				Check Sensor Connectivity
+			</button>
+		</div>
+
+		<!-- 2. CONFIGURATION FORM -->
+		<div class="card" id="configCard">
+			<h2 class="card-title">Configuration</h2>
+			<form id="screeningForm">
+				<div class="form-group">
+					<label>Patient ID</label>
+					<input type="text" id="patientId" value="PATIENT_001" />
+				</div>
+				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+					<div class="form-group">
+						<label>Radar Port</label>
+						<input type="text" id="radarPort" value="COM7" />
+					</div>
+					<div class="form-group">
+						<label>Thermal Port</label>
+						<input type="text" id="esp32Port" value="COM6" />
+					</div>
+				</div>
+				<button type="submit" class="btn-primary" id="startBtn">
+					Start Screening Flow
+				</button>
+			</form>
+		</div>
+
+		<!-- 3. SCREENING GUIDE -->
+		<div class="card instruction-card">
+			<h2 class="card-title">Screening Guide</h2>
+
+			<div class="instruction-animation">
+				<div class="circle-ripple"></div>
+			</div>
+
+			<div class="phase-instruction" id="phaseInstruction">
+				<strong>Ready to Start</strong>
+				Please ensure all sensors are connected. Stand in the center of the
+				frame.
+			</div>
+
+			<div class="phase-alert" id="phaseAlert">
+				<span id="phaseAlertIcon">⚠️</span>
+				<span id="phaseAlertText">Alert text here</span>
+			</div>
+
+			<div id="activeBiomarkers" style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px"></div>
+		</div>
+
+		<!-- 4. STATUS & RESULTS -->
+		<div class="card status-card" id="statusCard" style="display: none">
+			<h2 class="card-title">Status</h2>
+
+			<div class="step-list" id="progressSteps">
+				<div class="step-item" data-step="init">
+					<div class="step-circle">1</div>
+					Initializing
+				</div>
+				<div class="step-item" data-step="vitals">
+					<div class="step-circle">2</div>
+					Vitals Collection (10s)
+				</div>
+				<div class="step-item" data-step="baseline">
+					<div class="step-circle">3</div>
+					Baseline Calibration
+				</div>
+				<div class="step-item" data-step="capture">
+					<div class="step-circle">4</div>
+					Face Analysis (10s)
+				</div>
+				<div class="step-item" data-step="pose">
+					<div class="step-circle">5</div>
+					Body Analysis (10s)
+				</div>
+				<div class="step-item" data-step="process">
+					<div class="step-circle">6</div>
+					AI Processing
+				</div>
+			</div>
+
+			<div id="statusMessage" style="
+						padding: 12px;
+						border-radius: 8px;
+						background: rgba(99, 102, 241, 0.1);
+						color: white;
+						display: flex;
+						gap: 10px;
+						align-items: center;
+						font-size: 14px;
+					">
+				<span>⏳</span> <span id="statusText">Waiting...</span>
+			</div>
+
+			<div id="downloadSection" style="margin-top: 16px; display: none">
+				<a href="#" class="btn-primary" id="downloadPatient" target="_blank" style="
+							display: block;
+							text-align: center;
+							text-decoration: none;
+							margin-bottom: 8px;
+						">Download Patient Report</a>
+			</div>
+		</div>
+
+		<div style="
+					text-align: center;
+					color: var(--text-secondary);
+					font-size: 11px;
+					margin-top: auto;
+					padding-top: 20px;
+				">
+			Chiranjeevi v2.0 • Unified Architecture
+		</div>
+	</div>
+	</main>
+
+	<script>
+		const API_BASE = "http://localhost:8000";
+		let cameraShowing = false;
+		let pollInterval = null;
+
+
+
+		// ===== CAMERA TOGGLE (backend-owned MJPEG stream) =====
+		function toggleCamera() {
+			const feed = document.getElementById("cameraFeed");
+			const placeholder = document.getElementById("cameraPlaceholder");
+			const badge = document.getElementById("liveBadge");
+			const btn = document.getElementById("startCameraBtn");
+
+			if (!cameraShowing) {
+				// Show MJPEG stream from backend
+				feed.src = `${API_BASE}/api/v1/hardware/video-feed?t=${Date.now()}`;
+				feed.style.display = "block";
+				placeholder.style.display = "none";
+				badge.style.display = "flex";
+				btn.textContent = "⏹ Hide Camera";
+				btn.className = "btn-camera btn-camera-stop";
+				cameraShowing = true;
+				console.log("[info] Camera feed connected (backend MJPEG)");
+			} else {
+				// Hide stream (but backend keeps capturing)
+				feed.style.display = "none";
+				feed.src = "";
+				placeholder.style.display = "flex";
+				badge.style.display = "none";
+				btn.textContent = "▶ Show Camera";
+				btn.className = "btn-camera btn-camera-start";
+				cameraShowing = false;
+				console.log("[info] Camera feed hidden (backend still capturing)");
+			}
+		}
+
+		// ===== CHECK SENSORS =====
+		async function checkSensors() {
+			try {
+				const res = await fetch(`${API_BASE}/api/v1/hardware/sensor-status`);
+				const data = await res.json();
+
+				updateSensorCard("sensorCamera", data.camera);
+				updateSensorCard("sensorEsp32", data.esp32);
+				updateSensorCard("sensorRadar", data.radar);
+				console.log("[info] Sensor check complete");
+			} catch (e) {
+				console.error(`[error] Sensor check failed: ${e.message}`);
+			}
+		}
+
+		function updateSensorCard(cardId, sensorData) {
+			const card = document.getElementById(cardId);
+			if (!card) return;
+			const isConnected = sensorData.status === "connected";
+			card.className = `sensor-card ${isConnected ? "connected" : "disconnected"}`;
+			const label = card.querySelector(".status-label");
+			if (label) label.textContent = isConnected ? "Online" : "Disc.";
+		}
+
+		// ===== PHASE UI =====
+		function updatePhaseUI(phase, message) {
+			const instruction = document.getElementById("phaseInstruction");
+			const texts = {
+				IDLE: [
+					"SYSTEM READY",
+					"Please ensure all sensors are connected. Stand in the center of the frame.",
+				],
+				INITIALIZING: ["INITIALIZING", "Preparing sensors for analysis..."],
+				VITALS_COLLECTION: [
+					"VITALS COLLECTION",
+					message || "Collecting heart rate and respiration rate... Please sit still.",
+				],
+				BASELINE_CALIBRATION: [
+					"CALIBRATING ENVIRONMENT",
+					"Please stay still. Establishing environmental baseline for accurate analysis...",
+				],
+				FACE_ANALYSIS: [
+					"FACE ANALYSIS",
+					message || "Analyzing facial features and vital signs...",
+				],
+				BODY_ANALYSIS: [
+					"BODY ANALYSIS",
+					message || "Analyzing posture and movement patterns...",
+				],
+				PROCESSING: [
+					"AI DATA FUSION",
+					message || "Running biomarker extraction and risk assessment...",
+				],
+				COMPLETE: [
+					"SCREENING COMPLETE",
+					"Your health report is ready for download.",
+				],
+				ERROR: ["ERROR", message || "An error occurred during screening."],
+			};
+			const [title, desc] = texts[phase] || [
+				"PROCESSING",
+				message || "Please wait...",
+			];
+			instruction.innerHTML = `<strong>${title}</strong>${desc}`;
+
+			// Update biomarker tags
+			const marks = {
+				FACE_ANALYSIS: ["rPPG", "Ocular", "Thermal", "Skin", "Nasal"],
+				BODY_ANALYSIS: ["Skeletal", "Gait", "Posture", "Balance"],
+				PROCESSING: ["Fusion", "Risk", "LLM", "Report"],
+			};
+			const tagList = marks[phase] || [];
+			const html = tagList
+				.map(
+					(m) =>
+						`<span style="background:#E8F0FE; border: 1px solid var(--accent-blue); padding:4px 8px; font-size:9px; font-weight:700; color:var(--accent-blue); border-radius:6px;">${m}</span>`,
+				)
+				.join("");
+			document.getElementById("activeBiomarkers").innerHTML = html;
+
+			// Update step progress
+			const stepMap = {
+				INITIALIZING: "init",
+				VITALS_COLLECTION: "vitals",
+				BASELINE_CALIBRATION: "baseline",
+				FACE_ANALYSIS: "capture",
+				BODY_ANALYSIS: "pose",
+				PROCESSING: "process",
+				COMPLETE: "done",
+			};
+			const steps = ["init", "vitals", "baseline", "capture", "pose", "process"];
+			const activeIdx = steps.indexOf(stepMap[phase] || "");
+			document.querySelectorAll(".step-item").forEach((el, i) => {
+				el.className = "step-item";
+				if (i < activeIdx || phase === "COMPLETE")
+					el.classList.add("completed");
+				if (i < activeIdx || phase === "COMPLETE")
+					el.classList.add("completed");
+				else if (i === activeIdx) el.classList.add("active");
+			});
+
+			// Toggle AI Overlay
+			const aiOverlay = document.getElementById("aiOverlay");
+			if (phase === "PROCESSING") {
+				aiOverlay.style.display = "flex";
+			} else {
+				aiOverlay.style.display = "none";
+			}
+		}
+
+		// ===== START SCREENING =====
+		async function startScreening(e) {
+			console.log("Start button clicked");
+			if (e) e.preventDefault();
+
+			// Show status card, hide config
+			document.getElementById("statusCard").style.display = "block";
+			document.getElementById("configCard").style.opacity = "0.5";
+			document.getElementById("startBtn").disabled = true;
+			document.getElementById("downloadSection").style.display = "none";
+
+			// Ensure camera is visible
+			if (!cameraShowing) toggleCamera();
+
+			updatePhaseUI("INITIALIZING", "Preparing sensors...");
+			document.getElementById("statusText").textContent = "Starting...";
+
+			try {
+				// Launch scan (non-blocking — returns immediately)
+				const body = {
+					patient_id: document.getElementById("patientId").value,
+					radar_port: document.getElementById("radarPort").value,
+					esp32_port: document.getElementById("esp32Port").value,
+					camera_index: 0,
+				};
+
+				console.log("Starting screening...");
+				const res = await fetch(
+					`${API_BASE}/api/v1/hardware/start-screening`,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(body),
+					},
+				);
+
+				if (!res.ok) {
+					const errData = await res.json();
+					throw new Error(errData.detail || `Server error: ${res.status}`);
+				}
+
+				const data = await res.json();
+
+				if (data.status === "error") {
+					throw new Error(data.error || "Failed to start scan");
+				}
+
+				console.log("Scan started — polling for progress...");
+
+				// Start polling scan status
+				pollScanStatus();
+			} catch (e) {
+				console.error(`Start error: ${e.message}`);
+				document.getElementById("statusText").textContent =
+					"Error: " + e.message;
+				updatePhaseUI("ERROR", e.message);
+				resetUI();
+			}
+		}
+
+		// ===== POLL SCAN STATUS =====
+		function pollScanStatus() {
+			if (pollInterval) clearInterval(pollInterval);
+
+			pollInterval = setInterval(async () => {
+				try {
+					const res = await fetch(`${API_BASE}/api/v1/hardware/scan-status`);
+					const status = await res.json();
+
+					// Update UI
+					updatePhaseUI(status.phase, status.message);
+					document.getElementById("statusText").textContent =
+						`${status.message} (${status.progress}%)`;
+
+					// Display distance / alignment warnings from backend (Logic Restoration)
+					if (status.user_warnings) {
+						const { distance_warning, face_detected, pose_detected } = status.user_warnings;
+						const alertDiv = document.getElementById("phaseAlert");
+						const alertIcon = document.getElementById("phaseAlertIcon");
+						const alertText = document.getElementById("phaseAlertText");
+
+						if (distance_warning === "too_close") {
+							alertDiv.classList.add("visible");
+							alertIcon.textContent = "⚠️";
+							alertText.textContent = "TOO CLOSE — Move back from the camera";
+						} else if (distance_warning === "too_far") {
+							alertDiv.classList.add("visible");
+							alertIcon.textContent = "⚠️";
+							alertText.textContent = "TOO FAR — Move closer to the camera";
+						} else if (status.phase === "FACE_ANALYSIS" && !face_detected) {
+							alertDiv.classList.add("visible");
+							alertIcon.textContent = "👤";
+							alertText.textContent = "FACE NOT DETECTED — Center your face";
+						} else if (status.phase === "BODY_ANALYSIS" && !pose_detected) {
+							alertDiv.classList.add("visible");
+							alertIcon.textContent = "🚶";
+							alertText.textContent = "BODY NOT DETECTED — Step back until fully visible";
+						} else {
+							alertDiv.classList.remove("visible");
+						}
+					}
+
+					// Check terminal states
+					if (status.state === "complete") {
+						clearInterval(pollInterval);
+						pollInterval = null;
+						onScanComplete(status);
+					} else if (status.state === "error") {
+						clearInterval(pollInterval);
+						pollInterval = null;
+						onScanError(status.message);
+					}
+				} catch (e) {
+					console.error(`Poll error: ${e.message}`);
+				}
+			}, 500); // Poll every 500ms
+		}
+
+		// ===== SCAN COMPLETE =====
+		function onScanComplete(status) {
+			console.log("Screening complete!");
+			updatePhaseUI("COMPLETE", "Screening complete!");
+			document.getElementById("statusText").textContent =
+				"✅ Screening complete!";
+
+			// Show download link
+			if (status.patient_report_id) {
+				document.getElementById("downloadPatient").href =
+					`${API_BASE}/api/v1/reports/${status.patient_report_id}/download`;
+				document.getElementById("downloadSection").style.display = "block";
+			}
+
+			resetUI();
+		}
+
+		// ===== SCAN ERROR =====
+		function onScanError(msg) {
+			console.error(`Scan error: ${msg}`);
+			updatePhaseUI("ERROR", msg);
+			document.getElementById("statusText").textContent = "❌ Error: " + msg;
+			resetUI();
+		}
+
+		// ===== RESET UI =====
+		function resetUI() {
+			document.getElementById("configCard").style.opacity = "1";
+			document.getElementById("startBtn").disabled = false;
+		}
+
+		// ===== ERROR HANDLERS =====
+		window.onerror = function (msg, url, line) {
+			console.error(`JS Error: ${msg} (Line ${line})`);
+			return false;
+		};
+		window.addEventListener("unhandledrejection", function (event) {
+			console.error(`Promise Error: ${event.reason}`);
+		});
+
+		// ===== INIT =====
+		window.onload = () => {
+			// Wire form submit
+			const form = document.getElementById("screeningForm");
+			if (form) form.addEventListener("submit", startScreening);
+
+			// Auto-connect camera and check sensors
+			setTimeout(() => {
+				checkSensors();
+				toggleCamera(); // Auto-show MJPEG feed
+				startContinuousWarningCheck(); // Start continuous distance warning polling
+			}, 500);
+		};
+
+		// ===== CONTINUOUS WARNING CHECK =====
+		let warningCheckInterval = null;
+		function startContinuousWarningCheck() {
+			// Poll status every 500ms to show distance warnings even before scan starts
+			if (warningCheckInterval) clearInterval(warningCheckInterval);
+
+			warningCheckInterval = setInterval(async () => {
+				try {
+					const res = await fetch(`${API_BASE}/api/v1/hardware/scan-status`);
+					const status = await res.json();
+
+					// Only update warnings if not actively scanning (to avoid conflict with pollScanStatus)
+					if (status.state === "idle" || status.state === "complete") {
+						if (status.user_warnings) {
+							const { distance_warning, face_detected } =
+								status.user_warnings;
+							const alertDiv = document.getElementById("phaseAlert");
+							const alertIcon = document.getElementById("phaseAlertIcon");
+							const alertText = document.getElementById("phaseAlertText");
+
+							if (distance_warning === "too_close") {
+								alertDiv.classList.add("visible");
+								alertIcon.textContent = "⚠️";
+								alertText.textContent =
+									"TOO CLOSE — Please move back from the camera";
+							} else if (distance_warning === "too_far") {
+								alertDiv.classList.add("visible");
+								alertIcon.textContent = "⚠️";
+								alertText.textContent =
+									"TOO FAR — Please move closer to the camera";
+							} else if (!face_detected) {
+								alertDiv.classList.add("visible");
+								alertIcon.textContent = "👤";
+								alertText.textContent =
+									"NO FACE DETECTED — Position yourself in frame";
+							} else {
+								alertDiv.classList.remove("visible");
+							}
+						}
+					}
+				} catch (e) {
+					// Silent fail for continuous check
+				}
+			}, 500);
+		}
+	</script>
+</body>
+
+</html>
