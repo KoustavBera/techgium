@@ -1,0 +1,392 @@
+[32m[2026-02-14T05:57:52.711247+00:00] INFO     [app.core.hardware.manager] HardwareManager singleton created[0m
+
+[1/5] Initializing Hardware...
+[32m[2026-02-14T05:57:52.711247+00:00] INFO     [app.core.hardware.manager] ============================================================[0m
+[32m[2026-02-14T05:57:52.711247+00:00] INFO     [app.core.hardware.manager] HardwareManager starting up (Unified Architecture)[0m
+[32m[2026-02-14T05:57:52.711247+00:00] INFO     [app.core.hardware.manager] ============================================================[0m
+[32m[2026-02-14T05:57:52.711247+00:00] INFO     [app.core.hardware.drivers] Γ£à FaceDetector (Legacy) initialized[0m
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+W0000 00:00:1771048672.715704   29496 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[32m[2026-02-14T05:57:52.719057+00:00] INFO     [app.core.hardware.drivers] Γ£à PoseLandmarker (Legacy) initialized[0m
+[32m[2026-02-14T05:57:52.724318+00:00] INFO     [app.core.hardware.drivers] Γ£à FaceMesh initialized (478 landmarks)[0m
+W0000 00:00:1771048672.727937   19888 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771048672.738331    3060 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771048672.797160   10232 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771048672.813707   10232 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[32m[2026-02-14T05:57:55.119145+00:00] INFO     [app.core.hardware.drivers] Camera 0 opened with threaded capture[0m
+[32m[2026-02-14T05:57:55.119145+00:00] INFO     [app.core.hardware.manager] Γ£à Camera 0 opened[0m
+[32m[2026-02-14T05:57:55.123400+00:00] INFO     [app.core.hardware.drivers] Connected to Seeed Radar Kit (MR60BHA2) on COM7[0m
+[32m[2026-02-14T05:57:55.124354+00:00] INFO     [app.core.hardware.manager] Γ£à Radar connected on COM7[0m
+[32m[2026-02-14T05:57:55.187839+00:00] INFO     [app.core.hardware.drivers] Connected to ESP32 NodeMCU (Thermal MLX90640) on COM6[0m
+[32m[2026-02-14T05:57:55.188901+00:00] INFO     [app.core.hardware.manager] Γ£à Thermal connected on COM6[0m
+[32m[2026-02-14T05:57:55.188901+00:00] INFO     [app.core.extraction.base] CardiovascularExtractor initialized for cardiovascular[0m
+[32m[2026-02-14T05:57:55.188901+00:00] INFO     [app.core.extraction.base] CNSExtractor initialized for central_nervous_system[0m
+[32m[2026-02-14T05:57:55.188901+00:00] INFO     [app.core.extraction.base] SkeletalExtractor initialized for skeletal[0m
+[32m[2026-02-14T05:57:55.188901+00:00] INFO     [app.core.extraction.base] SkinExtractor initialized for skin[0m
+[32m[2026-02-14T05:57:55.194575+00:00] INFO     [app.core.extraction.base] PulmonaryExtractor initialized for pulmonary[0m
+[32m[2026-02-14T05:57:55.194575+00:00] INFO     [app.core.extraction.base] RenalExtractor initialized for renal[0m
+[32m[2026-02-14T05:57:55.194575+00:00] INFO     [app.core.extraction.base] EyeExtractor initialized for eyes[0m
+[32m[2026-02-14T05:57:55.194575+00:00] INFO     [app.core.extraction.base] NasalExtractor initialized for nasal[0m
+[32m[2026-02-14T05:57:55.194575+00:00] INFO     [app.core.hardware.manager] Γ£à All 8 extractors initialized[0m
+W0000 00:00:1771048675.197811    4688 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[32m[2026-02-14T05:57:55.197678+00:00] INFO     [app.core.hardware.manager] Γ£à Continuous capture thread started[0m
+[32m[2026-02-14T05:57:55.197678+00:00] INFO     [app.core.hardware.manager] HardwareManager startup complete[0m
+W0000 00:00:1771048675.209172   28232 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+   - Camera: connected
+   - Radar: connected
+   - Thermal: connected
+
+[PROPOSED FIX] Clearing stale buffer data...
+   Γ£à Queues cleared.
+
+   ≡ƒôí PHASE 0: Vitals Collection (10s)
+   Please sit still for accurate readings...
+   Collecting Vitals... 10s
+[32m[2026-02-14T05:57:55.302918+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=94.00000 RR=None[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:57:55.902833+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=91.00000 RR=None[0m
+   Collecting Vitals... 9s
+[32m[2026-02-14T05:57:56.497253+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=88.00000 RR=None[0m
+[32m[2026-02-14T05:57:56.986190+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=22.00000[0m
+[32m[2026-02-14T05:57:57.105784+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=85.00000 RR=None[0m
+   Collecting Vitals... 8s
+[32m[2026-02-14T05:57:57.696559+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=21.00000[0m
+[32m[2026-02-14T05:57:57.718797+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=83.00000 RR=None[0m
+   Collecting Vitals... 7s
+[32m[2026-02-14T05:57:58.322359+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=81.00000 RR=None[0m
+[32m[2026-02-14T05:57:58.555756+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=20.00000[0m
+[32m[2026-02-14T05:57:58.926056+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=79.00000 RR=None[0m
+[32m[2026-02-14T05:57:59.032636+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=19.00000[0m
+   Collecting Vitals... 6s
+[32m[2026-02-14T05:57:59.511125+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=18.00000[0m
+[32m[2026-02-14T05:57:59.511125+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=78.00000 RR=None[0m
+[32m[2026-02-14T05:57:59.763414+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=17.00000[0m
+[32m[2026-02-14T05:57:59.892445+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=16.00000[0m
+[32m[2026-02-14T05:58:00.009190+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=15.00000[0m
+[32m[2026-02-14T05:58:00.120446+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=76.00000 RR=None[0m
+   Collecting Vitals... 5s
+[32m[2026-02-14T05:58:00.249757+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=14.00000[0m
+[32m[2026-02-14T05:58:00.366921+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=13.00000[0m
+[32m[2026-02-14T05:58:00.602061+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=12.00000[0m
+[32m[2026-02-14T05:58:00.729570+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=11.00000[0m
+[32m[2026-02-14T05:58:00.732784+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=75.00000 RR=None[0m
+[32m[2026-02-14T05:58:00.973203+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=10.00000[0m
+[32m[2026-02-14T05:58:01.209000+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=9.00000[0m
+   Collecting Vitals... 4s
+[32m[2026-02-14T05:58:01.338616+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=74.00000 RR=None[0m
+[32m[2026-02-14T05:58:01.454691+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=8.00000[0m
+[32m[2026-02-14T05:58:01.814796+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=7.00000[0m
+[32m[2026-02-14T05:58:01.942420+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=71.00000 RR=None[0m
+[32m[2026-02-14T05:58:02.056020+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=6.00000[0m
+   Collecting Vitals... 3s
+[32m[2026-02-14T05:58:02.540736+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=5.00000[0m
+[32m[2026-02-14T05:58:02.541752+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=70.00000 RR=None[0m
+[32m[2026-02-14T05:58:03.016695+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=4.00000[0m
+[32m[2026-02-14T05:58:03.145150+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=68.00000 RR=None[0m
+   Collecting Vitals... 2s
+[32m[2026-02-14T05:58:03.503200+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=5.00000[0m
+[32m[2026-02-14T05:58:03.747380+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=6.00000[0m
+[32m[2026-02-14T05:58:03.747380+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=66.00000 RR=None[0m
+[32m[2026-02-14T05:58:03.865206+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=5.00000[0m
+   Collecting Vitals... 1s
+[32m[2026-02-14T05:58:04.345585+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=4.00000[0m
+[32m[2026-02-14T05:58:04.355880+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=64.00000 RR=None[0m
+[32m[2026-02-14T05:58:04.960034+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=3.00000[0m
+   Collecting Vitals... Done!
+
+   ΓÅ│ PHASE 0.5: Baseline Calibration (5s)
+   Establishing environmental baseline...
+   Calibrating... 5s
+[32m[2026-02-14T05:58:05.563474+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=65.00000 RR=None[0m
+[32m[2026-02-14T05:58:05.798255+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=2.00000[0m
+[32m[2026-02-14T05:58:06.172255+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=68.00000 RR=None[0m
+   Calibrating... 4s
+[32m[2026-02-14T05:58:06.767334+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=71.00000 RR=None[0m
+[32m[2026-02-14T05:58:07.012997+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=1.00000[0m
+   Calibrating... 3s
+[32m[2026-02-14T05:58:07.373322+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=74.00000 RR=None[0m
+[32m[2026-02-14T05:58:07.980652+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=77.00000 RR=None[0m
+   Calibrating... 2s
+[32m[2026-02-14T05:58:08.573334+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=80.00000 RR=None[0m
+[32m[2026-02-14T05:58:09.197069+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=83.00000 RR=None[0m
+   Calibrating... 1s
+[32m[2026-02-14T05:58:09.796894+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=85.00000 RR=None[0m
+   Calibrating... Done!
+
+   ≡ƒô╕ PHASE 1: Face Analysis (10s)
+   Please look at the camera...
+[32m[2026-02-14T05:58:10.278468+00:00] INFO     [app.core.hardware.drivers] Driver-level recording started[0m
+   Scanning... 10s
+[32m[2026-02-14T05:58:10.398102+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=86.00000 RR=None[0m
+[32m[2026-02-14T05:58:11.017832+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=88.00000 RR=None[0m
+   Scanning... 9s
+[32m[2026-02-14T05:58:11.609683+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=89.00000 RR=None[0m
+[32m[2026-02-14T05:58:12.222089+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=90.00000 RR=None[0m
+   Scanning... 8s
+[32m[2026-02-14T05:58:13.192337+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=0.00000[0m
+[32m[2026-02-14T05:58:13.192337+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=0.00000 RR=None[0m
+   Scanning... 7s
+   Scanning... 6s
+   Scanning... 5s
+   Scanning... 4s
+   Scanning... 3s
+   Scanning... 2s
+   Scanning... 1s
+[32m[2026-02-14T05:58:19.638588+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=1.00000[0m
+[32m[2026-02-14T05:58:20.002378+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=3.00000[0m
+[32m[2026-02-14T05:58:20.004428+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=91.00000 RR=None[0m
+[32m[2026-02-14T05:58:20.261477+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=4.00000[0m
+   Scanning... Done!
+[32m[2026-02-14T05:58:20.344810+00:00] INFO     [app.core.hardware.drivers] Driver-level recording stopped. Captured 302 frames.[0m
+   Γ£à Captured 302 face frames
+
+   ≡ƒÜ╢ PHASE 2: Body Analysis (10s)
+   Please show your full body...
+[32m[2026-02-14T05:58:20.345552+00:00] INFO     [app.core.hardware.drivers] Driver-level recording started[0m
+   Scanning... 10s
+[32m[2026-02-14T05:58:20.493599+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=5.00000[0m
+[32m[2026-02-14T05:58:20.738603+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=6.00000[0m
+[32m[2026-02-14T05:58:20.991429+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=7.00000[0m
+[32m[2026-02-14T05:58:21.248930+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=8.00000[0m
+   Scanning... 9s
+[32m[2026-02-14T05:58:21.486808+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=9.00000[0m
+[32m[2026-02-14T05:58:21.850601+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=10.00000[0m
+[32m[2026-02-14T05:58:21.991116+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=11.00000[0m
+[32m[2026-02-14T05:58:22.249641+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=12.00000[0m
+   Scanning... 8s
+[32m[2026-02-14T05:58:22.596865+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=13.00000[0m
+[32m[2026-02-14T05:58:23.095484+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=14.00000[0m
+   Scanning... 7s
+[32m[2026-02-14T05:58:23.581142+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=15.00000[0m
+[32m[2026-02-14T05:58:24.209303+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=16.00000[0m
+   Scanning... 6s
+[32m[2026-02-14T05:58:24.455053+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=15.00000[0m
+   Scanning... 5s
+[32m[2026-02-14T05:58:25.430843+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=16.00000[0m
+[32m[2026-02-14T05:58:25.559944+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=89.00000 RR=None[0m
+[32m[2026-02-14T05:58:26.178775+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=86.00000 RR=None[0m
+[32m[2026-02-14T05:58:26.295380+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=17.00000[0m
+   Scanning... 4s
+[32m[2026-02-14T05:58:26.792307+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=83.00000 RR=None[0m
+[32m[2026-02-14T05:58:27.259485+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=18.00000[0m
+[32m[2026-02-14T05:58:27.378605+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=80.00000 RR=None[0m
+   Scanning... 3s
+[32m[2026-02-14T05:58:27.752187+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=19.00000[0m
+[32m[2026-02-14T05:58:27.983285+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=18.00000[0m
+[32m[2026-02-14T05:58:27.994949+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=77.00000 RR=None[0m
+[32m[2026-02-14T05:58:28.103440+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=17.00000[0m
+[32m[2026-02-14T05:58:28.229351+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=16.00000[0m
+[32m[2026-02-14T05:58:28.355358+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=15.00000[0m
+   Scanning... 2s
+[32m[2026-02-14T05:58:28.582302+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=14.00000[0m
+[32m[2026-02-14T05:58:28.585049+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=75.00000 RR=None[0m
+[32m[2026-02-14T05:58:28.722354+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=13.00000[0m
+[32m[2026-02-14T05:58:29.074955+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=14.00000[0m
+[32m[2026-02-14T05:58:29.191473+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=74.00000 RR=None[0m
+[32m[2026-02-14T05:58:29.321045+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=15.00000[0m
+   Scanning... 1s
+[32m[2026-02-14T05:58:29.552863+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=16.00000[0m
+[32m[2026-02-14T05:58:29.786514+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=17.00000[0m
+[32m[2026-02-14T05:58:29.811572+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=72.00000 RR=None[0m
+[32m[2026-02-14T05:58:30.035834+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=18.00000[0m
+[32m[2026-02-14T05:58:30.408599+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=19.00000[0m
+[32m[2026-02-14T05:58:30.408599+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=70.00000 RR=None[0m
+   Scanning... Done!
+[32m[2026-02-14T05:58:30.413840+00:00] INFO     [app.core.hardware.drivers] Driver-level recording stopped. Captured 302 frames.[0m
+   Γ£à Captured 302 body frames
+
+[3/5] Aggregating Sensor Data (GLASS BOX VIEW)...
+   Γ£à Collected 84 Radar samples
+   ≡ƒöì Radar Logic:
+      - Input HR: [70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70]
+      - Median HR: 70
+   Γ£à Collected 43 Thermal samples
+   ≡ƒöì Thermal Logic (Firmware Mode):
+      - Input Canthus: [30.74, 30.87, 30.54, 30.75, 30.61, 30.59, 30.44, 30.38, 30.25, 30.24, 30.26, 30.38, 30.38, 30.42, 30.27, 30.24, 30.08, 29.23, 29.15, 28.38, 27.41, 27.39, 27.59, 27.52, 27.75, 27.75, 27.78, 27.7, 30.51, 30.12, 30.02, 29.72, 29.92, 29.74, 29.75, 29.48, 29.7, 29.56, 29.62, 29.81, 29.57, 29.69, 29.38]
+      - Valid Canthus (>25C): [30.74, 30.87, 30.54, 30.75, 30.61, 30.59, 30.44, 30.38, 30.25, 30.24, 30.26, 30.38, 30.38, 30.42, 30.27, 30.24, 30.08, 29.23, 29.15, 28.38, 27.41, 27.39, 27.59, 27.52, 27.75, 27.75, 27.78, 27.7, 30.51, 30.12, 30.02, 29.72, 29.92, 29.74, 29.75, 29.48, 29.7, 29.56, 29.62, 29.81, 29.57, 29.69, 29.38]
+      - Median Canthus: 29.81
+      - Median Face Max: 36.23 (Used for Fever Check)
+
+[4/5] Running Full Processing Pipeline (Extractors + Risk Engine)...
+   ΓÜÖ∩╕Å Processing Images (Body/Face)...
+   ≡ƒöì Extracting Face Features from 302 frames...
+[32m[2026-02-14T05:58:30.538900+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=20.00000[0m
+[32m[2026-02-14T05:58:30.790045+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=21.00000[0m
+[32m[2026-02-14T05:58:31.032647+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=68.00000 RR=None[0m
+[32m[2026-02-14T05:58:31.157860+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=22.00000[0m
+[32m[2026-02-14T05:58:31.532465+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=23.00000[0m
+[32m[2026-02-14T05:58:31.662606+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=67.00000 RR=None[0m
+[32m[2026-02-14T05:58:32.018087+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=24.00000[0m
+[32m[2026-02-14T05:58:32.269771+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=66.00000 RR=None[0m
+[32m[2026-02-14T05:58:32.638447+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=25.00000[0m
+[32m[2026-02-14T05:58:32.897212+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=65.00000 RR=None[0m
+   ≡ƒöì Extracting Body Pose from 302 frames...
+[32m[2026-02-14T05:58:33.378912+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=26.00000[0m
+[32m[2026-02-14T05:58:34.129254+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=63.00000 RR=None[0m
+[32m[2026-02-14T05:58:34.500608+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=27.00000[0m
+[32m[2026-02-14T05:58:34.746008+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=64.00000 RR=None[0m
+[32m[2026-02-14T05:58:35.990299+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=63.00000 RR=None[0m
+[32m[2026-02-14T05:58:36.594962+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=62.00000 RR=None[0m
+[32m[2026-02-14T05:58:36.840889+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=28.00000[0m
+[32m[2026-02-14T05:58:37.078635+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=27.00000[0m
+[32m[2026-02-14T05:58:37.205608+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=61.00000 RR=None[0m
+[32m[2026-02-14T05:58:37.700028+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=26.00000[0m
+[32m[2026-02-14T05:58:38.075280+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=25.00000[0m
+[32m[2026-02-14T05:58:38.450588+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=66.00000 RR=None[0m
+[32m[2026-02-14T05:58:38.698562+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=26.00000[0m
+[32m[2026-02-14T05:58:39.065649+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=70.00000 RR=None[0m
+[32m[2026-02-14T05:58:39.441150+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=25.00000[0m
+   ΓÜÖ∩╕Å Building Screening Request (Running 8 Extractors)...
+≡ƒöì [11:28:39.517] [DEBUG] PULMONARY       | respiration_rate         :   22.500 breaths/min
+≡ƒöì [11:28:39.517] [DEBUG] CARDIOVASCULAR  | heart_rate               :   70.000 bpm
+≡ƒöì [11:28:39.534] [DEBUG] CARDIOVASCULAR  | heart_rate               :   72.612 bpm
+≡ƒöì [11:28:39.535] [DEBUG] CARDIOVASCULAR  | hrv_rmssd                :  150.000 ms
+[32m[2026-02-14T05:58:39.535769+00:00] INFO     [app.core.extraction.cardiovascular] rPPG extraction: HR=72.6bpm, HRV=150.0ms, quality=0.82[0m
+≡ƒöì [11:28:39.536] [DEBUG] CARDIOVASCULAR  | thermal_asymmetry        :    3.548 delta_celsius
+≡ƒöì [11:28:39.550] [DEBUG] SKIN            | skin_temperature         :   37.030 celsius
+≡ƒöì [11:28:39.550] [DEBUG] SKIN            | skin_temperature_max     :   37.030 celsius
+≡ƒöì [11:28:39.550] [DEBUG] SKIN            | inflammation_index       :    0.000 percent
+≡ƒöì [11:28:39.550] [DEBUG] SKIN            | face_mean_temperature    :   28.830 celsius
+≡ƒöì [11:28:39.550] [DEBUG] SKIN            | thermal_stability        :    0.680 delta_celsius
+[33m[2026-02-14T05:58:39.550404+00:00] WARNING  [app.core.extraction.skin] Skin: High head rotation detected (Yaw: -15.0┬░, Pitch: -4.8┬░). Reducing asymmetry confidence.[0m
+≡ƒöì [11:28:39.550] [DEBUG] SKIN            | thermal_asymmetry        :    3.548 delta_celsius
+[32m[2026-02-14T05:58:39.556990+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=24.00000[0m
+≡ƒöì [11:28:39.560] [DEBUG] SKIN            | texture_roughness        :    2.568 glcm_contrast
+≡ƒöì [11:28:39.640] [DEBUG] SKIN            | skin_redness             :   25.409 lab_deviation
+≡ƒöì [11:28:39.640] [DEBUG] SKIN            | skin_yellowness          :   27.786 lab_deviation
+≡ƒöì [11:28:39.640] [DEBUG] SKIN            | color_uniformity         :    0.362 entropy_inv
+≡ƒöì [11:28:39.640] [DEBUG] SKIN            | lesion_count             :    0.000 count
+[32m[2026-02-14T05:58:39.643346+00:00] INFO     [app.core.extraction.skin] Skin: Visual head pose estimation - Yaw: -15.0┬░, Pitch: -4.8┬░[0m
+[32m[2026-02-14T05:58:39.643346+00:00] INFO     [app.core.extraction.cns] Subject appears stationary, skipping gait analysis[0m
+≡ƒöì [11:28:39.643] [DEBUG] CENTRAL_NERVOUS_SYSTEM | gait_variability         :    0.045 coefficient_of_variation
+≡ƒöì [11:28:39.644] [DEBUG] CENTRAL_NERVOUS_SYSTEM | posture_entropy          :    0.350 sample_entropy
+[33m[2026-02-14T05:58:39.644945+00:00] WARNING  [app.core.extraction.cns] Insufficient visible wrist landmarks for tremor analysis[0m
+≡ƒöì [11:28:39.644] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_resting           :    0.030 normalized_psd
+≡ƒöì [11:28:39.644] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_postural          :    0.030 normalized_psd
+≡ƒöì [11:28:39.644] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_intention         :    0.030 normalized_psd
+≡ƒöì [11:28:39.647] [DEBUG] CENTRAL_NERVOUS_SYSTEM | cns_stability_score      :   83.398 score_0_100
+≡ƒöì [11:28:39.647] [DEBUG] CENTRAL_NERVOUS_SYSTEM | sway_amplitude_ap        :    0.010 normalized_units
+≡ƒöì [11:28:39.647] [DEBUG] CENTRAL_NERVOUS_SYSTEM | sway_amplitude_ml        :    0.005 normalized_units
+[32m[2026-02-14T05:58:39.647321+00:00] INFO     [app.core.extraction.cns] CNS extraction complete: 8 biomarkers, 4.0ms, 0 heel strikes detected[0m
+≡ƒöì [11:28:39.647] [DEBUG] CENTRAL_NERVOUS_SYSTEM | thermal_stress_gradient  :    5.320 delta_celsius
+≡ƒöì [11:28:39.650] [DEBUG] SKELETAL        | gait_symmetry_ratio      :    0.609 ratio
+≡ƒöì [11:28:39.650] [DEBUG] SKELETAL        | average_joint_rom        :    0.391 radians
+[33m[2026-02-14T05:58:39.650099+00:00] WARNING  [app.core.extraction.renal] RenalExtractor: No data sources available.[0m
+≡ƒöì [11:28:39.650] [DEBUG] RENAL           | microcirculation_temp    :   29.810 celsius
+≡ƒöì [11:28:39.650] [DEBUG] RENAL           | cold_extremity_flag      :    1.000 flag
+[33m[2026-02-14T05:58:39.654559+00:00] WARNING  [app.core.extraction.eyes] Low landmark visibility: 0.00[0m
+≡ƒöì [11:28:39.654] [DEBUG] EYES            | blink_rate               :   23.841 blinks_per_min
+≡ƒöì [11:28:39.654] [DEBUG] EYES            | blink_count              :    4.000 count
+≡ƒöì [11:28:39.654] [DEBUG] EYES            | gaze_stability_score     :   95.302 score_0_100
+≡ƒöì [11:28:39.657] [DEBUG] EYES            | fixation_duration        :   50.000 ms
+≡ƒöì [11:28:39.657] [DEBUG] EYES            | saccade_frequency        :    1.788 saccades_per_sec
+≡ƒöì [11:28:39.657] [DEBUG] EYES            | eye_symmetry             :    0.950 ratio
+≡ƒöì [11:28:39.659] [DEBUG] NASAL           | nostril_occlusion_score  :    0.000 score_0_1
+≡ƒöì [11:28:39.661] [DEBUG] NASAL           | respiratory_effort_index :    0.761 ratio
+≡ƒöì [11:28:39.662] [DEBUG] NASAL           | nasal_cycle_balance      :    0.264 score_0_1
+   ≡ƒºá invoking ScreeningService (Risk Engine + LLM)...
+[32m[2026-02-14T05:58:39.689014+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=75.00000 RR=None[0m
+[32m[2026-02-14T05:58:39.906068+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=23.00000[0m
+[32m[2026-02-14T05:58:40.071986+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=22.00000[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:40.594543+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=79.00000 RR=None[0m
+[32m[2026-02-14T05:58:40.603282+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=21.00000[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:40.800713+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=20.00000[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:40.930906+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=83.00000 RR=None[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:41.182637+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=19.00000[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:41.563113+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=85.00000 RR=None[0m
+[32m[2026-02-14T05:58:41.667431+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=18.00000[0m
+[32m[2026-02-14T05:58:42.161938+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=87.00000 RR=None[0m
+[32m[2026-02-14T05:58:42.310131+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=17.00000[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:43.168431+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=16.00000[0m
+[32m[2026-02-14T05:58:43.400490+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=89.00000 RR=None[0m
+[32m[2026-02-14T05:58:44.020117+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=90.00000 RR=None[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:44.400548+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=15.00000[0m
+[32m[2026-02-14T05:58:44.653577+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=92.00000 RR=None[0m
+[32m[2026-02-14T05:58:45.272238+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=93.00000 RR=None[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:45.896778+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=92.00000 RR=None[0m
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+[32m[2026-02-14T05:58:46.566003+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=93.00000 RR=None[0m
+[32m[2026-02-14T05:58:46.947204+00:00] INFO     [app.core.inference.risk_engine] RiskEngine initialized (basic confidence scoring)[0m
+[33m[2026-02-14T05:58:46.947204+00:00] WARNING  [app.core.llm.gemini_client] No Gemini API key provided - mock mode enabled[0m
+[32m[2026-02-14T05:58:46.947204+00:00] INFO     [app.core.agents.hf_client] HuggingFaceClient in mock mode (no API key or InferenceClient unavailable)[0m
+[32m[2026-02-14T05:58:46.947204+00:00] INFO     [app.core.llm.multi_llm_interpreter] MultiLLMInterpreter initialized with Sequential Quality Pipeline[0m
+[32m[2026-02-14T05:58:46.947204+00:00] INFO     [app.core.ml.anomaly_detector] SignalAnomalyDetector initialized (sklearn=True)[0m
+[32m[2026-02-14T05:58:46.947204+00:00] INFO     [app.core.validation.signal_quality] SignalQualityAssessor initialized WITH anomaly detection[0m
+[32m[2026-02-14T05:58:46.947204+00:00] INFO     [app.services.screening] Processing system: pulmonary with 1 biomarkers[0m
+[32m[2026-02-14T05:58:46.947204+00:00] INFO     [app.services.screening] Processing system: cardiovascular with 2 biomarkers[0m
+[32m[2026-02-14T05:58:46.947204+00:00] INFO     [app.services.screening] Processing system: skin with 11 biomarkers[0m
+[32m[2026-02-14T05:58:46.947967+00:00] INFO     [app.services.screening] Processing system: central_nervous_system with 9 biomarkers[0m
+[32m[2026-02-14T05:58:46.947967+00:00] INFO     [app.services.screening] Processing system: skeletal with 2 biomarkers[0m
+[32m[2026-02-14T05:58:46.947967+00:00] INFO     [app.services.screening] Processing system: renal with 2 biomarkers[0m
+[32m[2026-02-14T05:58:46.947967+00:00] INFO     [app.services.screening] Processing system: eyes with 6 biomarkers[0m
+[32m[2026-02-14T05:58:46.947967+00:00] INFO     [app.services.screening] Processing system: nasal with 3 biomarkers[0m
+[32m[2026-02-14T05:58:46.947967+00:00] INFO     [app.core.llm.multi_llm_interpreter] Risk score 50.0 triggers FULL 3-LLM pipeline (forced)[0m
+[32m[2026-02-14T05:58:46.949489+00:00] INFO     [app.core.llm.multi_llm_interpreter] Starting MultiLLM Phase 1 (Gemini)...[0m
+[33m[2026-02-14T05:58:46.950305+00:00] WARNING  [app.core.llm.multi_llm_interpreter] Phase 1 returned MOCK response[0m
+[32m[2026-02-14T05:58:46.950914+00:00] INFO     [app.services.screening] MultiLLM validation: mode=full_pipeline, passed=True[0m
+   Γ£à Processing Complete in 0.0s
+   ≡ƒôè Result: high (Score: 50.0)
+
+[5/5] Saving Detailed Logs...
+   ≡ƒÆ╛ Attempting to save to C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\fastapi2\test_reports\headless_log_HEADLESS_20260214_112752.json...
+   Γ¥î FAILED TO SAVE LOG: Object of type SystemRiskResult is not JSON serializable
+[31m[2026-02-14T05:58:46.972462+00:00] ERROR    [headless_runner] Save failed: Object of type SystemRiskResult is not JSON serializable[0m
+Traceback (most recent call last):
+  File "C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\fastapi2\scripts\headless_runner.py", line 406, in run_scan
+    json.dump(self.session_log, f, indent=2, cls=NumpyEncoder)
+  File "C:\Users\Swetanjana Maity\AppData\Local\Programs\Python\Python312\Lib\json\__init__.py", line 179, in dump
+    for chunk in iterable:
+  File "C:\Users\Swetanjana Maity\AppData\Local\Programs\Python\Python312\Lib\json\encoder.py", line 432, in _iterencode
+    yield from _iterencode_dict(o, _current_indent_level)
+  File "C:\Users\Swetanjana Maity\AppData\Local\Programs\Python\Python312\Lib\json\encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+  File "C:\Users\Swetanjana Maity\AppData\Local\Programs\Python\Python312\Lib\json\encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+  File "C:\Users\Swetanjana Maity\AppData\Local\Programs\Python\Python312\Lib\json\encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+  File "C:\Users\Swetanjana Maity\AppData\Local\Programs\Python\Python312\Lib\json\encoder.py", line 439, in _iterencode
+    o = _default(o)
+        ^^^^^^^^^^^
+  File "C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\fastapi2\app\core\hardware\manager.py", line 86, in default
+    return super().default(obj)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Swetanjana Maity\AppData\Local\Programs\Python\Python312\Lib\json\encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+TypeError: Object of type SystemRiskResult is not JSON serializable
+[32m[2026-02-14T05:58:46.976035+00:00] INFO     [app.core.hardware.manager] HardwareManager shutting down...[0m
+[32m[2026-02-14T05:58:47.008773+00:00] INFO     [app.core.hardware.drivers] Camera capture thread stopped[0m
+[32m[2026-02-14T05:58:47.117278+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=None RR=16.00000[0m
+[32m[2026-02-14T05:58:47.117278+00:00] INFO     [app.core.hardware.drivers] Radar DEBUG: HR=91.00000 RR=None[0m
+[32m[2026-02-14T05:58:47.285504+00:00] INFO     [app.core.hardware.drivers] Camera closed[0m
+[32m[2026-02-14T05:58:47.288017+00:00] INFO     [app.core.hardware.drivers] Disconnected from Seeed Radar Kit (MR60BHA2)[0m
+[32m[2026-02-14T05:58:47.288537+00:00] INFO     [app.core.hardware.drivers] Disconnected from ESP32 NodeMCU (Thermal MLX90640)[0m
+[32m[2026-02-14T05:58:47.288537+00:00] INFO     [app.core.hardware.manager] HardwareManager shutdown complete[0m

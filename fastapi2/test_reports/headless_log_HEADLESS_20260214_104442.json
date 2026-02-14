@@ -1,0 +1,5253 @@
+{
+  "patient_id": "HEADLESS_20260214_104442",
+  "timestamp": "2026-02-14T10:44:42.841651",
+  "raw_sequences": {
+    "radar": [
+      {
+        "timestamp": 1771046085,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046085.6625829
+      },
+      {
+        "timestamp": 1771046086,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046086.2857625
+      },
+      {
+        "timestamp": 1771046086,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046086.9111962
+      },
+      {
+        "timestamp": 1771046087,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046087.1519778
+      },
+      {
+        "timestamp": 1771046087,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046087.5410936
+      },
+      {
+        "timestamp": 1771046088,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046088.154842
+      },
+      {
+        "timestamp": 1771046088,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046088.7701964
+      },
+      {
+        "timestamp": 1771046088,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046088.7830706
+      },
+      {
+        "timestamp": 1771046089,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046089.0336556
+      },
+      {
+        "timestamp": 1771046089,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046089.4009094
+      },
+      {
+        "timestamp": 1771046089,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046089.4009094
+      },
+      {
+        "timestamp": 1771046089,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046089.9073298
+      },
+      {
+        "timestamp": 1771046090,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046090.0249128
+      },
+      {
+        "timestamp": 1771046090,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046090.2795382
+      },
+      {
+        "timestamp": 1771046090,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046090.6587439
+      },
+      {
+        "timestamp": 1771046090,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046090.6594536
+      },
+      {
+        "timestamp": 1771046090,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046090.7677934
+      },
+      {
+        "timestamp": 1771046091,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046091.0213983
+      },
+      {
+        "timestamp": 1771046091,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046091.2755954
+      },
+      {
+        "timestamp": 1771046091,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046091.392234
+      },
+      {
+        "timestamp": 1771046091,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046091.76201
+      },
+      {
+        "timestamp": 1771046091,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046091.8911574
+      },
+      {
+        "timestamp": 1771046092,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046092.2631102
+      },
+      {
+        "timestamp": 1771046092,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046092.5089033
+      },
+      {
+        "timestamp": 1771046092,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046092.878793
+      },
+      {
+        "timestamp": 1771046093,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046093.7456713
+      },
+      {
+        "timestamp": 1771046094,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046094.369306
+      },
+      {
+        "timestamp": 1771046094,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046094.6123185
+      },
+      {
+        "timestamp": 1771046094,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046094.9945743
+      },
+      {
+        "timestamp": 1771046095,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046095.6249213
+      },
+      {
+        "timestamp": 1771046095,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046095.85905
+      },
+      {
+        "timestamp": 1771046096,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046096.2284117
+      },
+      {
+        "timestamp": 1771046096,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046096.85167
+      },
+      {
+        "timestamp": 1771046097,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046097.2199864
+      },
+      {
+        "timestamp": 1771046097,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046097.3290868
+      },
+      {
+        "timestamp": 1771046097,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046097.468458
+      },
+      {
+        "timestamp": 1771046097,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046097.5948777
+      },
+      {
+        "timestamp": 1771046097,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046097.837522
+      },
+      {
+        "timestamp": 1771046097,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046097.9450388
+      },
+      {
+        "timestamp": 1771046098,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046098.2111595
+      },
+      {
+        "timestamp": 1771046098,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046098.4539611
+      },
+      {
+        "timestamp": 1771046098,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046098.8177764
+      },
+      {
+        "timestamp": 1771046099,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046099.186994
+      },
+      {
+        "timestamp": 1771046099,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046099.3129504
+      },
+      {
+        "timestamp": 1771046099,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046099.5594301
+      },
+      {
+        "timestamp": 1771046099,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046100.0436323
+      },
+      {
+        "timestamp": 1771046100,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046100.5513883
+      },
+      {
+        "timestamp": 1771046100,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046100.6681025
+      },
+      {
+        "timestamp": 1771046100,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046101.4119294
+      },
+      {
+        "timestamp": 1771046102,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046102.4048662
+      },
+      {
+        "timestamp": 1771046102,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046102.6481805
+      },
+      {
+        "timestamp": 1771046103,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046103.0309503
+      },
+      {
+        "timestamp": 1771046104,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046104.8751004
+      },
+      {
+        "timestamp": 1771046105,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046105.488946
+      },
+      {
+        "timestamp": 1771046107,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046107.2927718
+      },
+      {
+        "timestamp": 1771046107,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046107.9083323
+      },
+      {
+        "timestamp": 1771046108,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046108.517974
+      },
+      {
+        "timestamp": 1771046109,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046109.1169498
+      },
+      {
+        "timestamp": 1771046109,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046109.733033
+      },
+      {
+        "timestamp": 1771046109,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046109.9617863
+      },
+      {
+        "timestamp": 1771046109,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046110.0790405
+      },
+      {
+        "timestamp": 1771046109,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046110.3249454
+      },
+      {
+        "timestamp": 1771046110,
+        "radar": {
+          "respiration_rate": 21.6,
+          "heart_rate": 93,
+          "presence_detected": true
+        },
+        "received_at": 1771046110.3249454
+      }
+    ],
+    "thermal": [
+      {
+        "timestamp": 2291,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 33.17,
+            "neck_mean": 29.51,
+            "face_max": 36.54
+          },
+          "stability_metrics": {
+            "canthus_range": 3.3
+          },
+          "symmetry": {
+            "cheek_asymmetry": 3.217
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.26
+          }
+        },
+        "received_at": 1771046087.7999196
+      },
+      {
+        "timestamp": 3053,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 33.1,
+            "neck_mean": 29.58,
+            "face_max": 36.52
+          },
+          "stability_metrics": {
+            "canthus_range": 3.24
+          },
+          "symmetry": {
+            "cheek_asymmetry": 3.67
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.3
+          }
+        },
+        "received_at": 1771046088.5650206
+      },
+      {
+        "timestamp": 3816,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 32.87,
+            "neck_mean": 29.95,
+            "face_max": 36.27
+          },
+          "stability_metrics": {
+            "canthus_range": 3.91
+          },
+          "symmetry": {
+            "cheek_asymmetry": 3.112
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.3
+          }
+        },
+        "received_at": 1771046089.3290167
+      },
+      {
+        "timestamp": 4578,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.8,
+            "neck_mean": 29.62,
+            "face_max": 36.35
+          },
+          "stability_metrics": {
+            "canthus_range": 2.1
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.585
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.39
+          }
+        },
+        "received_at": 1771046090.0901217
+      },
+      {
+        "timestamp": 5341,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.53,
+            "neck_mean": 29.13,
+            "face_max": 36.33
+          },
+          "stability_metrics": {
+            "canthus_range": 1.04
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.524
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.53
+          }
+        },
+        "received_at": 1771046090.8535342
+      },
+      {
+        "timestamp": 6104,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.31,
+            "neck_mean": 28.98,
+            "face_max": 36.18
+          },
+          "stability_metrics": {
+            "canthus_range": 1.13
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.713
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.47
+          }
+        },
+        "received_at": 1771046091.613349
+      },
+      {
+        "timestamp": 6866,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.37,
+            "neck_mean": 28.87,
+            "face_max": 36.46
+          },
+          "stability_metrics": {
+            "canthus_range": 1.13
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.649
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.54
+          }
+        },
+        "received_at": 1771046092.3793342
+      },
+      {
+        "timestamp": 7629,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.32,
+            "neck_mean": 28.85,
+            "face_max": 36.24
+          },
+          "stability_metrics": {
+            "canthus_range": 0.92
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.638
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.66
+          }
+        },
+        "received_at": 1771046093.1403818
+      },
+      {
+        "timestamp": 8391,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.37,
+            "neck_mean": 28.82,
+            "face_max": 36.34
+          },
+          "stability_metrics": {
+            "canthus_range": 1.41
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.643
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.68
+          }
+        },
+        "received_at": 1771046093.9029174
+      },
+      {
+        "timestamp": 9154,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.47,
+            "neck_mean": 28.77,
+            "face_max": 36.47
+          },
+          "stability_metrics": {
+            "canthus_range": 0.98
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.764
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.67
+          }
+        },
+        "received_at": 1771046094.664491
+      },
+      {
+        "timestamp": 9916,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.25,
+            "neck_mean": 28.77,
+            "face_max": 36.5
+          },
+          "stability_metrics": {
+            "canthus_range": 0.96
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.811
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.85
+          }
+        },
+        "received_at": 1771046095.4286623
+      },
+      {
+        "timestamp": 10679,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.04,
+            "neck_mean": 28.49,
+            "face_max": 36.2
+          },
+          "stability_metrics": {
+            "canthus_range": 1.26
+          },
+          "symmetry": {
+            "cheek_asymmetry": 3.006
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.98
+          }
+        },
+        "received_at": 1771046096.1916215
+      },
+      {
+        "timestamp": 11442,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 30.77,
+            "neck_mean": 28.42,
+            "face_max": 36.06
+          },
+          "stability_metrics": {
+            "canthus_range": 1.05
+          },
+          "symmetry": {
+            "cheek_asymmetry": 3.067
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.1
+          }
+        },
+        "received_at": 1771046096.9544797
+      },
+      {
+        "timestamp": 12204,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.1,
+            "neck_mean": 28.51,
+            "face_max": 36.28
+          },
+          "stability_metrics": {
+            "canthus_range": 1.02
+          },
+          "symmetry": {
+            "cheek_asymmetry": 3.033
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.96
+          }
+        },
+        "received_at": 1771046097.717018
+      },
+      {
+        "timestamp": 12967,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.15,
+            "neck_mean": 28.45,
+            "face_max": 35.96
+          },
+          "stability_metrics": {
+            "canthus_range": 1.11
+          },
+          "symmetry": {
+            "cheek_asymmetry": 3.047
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.99
+          }
+        },
+        "received_at": 1771046098.47885
+      },
+      {
+        "timestamp": 13729,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.26,
+            "neck_mean": 28.53,
+            "face_max": 36.21
+          },
+          "stability_metrics": {
+            "canthus_range": 1.41
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.975
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.03
+          }
+        },
+        "received_at": 1771046099.242348
+      },
+      {
+        "timestamp": 14492,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.25,
+            "neck_mean": 28.42,
+            "face_max": 36.07
+          },
+          "stability_metrics": {
+            "canthus_range": 1.34
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.929
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.16
+          }
+        },
+        "received_at": 1771046100.0050547
+      },
+      {
+        "timestamp": 15254,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.42,
+            "neck_mean": 28.48,
+            "face_max": 36.08
+          },
+          "stability_metrics": {
+            "canthus_range": 1.33
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.831
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.06
+          }
+        },
+        "received_at": 1771046100.7673495
+      },
+      {
+        "timestamp": 16017,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.46,
+            "neck_mean": 28.49,
+            "face_max": 36.21
+          },
+          "stability_metrics": {
+            "canthus_range": 1.35
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.909
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.04
+          }
+        },
+        "received_at": 1771046101.528848
+      },
+      {
+        "timestamp": 16780,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.44,
+            "neck_mean": 28.37,
+            "face_max": 36.07
+          },
+          "stability_metrics": {
+            "canthus_range": 1.56
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.852
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.1
+          }
+        },
+        "received_at": 1771046102.290645
+      },
+      {
+        "timestamp": 17542,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.55,
+            "neck_mean": 28.37,
+            "face_max": 35.93
+          },
+          "stability_metrics": {
+            "canthus_range": 1.38
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.841
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.02
+          }
+        },
+        "received_at": 1771046103.055537
+      },
+      {
+        "timestamp": 18305,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.7,
+            "neck_mean": 28.44,
+            "face_max": 36.24
+          },
+          "stability_metrics": {
+            "canthus_range": 1.41
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.744
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.05
+          }
+        },
+        "received_at": 1771046103.8170133
+      },
+      {
+        "timestamp": 19067,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.71,
+            "neck_mean": 28.36,
+            "face_max": 36.19
+          },
+          "stability_metrics": {
+            "canthus_range": 1.6
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.696
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.99
+          }
+        },
+        "received_at": 1771046104.578534
+      },
+      {
+        "timestamp": 19830,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.8,
+            "neck_mean": 28.41,
+            "face_max": 36.23
+          },
+          "stability_metrics": {
+            "canthus_range": 1.49
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.698
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.94
+          }
+        },
+        "received_at": 1771046105.3422587
+      },
+      {
+        "timestamp": 20592,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.77,
+            "neck_mean": 28.29,
+            "face_max": 36.24
+          },
+          "stability_metrics": {
+            "canthus_range": 1.41
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.665
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.95
+          }
+        },
+        "received_at": 1771046106.1048784
+      },
+      {
+        "timestamp": 21355,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.85,
+            "neck_mean": 28.37,
+            "face_max": 36.11
+          },
+          "stability_metrics": {
+            "canthus_range": 1.56
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.636
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.99
+          }
+        },
+        "received_at": 1771046106.8678715
+      },
+      {
+        "timestamp": 22118,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.93,
+            "neck_mean": 28.46,
+            "face_max": 36.07
+          },
+          "stability_metrics": {
+            "canthus_range": 1.75
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.627
+          },
+          "gradients": {
+            "forehead_nose_gradient": 4.03
+          }
+        },
+        "received_at": 1771046107.6310868
+      },
+      {
+        "timestamp": 22880,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.85,
+            "neck_mean": 28.31,
+            "face_max": 35.93
+          },
+          "stability_metrics": {
+            "canthus_range": 1.7
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.571
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.97
+          }
+        },
+        "received_at": 1771046108.3935122
+      },
+      {
+        "timestamp": 23643,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.78,
+            "neck_mean": 28.37,
+            "face_max": 36.2
+          },
+          "stability_metrics": {
+            "canthus_range": 1.62
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.673
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.94
+          }
+        },
+        "received_at": 1771046109.1563299
+      },
+      {
+        "timestamp": 24406,
+        "thermal": {
+          "core_regions": {
+            "canthus_mean": 31.5,
+            "neck_mean": 28.48,
+            "face_max": 36.21
+          },
+          "stability_metrics": {
+            "canthus_range": 1.32
+          },
+          "symmetry": {
+            "cheek_asymmetry": 2.647
+          },
+          "gradients": {
+            "forehead_nose_gradient": 3.92
+          }
+        },
+        "received_at": 1771046109.9172466
+      }
+    ],
+    "face_frames": [
+      {
+        "timestamp": 1771046090.4467413,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.4547086,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.512967,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.5184348,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.5750895,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.5807412,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.6411624,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.647653,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.7190754,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.723604,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.785419,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.790186,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.8470898,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.852907,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.9134908,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.9180446,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.9792206,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046090.9839575,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.0385969,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.044842,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.1231117,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.129016,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.1825948,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.18891,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.2502103,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.2558792,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.312685,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.3189363,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.3755035,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.3828423,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.455974,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.4629102,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.5227227,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.5287583,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.5830226,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.586888,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.6499486,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.6552875,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.7115715,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.7171152,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.7769575,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.7811906,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.8548026,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.861232,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.866966,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.9192314,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.9907184,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046091.9979622,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.0479755,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.055103,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.114585,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.1195774,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.1765888,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.1832867,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.2577949,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.2617335,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.2641065,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.319193,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.3825476,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.3884795,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.4481916,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.4538112,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.5118341,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.5188086,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.5787275,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.584998,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.6585193,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.6632676,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.6660717,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.724433,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.7853801,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.7901103,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.8519056,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.8549645,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.9111793,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.9152367,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.9791362,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046092.9836226,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.05451,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.060946,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.064707,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.11855,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.1859784,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.1905227,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.2499387,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.2553618,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.312133,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.315542,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.3938289,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.3976102,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.4575417,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.4618695,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.468954,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.5184987,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.5822358,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.5886393,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.647287,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.6533384,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.7132454,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.7170613,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.791191,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.7968075,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.8027694,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.8599806,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.8664515,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.922491,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.9862537,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046093.9892154,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.046974,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.051941,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.1111526,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.1186683,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.1934593,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.1965756,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.201761,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.259729,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.2657664,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.3194335,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.3845763,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.3888333,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.4513261,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.4549675,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.5120208,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.5187619,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.5936818,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.598211,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.601942,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.6593566,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.664491,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.719122,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.7855988,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.7902923,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.847967,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.85247,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.911793,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.917401,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.993881,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046094.9967568,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.0030646,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.0548325,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.0608962,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.1224134,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.1857018,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.1898541,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.2482758,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.2530692,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.311717,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.3181975,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.3930979,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.3979356,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.4051178,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.4557896,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.4628608,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.5198233,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.588627,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.5951924,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.6509194,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.6551402,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.7304902,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.7356384,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.7403798,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.7928972,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.7975988,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.855974,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.8619518,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.9184434,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.9853945,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046095.9904337,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.052189,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.0590725,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.130836,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.135923,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.1400266,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.1930294,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.196807,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.2558742,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.2611222,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.3224835,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.385036,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.3884802,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.448536,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.4541893,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.5290973,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.5338466,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.5388858,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.5929544,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.5998895,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.6595736,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.664267,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.7198853,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.785312,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.7904222,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.849736,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.8578734,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.931286,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.936323,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.9402175,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.99319,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046096.996914,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.058627,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.0615857,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.1193285,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.1847482,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.1886294,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.2477825,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.254708,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.3290868,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.3359067,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.3400614,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.392083,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.397105,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.4564378,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.4604247,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.521663,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.584634,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.5887377,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.6626973,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.6683705,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.67261,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.7266655,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.7347136,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.7933955,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.7977695,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.8573437,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.861649,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.9229136,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.9848616,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046097.9904182,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.0646088,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.0694656,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.075803,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.1310186,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.1354978,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.1926444,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.1991045,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.2549415,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.2610462,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.319157,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.384868,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.3884876,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.462775,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.4679098,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.4725893,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.5271325,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.534133,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.5923998,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.5974047,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.6548116,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.661231,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.7198768,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.785356,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.7902575,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.8644202,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.8699684,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.87673,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.9291255,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.936393,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.992071,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046098.997344,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.0594873,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.063464,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.1200361,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.1861491,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.1922572,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.2651677,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.2708788,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.275741,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.3307948,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.3368607,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.3922427,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.3968408,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.4574778,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.4616494,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.522113,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.5998542,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.6045384,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.609209,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.6644998,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.6693218,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.7285528,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.733062,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.791866,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.7978823,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.856732,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.861761,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046099.9187145,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.0016446,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.0050547,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.0116217,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.0663996,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.0693853,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.1291494,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.135898,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.1925008,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.195015,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.2601354,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.2661943,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.319947,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.402924,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.4088478,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.4113286,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.4662845,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      },
+      {
+        "timestamp": 1771046100.4699423,
+        "shape": [
+          720,
+          1280,
+          3
+        ]
+      }
+    ],
+    "pose_frames": [
+      {
+        "timestamp": 1771046100.5286462
+      },
+      {
+        "timestamp": 1771046100.5343735
+      },
+      {
+        "timestamp": 1771046100.5911345
+      },
+      {
+        "timestamp": 1771046100.5970902
+      },
+      {
+        "timestamp": 1771046100.6560526
+      },
+      {
+        "timestamp": 1771046100.6611588
+      },
+      {
+        "timestamp": 1771046100.7193038
+      },
+      {
+        "timestamp": 1771046100.8001175
+      },
+      {
+        "timestamp": 1771046100.8060424
+      },
+      {
+        "timestamp": 1771046100.8122497
+      },
+      {
+        "timestamp": 1771046100.8631883
+      },
+      {
+        "timestamp": 1771046100.8692305
+      },
+      {
+        "timestamp": 1771046100.9290001
+      },
+      {
+        "timestamp": 1771046100.9354587
+      },
+      {
+        "timestamp": 1771046100.993308
+      },
+      {
+        "timestamp": 1771046100.9966598
+      },
+      {
+        "timestamp": 1771046101.0547683
+      },
+      {
+        "timestamp": 1771046101.0594914
+      },
+      {
+        "timestamp": 1771046101.120344
+      },
+      {
+        "timestamp": 1771046101.2029421
+      },
+      {
+        "timestamp": 1771046101.205749
+      },
+      {
+        "timestamp": 1771046101.212013
+      },
+      {
+        "timestamp": 1771046101.265426
+      },
+      {
+        "timestamp": 1771046101.2691755
+      },
+      {
+        "timestamp": 1771046101.3273966
+      },
+      {
+        "timestamp": 1771046101.3332353
+      },
+      {
+        "timestamp": 1771046101.3915756
+      },
+      {
+        "timestamp": 1771046101.394916
+      },
+      {
+        "timestamp": 1771046101.455608
+      },
+      {
+        "timestamp": 1771046101.461447
+      },
+      {
+        "timestamp": 1771046101.5358717
+      },
+      {
+        "timestamp": 1771046101.6005948
+      },
+      {
+        "timestamp": 1771046101.6093206
+      },
+      {
+        "timestamp": 1771046101.6134872
+      },
+      {
+        "timestamp": 1771046101.6644216
+      },
+      {
+        "timestamp": 1771046101.6705463
+      },
+      {
+        "timestamp": 1771046101.7299807
+      },
+      {
+        "timestamp": 1771046101.7355924
+      },
+      {
+        "timestamp": 1771046101.795313
+      },
+      {
+        "timestamp": 1771046101.799457
+      },
+      {
+        "timestamp": 1771046101.8576055
+      },
+      {
+        "timestamp": 1771046101.8627863
+      },
+      {
+        "timestamp": 1771046101.938388
+      },
+      {
+        "timestamp": 1771046101.9423628
+      },
+      {
+        "timestamp": 1771046102.0032134
+      },
+      {
+        "timestamp": 1771046102.0097172
+      },
+      {
+        "timestamp": 1771046102.065656
+      },
+      {
+        "timestamp": 1771046102.070094
+      },
+      {
+        "timestamp": 1771046102.1292763
+      },
+      {
+        "timestamp": 1771046102.1353362
+      },
+      {
+        "timestamp": 1771046102.1923573
+      },
+      {
+        "timestamp": 1771046102.1973207
+      },
+      {
+        "timestamp": 1771046102.258079
+      },
+      {
+        "timestamp": 1771046102.2641053
+      },
+      {
+        "timestamp": 1771046102.3388917
+      },
+      {
+        "timestamp": 1771046102.344452
+      },
+      {
+        "timestamp": 1771046102.40426
+      },
+      {
+        "timestamp": 1771046102.411325
+      },
+      {
+        "timestamp": 1771046102.4651003
+      },
+      {
+        "timestamp": 1771046102.4689715
+      },
+      {
+        "timestamp": 1771046102.5308762
+      },
+      {
+        "timestamp": 1771046102.5367975
+      },
+      {
+        "timestamp": 1771046102.5911562
+      },
+      {
+        "timestamp": 1771046102.596899
+      },
+      {
+        "timestamp": 1771046102.6593614
+      },
+      {
+        "timestamp": 1771046102.666123
+      },
+      {
+        "timestamp": 1771046102.73595
+      },
+      {
+        "timestamp": 1771046102.740436
+      },
+      {
+        "timestamp": 1771046102.8001251
+      },
+      {
+        "timestamp": 1771046102.807636
+      },
+      {
+        "timestamp": 1771046102.8683133
+      },
+      {
+        "timestamp": 1771046102.8729262
+      },
+      {
+        "timestamp": 1771046102.9310346
+      },
+      {
+        "timestamp": 1771046102.935801
+      },
+      {
+        "timestamp": 1771046102.9946496
+      },
+      {
+        "timestamp": 1771046103.0002155
+      },
+      {
+        "timestamp": 1771046103.0587907
+      },
+      {
+        "timestamp": 1771046103.0655885
+      },
+      {
+        "timestamp": 1771046103.1385674
+      },
+      {
+        "timestamp": 1771046103.1429822
+      },
+      {
+        "timestamp": 1771046103.2002888
+      },
+      {
+        "timestamp": 1771046103.2074807
+      },
+      {
+        "timestamp": 1771046103.266037
+      },
+      {
+        "timestamp": 1771046103.2722309
+      },
+      {
+        "timestamp": 1771046103.329173
+      },
+      {
+        "timestamp": 1771046103.3361568
+      },
+      {
+        "timestamp": 1771046103.3915908
+      },
+      {
+        "timestamp": 1771046103.3965847
+      },
+      {
+        "timestamp": 1771046103.4732456
+      },
+      {
+        "timestamp": 1771046103.4813962
+      },
+      {
+        "timestamp": 1771046103.5359225
+      },
+      {
+        "timestamp": 1771046103.5401196
+      },
+      {
+        "timestamp": 1771046103.6079736
+      },
+      {
+        "timestamp": 1771046103.6145668
+      },
+      {
+        "timestamp": 1771046103.6657133
+      },
+      {
+        "timestamp": 1771046103.6705668
+      },
+      {
+        "timestamp": 1771046103.7290816
+      },
+      {
+        "timestamp": 1771046103.7359607
+      },
+      {
+        "timestamp": 1771046103.7929442
+      },
+      {
+        "timestamp": 1771046103.7978978
+      },
+      {
+        "timestamp": 1771046103.874559
+      },
+      {
+        "timestamp": 1771046103.8806105
+      },
+      {
+        "timestamp": 1771046103.9358785
+      },
+      {
+        "timestamp": 1771046103.9414175
+      },
+      {
+        "timestamp": 1771046104.0001743
+      },
+      {
+        "timestamp": 1771046104.0074816
+      },
+      {
+        "timestamp": 1771046104.0651708
+      },
+      {
+        "timestamp": 1771046104.0697134
+      },
+      {
+        "timestamp": 1771046104.1321218
+      },
+      {
+        "timestamp": 1771046104.1363244
+      },
+      {
+        "timestamp": 1771046104.1943355
+      },
+      {
+        "timestamp": 1771046104.2002017
+      },
+      {
+        "timestamp": 1771046104.2737901
+      },
+      {
+        "timestamp": 1771046104.2805307
+      },
+      {
+        "timestamp": 1771046104.3371863
+      },
+      {
+        "timestamp": 1771046104.3433683
+      },
+      {
+        "timestamp": 1771046104.4004886
+      },
+      {
+        "timestamp": 1771046104.4042804
+      },
+      {
+        "timestamp": 1771046104.4625194
+      },
+      {
+        "timestamp": 1771046104.4690437
+      },
+      {
+        "timestamp": 1771046104.52903
+      },
+      {
+        "timestamp": 1771046104.5355651
+      },
+      {
+        "timestamp": 1771046104.5947595
+      },
+      {
+        "timestamp": 1771046104.6003356
+      },
+      {
+        "timestamp": 1771046104.672526
+      },
+      {
+        "timestamp": 1771046104.680943
+      },
+      {
+        "timestamp": 1771046104.7362304
+      },
+      {
+        "timestamp": 1771046104.7431462
+      },
+      {
+        "timestamp": 1771046104.801508
+      },
+      {
+        "timestamp": 1771046104.8056364
+      },
+      {
+        "timestamp": 1771046104.8622646
+      },
+      {
+        "timestamp": 1771046104.8673234
+      },
+      {
+        "timestamp": 1771046104.9290667
+      },
+      {
+        "timestamp": 1771046104.9356997
+      },
+      {
+        "timestamp": 1771046104.990599
+      },
+      {
+        "timestamp": 1771046104.9966462
+      },
+      {
+        "timestamp": 1771046105.0724523
+      },
+      {
+        "timestamp": 1771046105.0785868
+      },
+      {
+        "timestamp": 1771046105.1362777
+      },
+      {
+        "timestamp": 1771046105.14293
+      },
+      {
+        "timestamp": 1771046105.20077
+      },
+      {
+        "timestamp": 1771046105.2097685
+      },
+      {
+        "timestamp": 1771046105.2648847
+      },
+      {
+        "timestamp": 1771046105.2727418
+      },
+      {
+        "timestamp": 1771046105.3310487
+      },
+      {
+        "timestamp": 1771046105.3354118
+      },
+      {
+        "timestamp": 1771046105.4092543
+      },
+      {
+        "timestamp": 1771046105.4153495
+      },
+      {
+        "timestamp": 1771046105.4725227
+      },
+      {
+        "timestamp": 1771046105.4794571
+      },
+      {
+        "timestamp": 1771046105.5389307
+      },
+      {
+        "timestamp": 1771046105.5454638
+      },
+      {
+        "timestamp": 1771046105.6010785
+      },
+      {
+        "timestamp": 1771046105.6081042
+      },
+      {
+        "timestamp": 1771046105.6660128
+      },
+      {
+        "timestamp": 1771046105.672386
+      },
+      {
+        "timestamp": 1771046105.7270718
+      },
+      {
+        "timestamp": 1771046105.7322862
+      },
+      {
+        "timestamp": 1771046105.8091538
+      },
+      {
+        "timestamp": 1771046105.8123362
+      },
+      {
+        "timestamp": 1771046105.873117
+      },
+      {
+        "timestamp": 1771046105.880915
+      },
+      {
+        "timestamp": 1771046105.9357085
+      },
+      {
+        "timestamp": 1771046105.9410715
+      },
+      {
+        "timestamp": 1771046105.999941
+      },
+      {
+        "timestamp": 1771046106.0058873
+      },
+      {
+        "timestamp": 1771046106.0638394
+      },
+      {
+        "timestamp": 1771046106.0705168
+      },
+      {
+        "timestamp": 1771046106.1259654
+      },
+      {
+        "timestamp": 1771046106.1306574
+      },
+      {
+        "timestamp": 1771046106.2095404
+      },
+      {
+        "timestamp": 1771046106.2126255
+      },
+      {
+        "timestamp": 1771046106.2729187
+      },
+      {
+        "timestamp": 1771046106.2770677
+      },
+      {
+        "timestamp": 1771046106.3358793
+      },
+      {
+        "timestamp": 1771046106.3406134
+      },
+      {
+        "timestamp": 1771046106.4000294
+      },
+      {
+        "timestamp": 1771046106.408025
+      },
+      {
+        "timestamp": 1771046106.462916
+      },
+      {
+        "timestamp": 1771046106.4692075
+      },
+      {
+        "timestamp": 1771046106.5287433
+      },
+      {
+        "timestamp": 1771046106.5358465
+      },
+      {
+        "timestamp": 1771046106.607897
+      },
+      {
+        "timestamp": 1771046106.6115768
+      },
+      {
+        "timestamp": 1771046106.6703598
+      },
+      {
+        "timestamp": 1771046106.6767485
+      },
+      {
+        "timestamp": 1771046106.736625
+      },
+      {
+        "timestamp": 1771046106.7418613
+      },
+      {
+        "timestamp": 1771046106.8010569
+      },
+      {
+        "timestamp": 1771046106.8068662
+      },
+      {
+        "timestamp": 1771046106.8621345
+      },
+      {
+        "timestamp": 1771046106.8678715
+      },
+      {
+        "timestamp": 1771046106.9297147
+      },
+      {
+        "timestamp": 1771046106.9357336
+      },
+      {
+        "timestamp": 1771046107.0097349
+      },
+      {
+        "timestamp": 1771046107.014173
+      },
+      {
+        "timestamp": 1771046107.0728881
+      },
+      {
+        "timestamp": 1771046107.0757632
+      },
+      {
+        "timestamp": 1771046107.1362674
+      },
+      {
+        "timestamp": 1771046107.1411364
+      },
+      {
+        "timestamp": 1771046107.2003846
+      },
+      {
+        "timestamp": 1771046107.2073472
+      },
+      {
+        "timestamp": 1771046107.2642982
+      },
+      {
+        "timestamp": 1771046107.2700253
+      },
+      {
+        "timestamp": 1771046107.3286622
+      },
+      {
+        "timestamp": 1771046107.3355322
+      },
+      {
+        "timestamp": 1771046107.4083955
+      },
+      {
+        "timestamp": 1771046107.412956
+      },
+      {
+        "timestamp": 1771046107.47095
+      },
+      {
+        "timestamp": 1771046107.477151
+      },
+      {
+        "timestamp": 1771046107.5362906
+      },
+      {
+        "timestamp": 1771046107.5412738
+      },
+      {
+        "timestamp": 1771046107.6031208
+      },
+      {
+        "timestamp": 1771046107.608023
+      },
+      {
+        "timestamp": 1771046107.6658728
+      },
+      {
+        "timestamp": 1771046107.6705399
+      },
+      {
+        "timestamp": 1771046107.7445142
+      },
+      {
+        "timestamp": 1771046107.750413
+      },
+      {
+        "timestamp": 1771046107.809776
+      },
+      {
+        "timestamp": 1771046107.8124735
+      },
+      {
+        "timestamp": 1771046107.8721552
+      },
+      {
+        "timestamp": 1771046107.879583
+      },
+      {
+        "timestamp": 1771046107.9360602
+      },
+      {
+        "timestamp": 1771046107.9407532
+      },
+      {
+        "timestamp": 1771046108.002959
+      },
+      {
+        "timestamp": 1771046108.008779
+      },
+      {
+        "timestamp": 1771046108.0653598
+      },
+      {
+        "timestamp": 1771046108.0689018
+      },
+      {
+        "timestamp": 1771046108.1449413
+      },
+      {
+        "timestamp": 1771046108.1502993
+      },
+      {
+        "timestamp": 1771046108.209563
+      },
+      {
+        "timestamp": 1771046108.2149026
+      },
+      {
+        "timestamp": 1771046108.2709284
+      },
+      {
+        "timestamp": 1771046108.2764275
+      },
+      {
+        "timestamp": 1771046108.3361204
+      },
+      {
+        "timestamp": 1771046108.3420541
+      },
+      {
+        "timestamp": 1771046108.4014132
+      },
+      {
+        "timestamp": 1771046108.4050984
+      },
+      {
+        "timestamp": 1771046108.4644413
+      },
+      {
+        "timestamp": 1771046108.4692676
+      },
+      {
+        "timestamp": 1771046108.5448802
+      },
+      {
+        "timestamp": 1771046108.550105
+      },
+      {
+        "timestamp": 1771046108.6091526
+      },
+      {
+        "timestamp": 1771046108.6123235
+      },
+      {
+        "timestamp": 1771046108.6744914
+      },
+      {
+        "timestamp": 1771046108.679757
+      },
+      {
+        "timestamp": 1771046108.7367053
+      },
+      {
+        "timestamp": 1771046108.7419107
+      },
+      {
+        "timestamp": 1771046108.8001459
+      },
+      {
+        "timestamp": 1771046108.808506
+      },
+      {
+        "timestamp": 1771046108.8629088
+      },
+      {
+        "timestamp": 1771046108.8703332
+      },
+      {
+        "timestamp": 1771046108.9449413
+      },
+      {
+        "timestamp": 1771046108.9502902
+      },
+      {
+        "timestamp": 1771046109.0093582
+      },
+      {
+        "timestamp": 1771046109.0141964
+      },
+      {
+        "timestamp": 1771046109.0731318
+      },
+      {
+        "timestamp": 1771046109.078631
+      },
+      {
+        "timestamp": 1771046109.136376
+      },
+      {
+        "timestamp": 1771046109.1404607
+      },
+      {
+        "timestamp": 1771046109.2030084
+      },
+      {
+        "timestamp": 1771046109.2084465
+      },
+      {
+        "timestamp": 1771046109.2622762
+      },
+      {
+        "timestamp": 1771046109.2687576
+      },
+      {
+        "timestamp": 1771046109.3451762
+      },
+      {
+        "timestamp": 1771046109.3501787
+      },
+      {
+        "timestamp": 1771046109.4118454
+      },
+      {
+        "timestamp": 1771046109.418864
+      },
+      {
+        "timestamp": 1771046109.475368
+      },
+      {
+        "timestamp": 1771046109.4818647
+      },
+      {
+        "timestamp": 1771046109.535959
+      },
+      {
+        "timestamp": 1771046109.5425663
+      },
+      {
+        "timestamp": 1771046109.6011004
+      },
+      {
+        "timestamp": 1771046109.6078036
+      },
+      {
+        "timestamp": 1771046109.6810548
+      },
+      {
+        "timestamp": 1771046109.6854324
+      },
+      {
+        "timestamp": 1771046109.7456253
+      },
+      {
+        "timestamp": 1771046109.7500145
+      },
+      {
+        "timestamp": 1771046109.8095853
+      },
+      {
+        "timestamp": 1771046109.8150349
+      },
+      {
+        "timestamp": 1771046109.8726268
+      },
+      {
+        "timestamp": 1771046109.8791132
+      },
+      {
+        "timestamp": 1771046109.936114
+      },
+      {
+        "timestamp": 1771046109.9446242
+      },
+      {
+        "timestamp": 1771046110.0004957
+      },
+      {
+        "timestamp": 1771046110.0075047
+      },
+      {
+        "timestamp": 1771046110.0790405
+      },
+      {
+        "timestamp": 1771046110.0853517
+      },
+      {
+        "timestamp": 1771046110.143296
+      },
+      {
+        "timestamp": 1771046110.1498413
+      },
+      {
+        "timestamp": 1771046110.2091339
+      },
+      {
+        "timestamp": 1771046110.214633
+      },
+      {
+        "timestamp": 1771046110.2730782
+      },
+      {
+        "timestamp": 1771046110.2774003
+      },
+      {
+        "timestamp": 1771046110.3364954
+      },
+      {
+        "timestamp": 1771046110.3418107
+      },
+      {
+        "timestamp": 1771046110.4004147
+      },
+      {
+        "timestamp": 1771046110.4098165
+      },
+      {
+        "timestamp": 1771046110.4810793
+      },
+      {
+        "timestamp": 1771046110.4856951
+      }
+    ]
+  },
+  "aggregation_logic": {
+    "radar": {
+      "heart_rate_sequence": [
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95,
+        95
+      ],
+      "heart_rate_median": 95,
+      "respiration_rate_sequence": [
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4,
+        5.4
+      ],
+      "respiration_rate_median": 5.4
+    },
+    "thermal": {
+      "type": "firmware",
+      "canthus_sequence": [
+        33.17,
+        33.1,
+        32.87,
+        31.8,
+        31.53,
+        31.31,
+        31.37,
+        31.32,
+        31.37,
+        31.47,
+        31.25,
+        31.04,
+        30.77,
+        31.1,
+        31.15,
+        31.26,
+        31.25,
+        31.42,
+        31.46,
+        31.44,
+        31.55,
+        31.7,
+        31.71,
+        31.8,
+        31.77,
+        31.85,
+        31.93,
+        31.85,
+        31.78,
+        31.82
+      ],
+      "valid_canthus": [
+        33.17,
+        33.1,
+        32.87,
+        31.8,
+        31.53,
+        31.31,
+        31.37,
+        31.32,
+        31.37,
+        31.47,
+        31.25,
+        31.04,
+        30.77,
+        31.1,
+        31.15,
+        31.26,
+        31.25,
+        31.42,
+        31.46,
+        31.44,
+        31.55,
+        31.7,
+        31.71,
+        31.8,
+        31.77,
+        31.85,
+        31.93,
+        31.85,
+        31.78,
+        31.82
+      ],
+      "median_canthus": 31.5,
+      "face_max_sequence": [
+        36.54,
+        36.52,
+        36.27,
+        36.35,
+        36.33,
+        36.18,
+        36.46,
+        36.24,
+        36.34,
+        36.47,
+        36.5,
+        36.2,
+        36.06,
+        36.28,
+        35.96,
+        36.21,
+        36.07,
+        36.08,
+        36.21,
+        36.07,
+        35.93,
+        36.24,
+        36.19,
+        36.23,
+        36.24,
+        36.11,
+        36.07,
+        35.93,
+        36.2,
+        35.85
+      ],
+      "median_face_max": 36.21
+    }
+  },
+  "extracted_features": {
+    "patient_id": "HEADLESS_20260214_104442",
+    "include_validation": true,
+    "systems": [
+      {
+        "system": "pulmonary",
+        "biomarkers": [
+          {
+            "name": "respiration_rate",
+            "value": 19.8,
+            "unit": "breaths/min",
+            "confidence": 0.9,
+            "normal_range": [
+              12.0,
+              20.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Respiration rate from 60GHz Radar"
+          }
+        ]
+      },
+      {
+        "system": "cardiovascular",
+        "biomarkers": [
+          {
+            "name": "heart_rate",
+            "value": 107.0,
+            "unit": "bpm",
+            "confidence": 0.9,
+            "normal_range": [
+              60.0,
+              100.0
+            ],
+            "is_abnormal": true,
+            "status": "high",
+            "description": "Heart rate from 60GHz Radar"
+          },
+          {
+            "name": "thermal_asymmetry",
+            "value": 2.647,
+            "unit": "delta_celsius",
+            "confidence": 0.85,
+            "normal_range": [
+              0.0,
+              0.5
+            ],
+            "is_abnormal": true,
+            "status": "high",
+            "description": "Left-right facial thermal asymmetry (perfusion indicator)"
+          }
+        ]
+      },
+      {
+        "system": "skin",
+        "biomarkers": [
+          {
+            "name": "skin_temperature",
+            "value": 37.01,
+            "unit": "celsius",
+            "confidence": 0.92,
+            "normal_range": [
+              35.5,
+              37.5
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Body temperature (Inner canthus - medical standard)"
+          },
+          {
+            "name": "skin_temperature_max",
+            "value": 37.01,
+            "unit": "celsius",
+            "confidence": 0.95,
+            "normal_range": [
+              36.0,
+              38.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Peak facial temperature (Fever indicator)"
+          },
+          {
+            "name": "inflammation_index",
+            "value": 4.3316,
+            "unit": "percent",
+            "confidence": 0.75,
+            "normal_range": [
+              0.0,
+              5.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Localized inflammation (hot pixel %, MLX90640)"
+          },
+          {
+            "name": "face_mean_temperature",
+            "value": 29.990000000000002,
+            "unit": "celsius",
+            "confidence": 0.85,
+            "normal_range": [
+              34.0,
+              37.0
+            ],
+            "is_abnormal": true,
+            "status": "low",
+            "description": "Average face temperature (MLX90640)"
+          },
+          {
+            "name": "thermal_stability",
+            "value": 1.32,
+            "unit": "delta_celsius",
+            "confidence": 0.8,
+            "normal_range": [
+              0.0,
+              0.8
+            ],
+            "is_abnormal": true,
+            "status": "high",
+            "description": "Thermal measurement stability (canthus range, MLX90640)"
+          },
+          {
+            "name": "thermal_asymmetry",
+            "value": 2.647,
+            "unit": "delta_celsius",
+            "confidence": 0.95,
+            "normal_range": [
+              0.0,
+              0.5
+            ],
+            "is_abnormal": true,
+            "status": "high",
+            "description": "Thermal asymmetry (Left vs Right)"
+          },
+          {
+            "name": "texture_roughness",
+            "value": 2.9174465314432223,
+            "unit": "glcm_contrast",
+            "confidence": 0.75,
+            "normal_range": [
+              0.0,
+              5.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Skin surface texture (GLCM Contrast, multi-angle)"
+          },
+          {
+            "name": "skin_redness",
+            "value": 22.963632912078992,
+            "unit": "lab_deviation",
+            "confidence": 0.85,
+            "normal_range": [
+              0.0,
+              25.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Skin redness (Lab a* deviation from neutral)"
+          },
+          {
+            "name": "skin_yellowness",
+            "value": 22.817106904594027,
+            "unit": "lab_deviation",
+            "confidence": 0.8,
+            "normal_range": [
+              0.0,
+              25.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Skin yellowness (Lab b* deviation from neutral)"
+          },
+          {
+            "name": "color_uniformity",
+            "value": 0.36026016335205835,
+            "unit": "entropy_inv",
+            "confidence": 0.7,
+            "normal_range": [
+              0.25,
+              1.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Skin tone uniformity (Inverse Entropy)"
+          },
+          {
+            "name": "lesion_count",
+            "value": 0.0,
+            "unit": "count",
+            "confidence": 0.0,
+            "normal_range": [
+              0.0,
+              5.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Skin lesions (Disabled: Requires ML Model)"
+          }
+        ]
+      },
+      {
+        "system": "central_nervous_system",
+        "biomarkers": [
+          {
+            "name": "gait_variability",
+            "value": 0.045,
+            "unit": "coefficient_of_variation",
+            "confidence": 0.5,
+            "normal_range": null,
+            "is_abnormal": null,
+            "status": "not_assessed",
+            "description": "Stride-to-stride timing variability (Zeni heel strike method)"
+          },
+          {
+            "name": "posture_entropy",
+            "value": 0.22328150454827994,
+            "unit": "sample_entropy",
+            "confidence": 0.85,
+            "normal_range": [
+              0.5,
+              2.5
+            ],
+            "is_abnormal": true,
+            "status": "low",
+            "description": "Postural sway complexity (Sample Entropy - Richman method)"
+          },
+          {
+            "name": "tremor_resting",
+            "value": 0.03,
+            "unit": "normalized_psd",
+            "confidence": 0.5,
+            "normal_range": [
+              0.0,
+              0.05
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Resting tremor power (4-6 Hz)"
+          },
+          {
+            "name": "tremor_postural",
+            "value": 0.03,
+            "unit": "normalized_psd",
+            "confidence": 0.5,
+            "normal_range": [
+              0.0,
+              0.05
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Postural tremor power (6-12 Hz)"
+          },
+          {
+            "name": "tremor_intention",
+            "value": 0.03,
+            "unit": "normalized_psd",
+            "confidence": 0.5,
+            "normal_range": [
+              0.0,
+              0.05
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Intention tremor power (3-5 Hz)"
+          },
+          {
+            "name": "cns_stability_score",
+            "value": 81.34824272690258,
+            "unit": "score_0_100",
+            "confidence": 0.8,
+            "normal_range": [
+              75.0,
+              100.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Composite CNS stability (sway + gait + tremor combined)"
+          },
+          {
+            "name": "sway_amplitude_ap",
+            "value": 0.019236007140206197,
+            "unit": "normalized_units",
+            "confidence": 0.85,
+            "normal_range": [
+              0.0,
+              0.05
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Anterior-posterior postural sway amplitude"
+          },
+          {
+            "name": "sway_amplitude_ml",
+            "value": 0.0034580826339090927,
+            "unit": "normalized_units",
+            "confidence": 0.85,
+            "normal_range": [
+              0.0,
+              0.05
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Medial-lateral postural sway amplitude"
+          },
+          {
+            "name": "thermal_stress_gradient",
+            "value": 3.92,
+            "unit": "delta_celsius",
+            "confidence": 0.8,
+            "normal_range": [
+              0.0,
+              1.5
+            ],
+            "is_abnormal": true,
+            "status": "high",
+            "description": "Forehead-nose thermal gradient (autonomic stress indicator)"
+          }
+        ]
+      },
+      {
+        "system": "skeletal",
+        "biomarkers": [
+          {
+            "name": "gait_symmetry_ratio",
+            "value": 0.9148997297961546,
+            "unit": "ratio",
+            "confidence": 0.88,
+            "normal_range": [
+              0.85,
+              1.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Bilateral kinematic symmetry (3D pose-filtered)"
+          },
+          {
+            "name": "average_joint_rom",
+            "value": 0.5501481592417998,
+            "unit": "radians",
+            "confidence": 0.94,
+            "normal_range": [
+              0.3,
+              0.8
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Average 3D joint range of motion"
+          }
+        ]
+      },
+      {
+        "system": "renal",
+        "biomarkers": [
+          {
+            "name": "microcirculation_temp",
+            "value": 31.5,
+            "unit": "celsius",
+            "confidence": 0.75,
+            "normal_range": [
+              35.5,
+              37.0
+            ],
+            "is_abnormal": true,
+            "status": "low",
+            "description": "Inner canthus temperature (microcirculation proxy)"
+          },
+          {
+            "name": "cold_extremity_flag",
+            "value": 1.0,
+            "unit": "flag",
+            "confidence": 0.7,
+            "normal_range": [
+              0.0,
+              0.0
+            ],
+            "is_abnormal": true,
+            "status": "high",
+            "description": "Cold extremity detected (peripheral microcirculation issue)"
+          }
+        ]
+      },
+      {
+        "system": "eyes",
+        "biomarkers": [
+          {
+            "name": "blink_rate",
+            "value": 0.0,
+            "unit": "blinks_per_min",
+            "confidence": 0.92,
+            "normal_range": [
+              12.0,
+              35.0
+            ],
+            "is_abnormal": true,
+            "status": "low",
+            "description": "Blink rate (12-35 bpm normal for screen viewing)"
+          },
+          {
+            "name": "blink_count",
+            "value": 0.0,
+            "unit": "count",
+            "confidence": 0.95,
+            "normal_range": null,
+            "is_abnormal": null,
+            "status": "not_assessed",
+            "description": "Total blinks detected in session"
+          },
+          {
+            "name": "gaze_stability_score",
+            "value": 98.42860577292836,
+            "unit": "score_0_100",
+            "confidence": 0.85,
+            "normal_range": [
+              70.0,
+              100.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "ISO 9241-3 velocity-based stability"
+          },
+          {
+            "name": "fixation_duration",
+            "value": 200.0,
+            "unit": "ms",
+            "confidence": 0.8,
+            "normal_range": [
+              60.0,
+              400.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Fixation duration (60ms+ normal for reading/scanning)"
+          },
+          {
+            "name": "saccade_frequency",
+            "value": 2.871287128712871,
+            "unit": "saccades_per_sec",
+            "confidence": 0.8,
+            "normal_range": [
+              2.0,
+              5.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Peak velocity saccade detection"
+          },
+          {
+            "name": "eye_symmetry",
+            "value": 0.95,
+            "unit": "ratio",
+            "confidence": 0.9,
+            "normal_range": [
+              0.9,
+              1.0
+            ],
+            "is_abnormal": false,
+            "status": "normal",
+            "description": "Bilateral eye motion correlation"
+          }
+        ]
+      },
+      {
+        "system": "nasal",
+        "biomarkers": [
+          {
+            "name": "nostril_occlusion_score",
+            "value": 0.0,
+            "unit": "score_0_1",
+            "confidence": 0.75,
+            "normal_range": [
+              0.7,
+              1.0
+            ],
+            "is_abnormal": true,
+            "status": "low",
+            "description": "Nostril area symmetry (1.0 = clear, <0.5 = blocked)"
+          },
+          {
+            "name": "respiratory_effort_index",
+            "value": 0.06120627535789475,
+            "unit": "ratio",
+            "confidence": 0.65,
+            "normal_range": [
+              0.5,
+              1.5
+            ],
+            "is_abnormal": true,
+            "status": "low",
+            "description": "Nostril flaring variability (work of breathing)"
+          },
+          {
+            "name": "nasal_cycle_balance",
+            "value": 0.32630628867337097,
+            "unit": "score_0_1",
+            "confidence": 0.7,
+            "normal_range": [
+              0.6,
+              1.0
+            ],
+            "is_abnormal": true,
+            "status": "low",
+            "description": "Left-right nostril dominance balance"
+          }
+        ]
+      }
+    ]
+  },
+  "result": {
+    "screening_id": "SCR-E7892BD8",
+    "patient_id": "HEADLESS_20260214_104442",
+    "timestamp": 

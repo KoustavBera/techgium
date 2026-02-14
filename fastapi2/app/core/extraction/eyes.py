@@ -119,7 +119,11 @@ class EyeExtractor(BaseExtractor):
             self._extract_from_pose(pose_array, biomarker_set, fps)
             
         else:
-            logger.warning(f"Insufficient data for eye analysis: face={len(face_seq)}, pose={len(pose_seq)}")
+            logger.warning(
+                f"⚠️ Insufficient data for clinical eye analysis: face_landmarks={len(face_seq)}, pose={len(pose_seq)}. "
+                f"Eye blink rate requires minimum {self.min_frames} FaceMesh landmarks for accuracy. "
+                f"Check camera positioning, lighting, and ensure face is clearly visible."
+            )
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
 
@@ -314,9 +318,24 @@ class EyeExtractor(BaseExtractor):
                     blink_events.append(blink_duration_frames / fps)
                 in_blink = False
         
-        # Convert to blinks per minute
-        duration_min = len(landmarks) / fps / 60
-        blink_rate = len(blink_events) / max(duration_min, 0.01) # Avoid div by zero, but allow low rates
+        # Convert to blinks per minute with minimum duration validation
+        duration_sec = len(landmarks) / fps
+        duration_min = duration_sec / 60
+        
+        # Prevent extrapolation from insufficient data (e.g., 36 frames = 1.2s)
+        # Minimum 5 seconds required for reliable blink rate estimation
+        MIN_DURATION_SEC = 5.0
+        
+        if duration_sec < MIN_DURATION_SEC:
+            # Return conservative estimate with low confidence flag
+            # Instead of extrapolating from tiny window
+            logger.warning(
+                f"Blink rate: Insufficient data duration ({duration_sec:.1f}s < {MIN_DURATION_SEC}s). "
+                f"Detected {len(blink_events)} blinks. Returning 0.0 to avoid extrapolation."
+            )
+            return 0.0, len(blink_events)
+        
+        blink_rate = len(blink_events) / max(duration_min, 0.01)
         
         return float(np.clip(blink_rate, 0, 60)), len(blink_events)
     

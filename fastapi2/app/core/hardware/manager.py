@@ -81,6 +81,14 @@ class NumpyEncoder(json.JSONEncoder):
             return bool(obj)
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
+        elif hasattr(obj, 'isoformat'): # Handle datetime and similar
+            return obj.isoformat()
+        elif hasattr(obj, 'model_dump'): # Pydantic v2
+            return obj.model_dump()
+        elif hasattr(obj, 'dict'): # Pydantic v1
+            return obj.dict()
+        elif hasattr(obj, '__dict__'): # Generic objects
+            return obj.__dict__
         return super().default(obj)
 
 
@@ -355,8 +363,13 @@ class HardwareManager:
                 else:
                     active_models = [] # PROCESSING or ERROR -> No AI needed
                 
-                # Frame Skipping for Inference
-                should_run_inference = (self._frame_counter % self._inference_interval == 0)
+                # Frame Skipping for Inference (Throttle during active scans)
+                current_phase = self._scan_status.get("phase", "IDLE")
+                is_scanning = current_phase in ["FACE_ANALYSIS", "BODY_ANALYSIS"]
+                
+                # Use a much higher interval (lower FPS) for overlays during active recording
+                dynamic_interval = 10 if is_scanning else self._inference_interval
+                should_run_inference = (self._frame_counter % dynamic_interval == 0)
                 
                 if should_run_inference and active_models:
                     # Run selective inference
@@ -397,13 +410,9 @@ class HardwareManager:
                     with self._frame_lock:
                         self._latest_frame_jpeg = jpeg.tobytes()
                 
-                # Record frame if scan is active
-                if self._recording_active:
-                    with self._recording_lock:
-                        self._recording_buffer.append({
-                            'frame': frame.copy(),
-                            'timestamp': time.time()
-                        })
+                # Record frame if scan is active (HANDLED BY DRIVER Thread for 30FPS)
+                # We no longer need to append here; driver does it in background
+                pass
             else:
                 time.sleep(0.01)  # Brief sleep if no frame
     
@@ -677,14 +686,35 @@ class HardwareManager:
                 logger.info("Thermal queue cleared.")
 
             # ============================================================
-            # Phase 0: Baseline Calibration (NEW)
+            # Phase 0: Vitals Collection (NEW)
+            # ============================================================
+            self._update_scan_status(
+                phase="VITALS_COLLECTION",
+                message="Collecting vitals... Please sit still.",
+                progress=7,
+            )
+            logger.info("🎯 Phase 0: Vitals Collection (10s)")
+            
+            # Wait for user to be stationary
+            time.sleep(2)
+            
+            # Capture vitals for 10 seconds
+            self._countdown(10, "Collecting Vitals...", "VITALS_COLLECTION")
+            
+            # Aggregate vitals immediately while user is stationary
+            logger.info("📊 Aggregating vitals from Phase 0...")
+            radar_data = self._aggregate_radar()
+            esp32_data = self._aggregate_thermal()
+            
+            # ============================================================
+            # Phase 0.5: Baseline Calibration
             # ============================================================
             self._update_scan_status(
                 phase="BASELINE_CALIBRATION",
-                message="Calibrating environment... Stay still",
-                progress=7,
+                message="Calibrating environment...",
+                progress=15,
             )
-            logger.info("🎯 Phase 0: Baseline Calibration (5s)")
+            logger.info("🎯 Phase 0.5: Baseline Calibration (5s)")
             
             # Wait for initial alignment if possible, but don't block too long
             self._wait_for_alignment("FACE_ANALYSIS", timeout=3)
@@ -734,21 +764,16 @@ class HardwareManager:
                 # Preparation Timer (10s)
                 self._countdown(10, "Get Ready...", "FACE_ANALYSIS")
                 
-                # Start recording
-                with self._recording_lock:
-                    self._recording_buffer = []
-                    self._recording_active = True
+                # Start recording (DRIVER LEVEL)
+                self.camera.start_recording()
                 
                 # Capture Timer (10s)
                 self._countdown(self.config.face_capture_seconds, "Scanning Face...", "FACE_ANALYSIS")
                 
-                # Stop recording
-                self._recording_active = False
-                with self._recording_lock:
-                     # Copy buffer to local list
-                    raw_captures = list(self._recording_buffer)
+                # Stop recording (DRIVER LEVEL)
+                raw_captures = self.camera.stop_recording()
                 
-                logger.info(f"Captured {len(raw_captures)} face frames from broadcast")
+                logger.info(f"Captured {len(raw_captures)} face frames from hardware driver")
                 
                 # Post-process frames (CONSOLIDATED extraction: ROI + Landmarks)
                 processed_data = []
@@ -760,8 +785,13 @@ class HardwareManager:
 
                 face_frames = [d['roi'] for d in processed_data]
                 face_landmarks_sequence = [d['landmarks'] for d in processed_data if d['landmarks'] is not None]
-                
                 logger.info(f"Extracted {len(face_frames)} face ROIs, {len(face_landmarks_sequence)} landmark sets (CONSOLIDATED)")
+                
+                # Validation: Warn if faces detected but landmarks missing
+                if len(face_frames) > 0 and len(face_landmarks_sequence) == 0:
+                    logger.warning(f"⚠️ Face ROIs detected ({len(face_frames)}) but NO FaceMesh landmarks extracted. Eye blink detection will fail.")
+                elif len(face_frames) > 0 and len(face_landmarks_sequence) < len(face_frames) * 0.5:
+                    logger.warning(f"⚠️ Low landmark detection rate: {len(face_landmarks_sequence)}/{len(face_frames)} frames ({100*len(face_landmarks_sequence)/len(face_frames):.1f}%)")
             
             self._update_scan_status(progress=40)
             
@@ -788,20 +818,16 @@ class HardwareManager:
                 # Preparation Timer (10s)
                 self._countdown(10, "Get Ready...", "BODY_ANALYSIS")
                 
-                # Start recording
-                with self._recording_lock:
-                    self._recording_buffer = []
-                    self._recording_active = True
+                # Start recording (DRIVER LEVEL)
+                self.camera.start_recording()
                 
                 # Capture Timer (10s)
                 self._countdown(self.config.body_capture_seconds, "Scanning Body...", "BODY_ANALYSIS")
                 
-                # Stop recording
-                self._recording_active = False
-                with self._recording_lock:
-                    raw_captures = list(self._recording_buffer)
+                # Stop recording (DRIVER LEVEL)
+                raw_captures = self.camera.stop_recording()
                 
-                logger.info(f"Captured {len(raw_captures)} body frames from broadcast")
+                logger.info(f"Captured {len(raw_captures)} body frames from hardware driver")
                 
                 # Post-process frames
                 pose_sequence = []
@@ -823,11 +849,13 @@ class HardwareManager:
                 progress=75,
             )
             
-            # Aggregate Radar
-            radar_data = self._aggregate_radar()
+            # Aggregate Radar (Only if not already done in Phase 0)
+            if radar_data is None:
+                radar_data = self._aggregate_radar()
             
-            # Aggregate Thermal
-            esp32_data = self._aggregate_thermal()
+            # Aggregate Thermal (Only if not already done in Phase 0)
+            if esp32_data is None:
+                esp32_data = self._aggregate_thermal()
             
             # ============================================================
             # Build screening request (run all 8 extractors)
@@ -992,14 +1020,22 @@ class HardwareManager:
             return latest
         
         # Calculate medians for physiological stability (Replaced mean)
-        avg_hr = int(np.median([i['radar']['heart_rate'] for i in items]))
-        avg_resp = round(float(np.median([i['radar']['respiration_rate'] for i in items])), 1)
+        hr_values = [i['radar']['heart_rate'] for i in items]
+        rr_values = [i['radar']['respiration_rate'] for i in items]
+        
+        avg_hr = int(np.median(hr_values)) if hr_values else 0
+        avg_resp = round(float(np.median(rr_values)), 1) if rr_values else 0.0
         
         result = items[-1].copy()
         result['radar']['heart_rate'] = avg_hr
         result['radar']['respiration_rate'] = avg_resp
         
-        logger.info(f"Aggregated {len(items)} radar samples (Median). Avg HR: {avg_hr}, Avg Resp: {avg_resp}")
+        logger.info(f"   ✅ Collected {len(items)} Radar samples")
+        logger.info(f"   🔍 Radar Logic:")
+        logger.info(f"      - Input HR: {hr_values}")
+        logger.info(f"      - Median HR: {avg_hr}")
+        logger.info(f"      - Input RR: {rr_values}")
+        logger.info(f"      - Median RR: {avg_resp}")
         return result
     
     def _aggregate_thermal(self) -> Optional[Dict]:
@@ -1034,6 +1070,8 @@ class HardwareManager:
                            if get_val(i, 'core_regions', 'canthus_mean') > 25.0]
             neck_valid = [get_val(i, 'core_regions', 'neck_mean') for i in items 
                          if get_val(i, 'core_regions', 'neck_mean') > 25.0]
+            face_max_valid = [get_val(i, 'core_regions', 'face_max') for i in items 
+                           if get_val(i, 'core_regions', 'face_max') > 25.0]
             stability_vals = [get_val(i, 'stability_metrics', 'canthus_range') for i in items]
             asymmetry_vals = [get_val(i, 'symmetry', 'cheek_asymmetry') for i in items]
             gradient_vals = [get_val(i, 'gradients', 'forehead_nose_gradient') for i in items]
@@ -1041,6 +1079,7 @@ class HardwareManager:
             # Use median for core temperatures and metrics (more robust to noise)
             avg_canthus = round(float(np.median(canthus_valid)), 2) if canthus_valid else 0.0
             avg_neck = round(float(np.median(neck_valid)), 2) if neck_valid else 0.0
+            avg_face_max = round(float(np.median(face_max_valid)), 2) if face_max_valid else 0.0
             avg_stability = round(float(np.median(stability_vals)), 2) if stability_vals else 0.0
             avg_asymmetry = round(float(np.median(asymmetry_vals)), 3) if asymmetry_vals else 0.0
             avg_gradient = round(float(np.median(gradient_vals)), 2) if gradient_vals else 0.0
@@ -1048,7 +1087,11 @@ class HardwareManager:
             result = {
                 'timestamp': items[-1].get('timestamp', 0),
                 'thermal': {
-                    'core_regions': {'canthus_mean': avg_canthus, 'neck_mean': avg_neck},
+                    'core_regions': {
+                        'canthus_mean': avg_canthus, 
+                        'neck_mean': avg_neck,
+                        'face_max': avg_face_max
+                    },
                     'stability_metrics': {'canthus_range': avg_stability},
                     'symmetry': {'cheek_asymmetry': avg_asymmetry},
                     'gradients': {'forehead_nose_gradient': avg_gradient}

@@ -10,6 +10,7 @@ from enum import Enum
 import numpy as np
 
 from app.utils import get_logger
+from .debug_logging import log_extracted_biomarker  # Added for value tracking
 
 logger = get_logger(__name__)
 
@@ -201,6 +202,12 @@ class BaseExtractor(ABC):
     ) -> None:
         """Helper to add a biomarker to a set."""
         # Convert numpy types to native Python types for JSON serialization safety
+        # Sequential Debug Logging for Report Verification
+        try:
+            log_extracted_biomarker(biomarker_set.system.value, name, float(value), unit)
+        except Exception:
+            pass  # Fail gracefully to avoid blocking extraction
+            
         biomarker_set.add(Biomarker(
             name=name,
             value=float(value),

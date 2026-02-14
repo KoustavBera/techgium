@@ -1,110 +1,30 @@
-# Unified Architecture Migration Plan (Option 2)
+# Radar Data Investigation (Constant Heart Rate)
 
-## 1. Executive Summary
-This document outlines the migration from the current "Split-Process" architecture (Frontend `getUserMedia` vs. Backend `bridge.py`) to a **Unified "Kiosk-Style" Architecture**.
+## Observation
+The user reported that the Radar Heart Rate (HR) appears constant (e.g., 62 bpm) in the headless logs, despite the sensor ostensibly sending variable values (e.g., 79, 76, 73 bpm) as seen in Arduino IDE. The Respiratory Rate (RR) was also missing from the aggregation log snippet.
 
-In this new model:
-*   **The Backend (`main.py`) owns all hardware sensors** through a singleton `HardwareManager`.
-*   **The Frontend (`index.html`) is a passive display** that consumes a video stream (`/video_feed`) and sends commands (`start_scan`, `stop_scan`).
-*   **Analysis happens on the live stream**, eliminating the need for "hand-off" or "stopping/starting" cameras.
+## Hypotheses
+1.  **Regex Mismatch**: The regex `r"heart rate'.*?sending state\s*([\d.]+)"` might fail to match the specific format of HR lines, possibly due to ANSI color codes, quotes, or whitespace variations.
+2.  **Stale Data Persistence**: The `RadarReader` updates a shared `last_data` structure. If only RR updates are received (or matched), the `last_data` timestamp updates, and the old HR value is pushed to the queue repeatedly. This floods the aggregation window with a single stale HR value, leading to a constant median.
+3.  **Port Mismatch**: `COM6` was identified as the Thermal Camera (ESP32). `COM7` is likely the Radar. If the wrong port was used, no data (or wrong data) would be read.
 
-**Goal**: "Flawless" user experience with zero-latency startup and robust hardware management.
+## Investigation Steps
+1.  **Raw Logging**: Created `scripts/log_radar_raw.py` to capture raw serial bytes from `COM7`.
+2.  **Regex Verification**: The script tests the driver's regex against the live data.
+    - Result: RR lines match correctly (`✅ RR MATCH`).
+    - Status of HR matches is verified in `radar_raw_log.txt`.
 
----
+## Solution Plan
+1.  **Refine Regex**: Ensure the regex accounts for all variations (color codes, quotes).
+2.  **Data Expiry**: Modify `RadarReader` to clear or mark HR as "stale" if it hasn't been updated recently, rather than persisting the last known value indefinitely.
+3.  **Separate Streams**: Alternatively, track HR and RR timestamps independently to avoid queueing stale mixed data.
 
-## 2. Technical Design
+## Missing RR in Logs
+The "missing RR" in `[3/5] Aggregating Sensor Data` logs is likely because `HardwareManager._aggregate_radar` logging was focused only on HR. The data *is* being collected (as seen in the internal `raw_sequences` of the JSON log), but the debug printout just didn't show it.
 
-### A. The Hardware Manager (`app/core/hardware/manager.py`)
-This new class is the heart of the system. It replaces `bridge.py` and `app/core/hardware/bridge.py` (if it existed).
-
-**Responsibilities:**
-1.  **Persistent Connection**: Opens Camera(0), Radar(COM6), Thermal(COM5) *once* at startup.
-2.  **Multithreaded Capture**: Runs `threading.Thread` loops to constantly buffer the latest frames/data.
-3.  **Data Diffusion**:
-    *   **Hot Stream**: Provides latest JPEG frame for `/video_feed`.
-    *   **Analysis Buffer**: When "Screening Mode" is active, it routes frames to `PhysiologicalSystem` extractors.
-
-**Key Definition:**
-```python
-class HardwareManager:
-    _instance = None # Singleton
-    
-    def __init__(self):
-        self.camera = None
-        self.radar = None
-        self.thermal = None
-        self.running = False
-        self.latest_frame_jpeg = None
-        self.analysis_mode = False
-        self.buffer = []
-
-    async def startup(self):
-        # Start threads for Camera, Radar, Thermal
-        pass
-
-    def get_video_stream(self):
-        # Generator for Multipart MJPEG
-        while True:
-            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + self.latest_frame_jpeg + b'\r\n')
-```
-
-### B. FastAPI Integration (`app/main.py`)
-We remove the `subprocess.run(["python", "bridge.py"])` logic entirely.
-
-**Changes:**
-1.  **Lifespan Event**: Initialize `HardwareManager.startup()` on app boot.
-2.  **Endpoint 1 (`GET /video_feed`)**: Streams the camera view to the browser.
-3.  **Endpoint 2 (`POST /start_scan`)**: Sets `HardwareManager.analysis_mode = True`. Returns immediately. Frontend polls for completion.
-4.  **Endpoint 3 (`GET /scan_status`)**: Returns progress (e.g., "Face: 50%", "Pose: Waiting") and final `screening_id`.
-
-### C. Frontend Refactor (`frontend/index.html`)
-The complex MediaPipe JS logic is removed in favor of Server-Side Rendering (SSR) of overlays (optional) or just raw video.
-
-**Changes:**
-1.  **Remove**: `getUserMedia`, `faceMesh` JS, `pose` JS.
-2.  **Add**: `<img src="/api/video_feed" style="width: 100%" />`.
-3.  **Logic**:
-    *   Click "Start" -> calls `/start_scan`.
-    *   Poll `/scan_status` every 1s.
-    *   When status="Complete", show report link.
-
----
-
-## 3. Migration Checklist
-
-### Phase 1: Hardware Abstraction Layer
-1.  [ ] Create `app/core/hardware/` package.
-2.  [ ] **Action**: Copy `CameraCapture`, `RadarReader`, `ESP32Reader` classes from `bridge.py` to `app/core/hardware/drivers.py`.
-3.  [ ] **Action**: Create `app/core/hardware/manager.py` implementing the Singleton pattern and Threading logic.
-
-### Phase 2: FastAPI Wiring
-1.  [ ] **Modify** `app/main.py`:
-    *   Import `HardwareManager`.
-    *   Add `lifespan` handler.
-    *   Add `/video_feed` endpoint using `StreamingResponse`.
-    *   Add `/hardware/control` endpoints.
-
-### Phase 3: Extraction Logic Port
-1.  [ ] **Analyze**: `bridge.py` has a main loop that runs extractors (`SkinExtractor`, `CardiovascularExtractor`, etc.) sequentially.
-2.  [ ] **Port**: Move this logic into `HardwareManager.run_analysis_routine()`. This method will be called in a background thread when `/start_scan` is hit.
-3.  [ ] **State**: Store the results (`system_results`, `overall_risk`) in an in-memory `_screenings` dictionary (same as `main.py` currently uses, or a shared state).
-
-### Phase 4: Frontend "dumb" Mode
-1.  [ ] Update `index.html` to remove all client-side webcam logic.
-2.  [ ] Point the main view to the MJPEG stream.
-3.  [ ] Re-implement the UI overlay to reflect the *Backend's* state (received via polling).
-
----
-
-## 4. Risk Analysis
-
-*   **Performance**: Python `cv2` is slower than JS MediaPipe. Expected output FPS: 15-20. **Mitigation**: Resize frames to 640x480 for analysis, maybe stream 720p.
-*   **Concurrency**: FastAPI is Async, OpenCV is Blocking. **Mitigation**: Must use `asyncio.to_thread` or `ThreadPoolExecutor` for all hardware interaction. The `video_feed` generator must yield clearly to avoid blocking the event loop.
-*   **Hardware Locks**: If the server crashes/reloads (WatchFiles), the camera might not release. **Mitigation**: Robust `try...finally` blocks in the lifespan handler to ensure `cap.release()` is called.
-
-## 5. Why this is "Flawless"
-*   **No "Permission" Popups**: Browser just loads an image.
-*   **Instant On**: Camera is already warm when user clicks "Start".
-*   **Synchronization**: Radar and Thermal are perfectly aligned with Video because the same process holds the timestamps.
-
-**Proceeding with Phase 1...**
+## Final Resolution
+1.  **Reference Bug**: The constant HR was caused by `self.last_data.copy()` being a **shallow copy**. All 84 queued items shared the same `['radar']` dictionary reference. When aggregation ran, it read the current value (e.g., 70) 84 times.
+    - **Fix**: Implemented explicit deep copy of the inner dictionary in `drivers.py`.
+2.  **JSON Crash**: The runner crashed on save because `SystemRiskResult` wasn't serializable.
+    - **Fix**: Updated `NumpyEncoder` in `manager.py` to handle generic objects.
+3.  **Visualization**: Added RR statistics to `HardwareManager` logs to confirm data presence.

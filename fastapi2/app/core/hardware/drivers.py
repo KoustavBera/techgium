@@ -179,12 +179,20 @@ class RadarReader(BaseSerialReader):
                     if not line:
                         continue
                     
-                    # Parse text-based output using regex (matches actual hardware)
-                    hr_match = re.search(r'heart rate.*?([\d.]+)\s*bpm', line.lower())
-                    rr_match = re.search(r'respiratory rate.*?([\d.]+)', line.lower())
+                    # Parse ESPHome debug logs strictly (same as test_mmradar.py)
+                    # Example color-coded ESPHome log format:
+                    # [11:17:05][D][sensor:094]: 'Real-time heart rate': Sending state 87.000000 
+                    hr_match = re.search(r"heart rate'.*?sending state\s*([\d.]+)", line.lower())
+                    rr_match = re.search(r"respiratory rate'.*?sending state\s*([\d.]+)", line.lower())
                     
-                    # Update last_data with any new values found
+                    # DEBUG: Log what we see
                     if hr_match or rr_match:
+                         hr_val = hr_match.group(1) if hr_match else "None"
+                         rr_val = rr_match.group(1) if rr_match else "None"
+                         # logger.info(f"Radar DEBUG: HR={hr_val} RR={rr_val}")
+                    
+                    if hr_match or rr_match:
+                        # Ensure we have the base structure
                         if not self.last_data or 'radar' not in self.last_data:
                             self.last_data = {
                                 'timestamp': int(time.time()),
@@ -195,25 +203,50 @@ class RadarReader(BaseSerialReader):
                                 }
                             }
                         
+                        fresh_update = False
+                        
                         if hr_match:
-                            heart_rate = float(hr_match.group(1))
-                            if 40 <= heart_rate <= 180:
-                                self.last_data['radar']['heart_rate'] = int(heart_rate)
-                                self.last_data['timestamp'] = int(time.time())
+                            try:
+                                heart_rate = float(hr_match.group(1))
+                                if 40 <= heart_rate <= 180:
+                                    # Only update if different or first time
+                                    if self.last_data['radar']['heart_rate'] != int(heart_rate):
+                                        self.last_data['radar']['heart_rate'] = int(heart_rate)
+                                    self.last_data['timestamp'] = int(time.time())
+                                    fresh_update = True
+                            except (ValueError, IndexError):
+                                pass
                         
                         if rr_match:
-                            resp_rate = float(rr_match.group(1))
-                            # Apply -10% calibration correction for sensor error
-                            resp_rate_corrected = resp_rate * 0.9
-                            if 5 <= resp_rate_corrected <= 40:
-                                self.last_data['radar']['respiration_rate'] = round(resp_rate_corrected, 1)
-                                self.last_data['timestamp'] = int(time.time())
+                            try:
+                                resp_rate = float(rr_match.group(1))
+                                resp_rate_corrected = round(resp_rate, 1) # Removed * 0.9
+                                if 5 <= resp_rate_corrected <= 40:
+                                    if self.last_data['radar']['respiration_rate'] != resp_rate_corrected:
+                                        self.last_data['radar']['respiration_rate'] = resp_rate_corrected
+                                    self.last_data['timestamp'] = int(time.time())
+                                    fresh_update = True
+                            except (ValueError, IndexError):
+                                pass
                         
-                        # Update queue with latest data
-                        self.last_data['received_at'] = time.time()
-                        if self.data_queue.full():
-                            self.data_queue.get()
-                        self.data_queue.put(self.last_data.copy())
+                        # ONLY PUSH TO QUEUE IF WE ACTUALLY MATCHED A NEW LINE
+                        # This prevents RR updates from flooding the queue with stale HR copies
+                        if fresh_update:
+                            self.last_data['received_at'] = time.time()
+                            if self.data_queue.full():
+                                try:
+                                    self.data_queue.get_nowait()
+                                except queue.Empty:
+                                    pass
+                            
+                            # KEY FIX: Use deepcopy (or manual dict reconstruction) to avoid reference sharing
+                            data_snapshot = {
+                                'timestamp': self.last_data['timestamp'],
+                                'received_at': self.last_data['received_at'],
+                                'radar': self.last_data['radar'].copy()  # Explicit copy of inner dict
+                            }
+                            self.data_queue.put(data_snapshot)
+                            # self.data_queue.put(self.last_data.copy()) REMOVED
                 else:
                     time.sleep(0.01)
                         
@@ -276,6 +309,11 @@ class CameraCapture:
         self.thread_running = False
         self.capture_thread = None
         
+        # Recording state
+        self._recording_active = False
+        self._recording_buffer = []
+        self._recording_lock = threading.Lock()
+        
         self._init_mediapipe()
     
     def _init_mediapipe(self):
@@ -305,12 +343,13 @@ class CameraCapture:
             logger.warning(f"Pose landmarker init failed: {e}")
 
         try:
+            # Use static_image_mode=True for batch processing to avoid timestamp mismatch errors
+            # Each frame is processed independently without temporal tracking
             self.face_mesh = mp.solutions.face_mesh.FaceMesh(
-                static_image_mode=False,
+                static_image_mode=True,
                 max_num_faces=1,
                 refine_landmarks=True,
-                min_detection_confidence=0.5,
-                min_tracking_confidence=0.5
+                min_detection_confidence=0.5
             )
             logger.info("✅ FaceMesh initialized (478 landmarks)")
         except Exception as e:
@@ -342,9 +381,34 @@ class CameraCapture:
             if ret:
                 with self.frame_lock:
                     self.current_frame = frame
+                
+                # Decoupled Recording: Push to buffer immediately at native FPS
+                if self._recording_active:
+                    with self._recording_lock:
+                        # Append copy to avoid mutation by other processes
+                        self._recording_buffer.append({
+                            'frame': frame.copy(),
+                            'timestamp': time.time()
+                        })
             else:
-                time.sleep(0.1)
+                time.sleep(0.01) # Faster polling for 30fps
         logger.info("Camera capture thread stopped")
+
+    def start_recording(self):
+        """Enable low-level frame recording."""
+        with self._recording_lock:
+            self._recording_buffer = []
+            self._recording_active = True
+        logger.info("Driver-level recording started")
+
+    def stop_recording(self) -> List[Dict[str, Any]]:
+        """Stop recording and return the buffer."""
+        with self._recording_lock:
+            self._recording_active = False
+            buffer = list(self._recording_buffer)
+            self._recording_buffer = []
+        logger.info(f"Driver-level recording stopped. Captured {len(buffer)} frames.")
+        return buffer
     
     def close(self):
         """Close camera."""
@@ -463,7 +527,7 @@ class CameraCapture:
                 
             landmarks = result.multi_face_landmarks[0].landmark
             landmarks_array = np.array([
-                [lm.x, lm.y, lm.z, 1.0]
+                [lm.x, lm.y, lm.z, lm.visibility if hasattr(lm, 'visibility') else 1.0]
                 for lm in landmarks
             ])
             

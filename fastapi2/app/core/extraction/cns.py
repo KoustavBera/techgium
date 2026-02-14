@@ -45,8 +45,8 @@ class CNSExtractor(BaseExtractor):
         super().__init__()
         self.sample_rate = sample_rate
         
-        # Minimum data requirements (10 seconds for reliable analysis)
-        self.min_data_length = int(10 * self.sample_rate)
+        # Minimum data requirements (relaxed from 10s to ~7s for reliability)
+        self.min_data_length = 200 # Previously 300 (10s @ 30fps)
         self.min_strides = 3  # Minimum strides for gait analysis
         
         # MediaPipe landmark indices

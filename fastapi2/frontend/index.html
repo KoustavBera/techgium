@@ -711,20 +711,24 @@
 					<div class="step-circle">1</div>
 					Initializing
 				</div>
-				<div class="step-item" data-step="baseline">
+				<div class="step-item" data-step="vitals">
 					<div class="step-circle">2</div>
-					Baseline Calibration (5s)
+					Vitals Collection (10s)
+				</div>
+				<div class="step-item" data-step="baseline">
+					<div class="step-circle">3</div>
+					Baseline Calibration
 				</div>
 				<div class="step-item" data-step="capture">
-					<div class="step-circle">3</div>
+					<div class="step-circle">4</div>
 					Face Analysis (10s)
 				</div>
 				<div class="step-item" data-step="pose">
-					<div class="step-circle">4</div>
+					<div class="step-circle">5</div>
 					Body Analysis (10s)
 				</div>
 				<div class="step-item" data-step="process">
-					<div class="step-circle">5</div>
+					<div class="step-circle">6</div>
 					AI Processing
 				</div>
 			</div>
@@ -833,6 +837,10 @@
 					"Please ensure all sensors are connected. Stand in the center of the frame.",
 				],
 				INITIALIZING: ["INITIALIZING", "Preparing sensors for analysis..."],
+				VITALS_COLLECTION: [
+					"VITALS COLLECTION",
+					message || "Collecting heart rate and respiration rate... Please sit still.",
+				],
 				BASELINE_CALIBRATION: [
 					"CALIBRATING ENVIRONMENT",
 					"Please stay still. Establishing environmental baseline for accurate analysis...",
@@ -879,13 +887,14 @@
 			// Update step progress
 			const stepMap = {
 				INITIALIZING: "init",
+				VITALS_COLLECTION: "vitals",
 				BASELINE_CALIBRATION: "baseline",
 				FACE_ANALYSIS: "capture",
 				BODY_ANALYSIS: "pose",
 				PROCESSING: "process",
 				COMPLETE: "done",
 			};
-			const steps = ["init", "baseline", "capture", "pose", "process"];
+			const steps = ["init", "vitals", "baseline", "capture", "pose", "process"];
 			const activeIdx = steps.indexOf(stepMap[phase] || "");
 			document.querySelectorAll(".step-item").forEach((el, i) => {
 				el.className = "step-item";

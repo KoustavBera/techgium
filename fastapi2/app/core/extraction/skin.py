@@ -37,6 +37,7 @@ FALLBACK_VALUES = {
 class SessionBaseline:
     """Session-specific environmental baseline (not stored after scan)."""
     baseline_facial_temp: float = 36.0
+    baseline_canthus_temp: float = 35.5 # NEW: inner eye specific baseline
     baseline_redness: float = 0.0  # CIELab *a
     baseline_yellowness: float = 0.0  # CIELab *b
     ambient_background_temp: float = 25.0  # Room temp from thermal camera
@@ -45,6 +46,7 @@ class SessionBaseline:
     def to_dict(self) -> Dict[str, float]:
         return {
             "baseline_facial_temp": self.baseline_facial_temp,
+            "baseline_canthus_temp": self.baseline_canthus_temp,
             "baseline_redness": self.baseline_redness,
             "baseline_yellowness": self.baseline_yellowness,
             "ambient_background_temp": self.ambient_background_temp,
@@ -366,28 +368,29 @@ class SkinExtractor(BaseExtractor):
         forehead = landmarks[10]
 
         # 1. Yaw Estimation (Horizontal Rotation)
-        # Ratio of distances from nose tip to eye outer corners
+        # Stable Linear Delta Ratio: (L-R)/(L+R)
         dist_left = abs(nose_tip.x - left_eye.x)
         dist_right = abs(nose_tip.x - right_eye.x)
         
-        if dist_right == 0: dist_right = 0.01
-        yaw_ratio = dist_left / dist_right
+        denominator = dist_left + dist_right
+        if denominator == 0: denominator = 0.01
         
-        # Logarithmic mapping: ratio=1.0 -> 0°, ratio=2.0 -> ~20°
-        yaw = np.degrees(np.log(yaw_ratio)) * 20.0
-
+        # Linear shift: -1.0 (Full Left) to 1.0 (Full Right)
+        yaw_shift = (dist_left - dist_right) / denominator
+        # Map to degrees (~ ±90°)
+        yaw = yaw_shift * 90.0
+        
         # 2. Pitch Estimation (Vertical Rotation)
-        # Ratio of (Nose-Forehead) / (Nose-Chin)
         dist_up = abs(nose_tip.y - forehead.y)
         dist_down = abs(nose_tip.y - chin.y)
         
-        if dist_down == 0: dist_down = 0.01
-        pitch_ratio = dist_up / dist_down
+        denominator_v = dist_up + dist_down
+        if denominator_v == 0: denominator_v = 0.01
         
-        # Baseline vertical ratio for frontal face is approx 1.0
-        pitch = np.degrees(np.log(pitch_ratio)) * 15.0
+        pitch_shift = (dist_up - dist_down) / denominator_v
+        pitch = pitch_shift * 90.0
         
-        return float(yaw), float(pitch)
+        return float(np.clip(yaw, -90, 90)), float(np.clip(pitch, -90, 90))
 
     def _analyze_skin_color_lab(self, frame: np.ndarray, mask: np.ndarray, session_baseline: Optional[SessionBaseline] = None) -> Dict[str, float]:
         """
@@ -522,6 +525,7 @@ class SkinExtractor(BaseExtractor):
         
         # 1. Thermal Baseline
         facial_temps = []
+        canthus_temps = [] # NEW
         background_temps = []
         CALIBRATION_OFFSET = 0.8
         
@@ -530,11 +534,16 @@ class SkinExtractor(BaseExtractor):
             if face_max is not None:
                 facial_temps.append(face_max + CALIBRATION_OFFSET)
             
+            canthus = data.get('fever_canthus_temp') # NEW
+            if canthus is not None:
+                canthus_temps.append(canthus + CALIBRATION_OFFSET)
+            
             bg_temp = data.get('background_temp')
             if bg_temp is not None:
                 background_temps.append(bg_temp)
                 
         baseline_temp = np.median(facial_temps) if facial_temps else 36.0
+        baseline_canthus = np.median(canthus_temps) if canthus_temps else baseline_temp - 0.5 # NEW
         ambient_temp = np.median(background_temps) if background_temps else 25.0
         
         # 2. RGB Baseline
@@ -561,6 +570,7 @@ class SkinExtractor(BaseExtractor):
         
         baseline = SessionBaseline(
             baseline_facial_temp=float(baseline_temp),
+            baseline_canthus_temp=float(baseline_canthus),
             baseline_redness=float(baseline_redness),
             baseline_yellowness=float(baseline_yellowness),
             ambient_background_temp=float(ambient_temp),
@@ -614,7 +624,15 @@ class SkinExtractor(BaseExtractor):
         
         if final_skin_temp is not None:
             if session_baseline:
-                thermal_deviation = final_skin_temp - session_baseline.baseline_facial_temp
+                # Metric-aware deviation (compare like-for-like)
+                if face_max is not None:
+                    # Peak vs Peak Baseline
+                    thermal_deviation = face_max - session_baseline.baseline_facial_temp
+                    desc_suffix = f"Peak baseline ({session_baseline.baseline_facial_temp:.1f}°C)"
+                else:
+                    # Canthus vs Canthus Baseline
+                    thermal_deviation = final_skin_temp - session_baseline.baseline_canthus_temp
+                    desc_suffix = f"Canthus baseline ({session_baseline.baseline_canthus_temp:.1f}°C)"
                 
                 # Adjust normal range based on ambient temperature
                 if session_baseline.ambient_background_temp < 22.0:
@@ -631,7 +649,7 @@ class SkinExtractor(BaseExtractor):
                     unit="delta_celsius",
                     confidence=0.92 if canthus_temp is not None else 0.70,
                     normal_range=adjusted_range,
-                    description=f"Skin temp deviation from session baseline ({session_baseline.baseline_facial_temp:.1f}°C)"
+                    description=f"Skin temp deviation from experimental {desc_suffix}"
                 )
             else:
                  self._add_biomarker_safe(
