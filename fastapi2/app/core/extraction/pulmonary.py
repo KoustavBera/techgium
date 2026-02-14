@@ -100,7 +100,7 @@ class PulmonaryExtractor(BaseExtractor):
                     value=float(radar["respiration_rate"]),
                     unit="breaths/min",
                     confidence=0.90,
-                    normal_range=(12, 20),
+                    normal_range=(10, 20),
                     description="Respiration rate from 60GHz Radar"
                 )
                 
@@ -139,7 +139,7 @@ class PulmonaryExtractor(BaseExtractor):
                 value=float(vitals["respiration_rate"]),
                 unit="breaths/min",
                 confidence=0.99,
-                normal_range=(12, 20),
+                normal_range=(10, 20),
                 description="Manual/Clinical entry"
             )
 

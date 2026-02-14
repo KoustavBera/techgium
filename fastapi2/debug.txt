@@ -1,179 +1,188 @@
-(venv) PS C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\fastapi2> python scripts/headless_runner.py
-[2026-02-14T04:50:17.941942+00:00] INFO [app.core.hardware.manager] HardwareManager singleton created
-
-[1/5] Initializing Hardware...
-[2026-02-14T04:50:17.941942+00:00] INFO [app.core.hardware.manager] ============================================================
-[2026-02-14T04:50:17.941942+00:00] INFO [app.core.hardware.manager] HardwareManager starting up (Unified Architecture)
-[2026-02-14T04:50:17.941942+00:00] INFO [app.core.hardware.manager] ============================================================
-[2026-02-14T04:50:17.954776+00:00] INFO [app.core.hardware.drivers] ✅ FaceDetector (Legacy) initialized
+PS C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\fastapi2> cd .. && venv/Scripts/activate && cd fastapi2\
+(venv) PS C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\fastapi2> uvicorn app.main:app --reload --port 8000
+INFO: Will watch for changes in these directories: ['C:\\Users\\Swetanjana Maity\\Desktop\\kblndt\\techgium\\fastapi2']
+INFO: Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO: Started reloader process [27168] using WatchFiles
+[2026-02-14T07:08:30.372620+00:00] INFO [app.core.hardware.manager] HardwareManager singleton created
+[2026-02-14T07:08:30.379144+00:00] WARNING [app.core.llm.gemini_client] No Gemini API key provided - mock mode enabled
+[2026-02-14T07:08:30.381239+00:00] INFO [app.core.reports.patient_report] GeminiClient initialized for AI explanations
+[2026-02-14T07:08:30.381681+00:00] INFO [app.core.reports.patient_report] EnhancedPatientReportGenerator initialized, output: reports
+[2026-02-14T07:08:30.382949+00:00] INFO [app.core.reports.doctor_report] DoctorReportGenerator initialized, output: reports
+[2026-02-14T07:08:30.382949+00:00] INFO [app.core.inference.risk_engine] RiskEngine initialized (basic confidence scoring)
+[2026-02-14T07:08:30.382949+00:00] INFO [app.core.agents.medical_agents] AgentConsensus initialized
+[2026-02-14T07:08:30.382949+00:00] WARNING [app.core.llm.gemini_client] No Gemini API key provided - mock mode enabled
+[2026-02-14T07:08:30.385017+00:00] INFO [app.core.agents.hf_client] HuggingFaceClient in mock mode (no API key or InferenceClient unavailable)
+[2026-02-14T07:08:30.385841+00:00] INFO [app.core.llm.multi_llm_interpreter] MultiLLMInterpreter initialized with Sequential Quality Pipeline
+[2026-02-14T07:08:30.386151+00:00] INFO [app.core.ml.anomaly_detector] SignalAnomalyDetector initialized (sklearn=True)
+[2026-02-14T07:08:30.386151+00:00] INFO [app.core.validation.signal_quality] SignalQualityAssessor initialized WITH anomaly detection
+INFO: Started server process [29772]
+INFO: Waiting for application startup.
+[2026-02-14T07:08:30.400473+00:00] INFO [app.core.hardware.manager] ============================================================
+[2026-02-14T07:08:30.400473+00:00] INFO [app.core.hardware.manager] HardwareManager starting up (Unified Architecture)
+[2026-02-14T07:08:30.400473+00:00] INFO [app.core.hardware.manager] ============================================================
+[2026-02-14T07:08:30.407947+00:00] INFO [app.core.hardware.drivers] ✅ FaceDetector (Legacy) initialized
 INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
-[2026-02-14T04:50:17.963315+00:00] INFO [app.core.hardware.drivers] ✅ PoseLandmarker (Legacy) initialized
 WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
-W0000 00:00:1771044617.967027 13004 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-[2026-02-14T04:50:17.969502+00:00] INFO [app.core.hardware.drivers] ✅ FaceMesh initialized (478 landmarks)
-W0000 00:00:1771044617.973747 11820 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-W0000 00:00:1771044617.992471 26340 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-W0000 00:00:1771044618.066139 28636 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-W0000 00:00:1771044618.084570 28636 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-[2026-02-14T04:50:20.605792+00:00] INFO [app.core.hardware.drivers] Camera 0 opened with threaded capture
-[2026-02-14T04:50:20.605792+00:00] INFO [app.core.hardware.manager] ✅ Camera 0 opened
-[2026-02-14T04:50:20.609699+00:00] INFO [app.core.hardware.drivers] Connected to Seeed Radar Kit (MR60BHA2) on COM7
-[2026-02-14T04:50:20.611300+00:00] INFO [app.core.hardware.manager] ✅ Radar connected on COM7
-[2026-02-14T04:50:20.674213+00:00] INFO [app.core.hardware.drivers] Connected to ESP32 NodeMCU (Thermal MLX90640) on COM6
-[2026-02-14T04:50:20.675319+00:00] INFO [app.core.hardware.manager] ✅ Thermal connected on COM6
-[2026-02-14T04:50:20.675319+00:00] INFO [app.core.extraction.base] CardiovascularExtractor initialized for cardiovascular
-[2026-02-14T04:50:20.675319+00:00] INFO [app.core.extraction.base] CNSExtractor initialized for central_nervous_system
-[2026-02-14T04:50:20.675319+00:00] INFO [app.core.extraction.base] SkeletalExtractor initialized for skeletal
-[2026-02-14T04:50:20.675319+00:00] INFO [app.core.extraction.base] SkinExtractor initialized for skin
-[2026-02-14T04:50:20.678656+00:00] INFO [app.core.extraction.base] PulmonaryExtractor initialized for pulmonary
-[2026-02-14T04:50:20.678656+00:00] INFO [app.core.extraction.base] RenalExtractor initialized for renal
-[2026-02-14T04:50:20.678656+00:00] INFO [app.core.extraction.base] EyeExtractor initialized for eyes
-[2026-02-14T04:50:20.678656+00:00] INFO [app.core.extraction.base] NasalExtractor initialized for nasal
-[2026-02-14T04:50:20.683868+00:00] INFO [app.core.hardware.manager] ✅ All 8 extractors initialized
-W0000 00:00:1771044620.684674 28508 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-[2026-02-14T04:50:20.686188+00:00] INFO [app.core.hardware.manager] ✅ Continuous capture thread started
-[2026-02-14T04:50:20.686188+00:00] INFO [app.core.hardware.manager] HardwareManager startup complete
-- Camera: connected
-- Radar: connected
-- Thermal: connected
-
-[2/5] Starting Scan for HEADLESS_20260214_102017...
-
-📸 PHASE 1: Face Analysis (10s)
-Please look at the camera...
-[2026-02-14T04:50:20.686714+00:00] INFO [app.core.hardware.drivers] Driver-level recording started
-W0000 00:00:1771044620.697588 16176 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771052910.412189 28236 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[2026-02-14T07:08:30.422423+00:00] INFO [app.core.hardware.drivers] ✅ PoseLandmarker (Legacy) initialized
+[2026-02-14T07:08:30.439637+00:00] INFO [app.core.hardware.drivers] ✅ FaceMesh initialized (478 landmarks)
+W0000 00:00:1771052910.442546 29144 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771052910.471104 29144 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771052910.580920 30856 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771052910.622361 30856 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[2026-02-14T07:08:34.354761+00:00] INFO [app.core.hardware.drivers] Camera 0 opened with threaded capture
+[2026-02-14T07:08:34.354761+00:00] INFO [app.core.hardware.manager] ✅ Camera 0 opened
+[2026-02-14T07:08:34.357512+00:00] INFO [app.core.hardware.drivers] Connected to Seeed Radar Kit (MR60BHA2) on COM7
+[2026-02-14T07:08:34.359140+00:00] INFO [app.core.hardware.manager] ✅ Radar connected on COM7
+[2026-02-14T07:08:34.422814+00:00] INFO [app.core.hardware.drivers] Connected to ESP32 NodeMCU (Thermal MLX90640) on COM6
+[2026-02-14T07:08:34.428642+00:00] INFO [app.core.hardware.manager] ✅ Thermal connected on COM6
+[2026-02-14T07:08:34.428642+00:00] INFO [app.core.extraction.base] CardiovascularExtractor initialized for cardiovascular
+[2026-02-14T07:08:34.428642+00:00] INFO [app.core.extraction.base] CNSExtractor initialized for central_nervous_system
+[2026-02-14T07:08:34.428642+00:00] INFO [app.core.extraction.base] SkeletalExtractor initialized for skeletal
+[2026-02-14T07:08:34.428642+00:00] INFO [app.core.extraction.base] SkinExtractor initialized for skin
+[2026-02-14T07:08:34.440241+00:00] INFO [app.core.extraction.base] PulmonaryExtractor initialized for pulmonary
+[2026-02-14T07:08:34.440241+00:00] INFO [app.core.extraction.base] RenalExtractor initialized for renal
+[2026-02-14T07:08:34.440241+00:00] INFO [app.core.extraction.base] EyeExtractor initialized for eyes
+[2026-02-14T07:08:34.440241+00:00] INFO [app.core.extraction.base] NasalExtractor initialized for nasal
+[2026-02-14T07:08:34.443574+00:00] INFO [app.core.hardware.manager] ✅ All 8 extractors initialized
+W0000 00:00:1771052914.445445 21496 inference_feedback_manager.cc:114] Feedback manager requires capture thread started
+[2026-02-14T07:08:34.446578+00:00] INFO [app.core.hardware.manager] HardwareManager startup complete
+[2026-02-14T07:08:34.449114+00:00] INFO [app.main] API ready to accept requests
+INFO: Application startup complete.
+W0000 00:00:1771052914.474190 12980 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
 C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
 warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-Scanning... Done!
-[2026-02-14T04:50:30.761427+00:00] INFO [app.core.hardware.drivers] Driver-level recording stopped. Captured 298 frames.
-✅ Captured 298 face frames
-
-🚶 PHASE 2: Body Analysis (10s)
-Please show your full body...
-[2026-02-14T04:50:30.761427+00:00] INFO [app.core.hardware.drivers] Driver-level recording started
-Scanning... Done!
-[2026-02-14T04:50:40.836861+00:00] INFO [app.core.hardware.drivers] Driver-level recording stopped. Captured 302 frames.
-✅ Captured 302 body frames
-
-[3/5] Aggregating Sensor Data (GLASS BOX VIEW)...
-✅ Collected 71 Radar samples
-🔍 Radar Logic:
-- Input HR: [103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103]
-- Median HR: 103
-✅ Collected 24 Thermal samples
-🔍 Thermal Logic (Firmware Mode):
-- Input Canthus: [31.46, 31.45, 31.38, 31.08, 30.83, 30.72, 31.75, 31.66, 31.15, 30.54, 30.53, 30.52, 30.37, 30.46, 30.42, 30.57, 30.49, 30.37, 30.34, 30.41, 30.37, 30.3, 30.3, 30.34]
-- Valid Canthus (>25C): [31.46, 31.45, 31.38, 31.08, 30.83, 30.72, 31.75, 31.66, 31.15, 30.54, 30.53, 30.52, 30.37, 30.46, 30.42, 30.57, 30.49, 30.37, 30.34, 30.41, 30.37, 30.3, 30.3, 30.34]
-- Median Canthus: 30.52
-
-[4/5] Running Full Processing Pipeline (Extractors + Risk Engine)...
-⚙️ Processing Images (Body/Face)...
-🔍 Extracting Face Features from 298 frames...
-🔍 Extracting Body Pose from 302 frames...
-⚙️ Building Screening Request (Running 8 Extractors)...
-🔍 [10:20:50.354] [DEBUG] PULMONARY | respiration_rate : 20.700 breaths/min
-🔍 [10:20:50.355] [DEBUG] CARDIOVASCULAR | heart_rate : 108.000 bpm
-[2026-02-14T04:50:50.355920+00:00] WARNING [app.core.extraction.cardiovascular] rPPG: Insufficient frames, need at least 10 seconds
-🔍 [10:20:50.355] [DEBUG] CARDIOVASCULAR | thermal_asymmetry : 0.292 delta_celsius
-🔍 [10:20:50.367] [DEBUG] SKIN | skin_temperature : 36.680 celsius
-🔍 [10:20:50.367] [DEBUG] SKIN | skin_temperature_max : 36.680 celsius
-🔍 [10:20:50.367] [DEBUG] SKIN | inflammation_index : 4.998 percent
-🔍 [10:20:50.368] [DEBUG] SKIN | face_mean_temperature : 29.035 celsius
-🔍 [10:20:50.368] [DEBUG] SKIN | thermal_stability : 1.400 delta_celsius
-[2026-02-14T04:50:50.368391+00:00] WARNING [app.core.extraction.skin] Skin: High head rotation detected (Yaw: 13.5°, Pitch: 10.7°). Reducing asymmetry confidence.
-🔍 [10:20:50.368] [DEBUG] SKIN | thermal_asymmetry : 0.292 delta_celsius
-🔍 [10:20:50.379] [DEBUG] SKIN | texture_roughness : 2.002 glcm_contrast
-🔍 [10:20:50.461] [DEBUG] SKIN | skin_redness : 24.525 lab_deviation
-🔍 [10:20:50.461] [DEBUG] SKIN | skin_yellowness : 28.297 lab_deviation
-🔍 [10:20:50.461] [DEBUG] SKIN | color_uniformity : 0.343 entropy_inv
-🔍 [10:20:50.461] [DEBUG] SKIN | lesion_count : 0.000 count
-[2026-02-14T04:50:50.461355+00:00] INFO [app.core.extraction.skin] Skin: Visual head pose estimation - Yaw: 13.5°, Pitch: 10.7°
-[2026-02-14T04:50:50.463379+00:00] INFO [app.core.extraction.cns] Subject appears stationary, skipping gait analysis
-🔍 [10:20:50.463] [DEBUG] CENTRAL_NERVOUS_SYSTEM | gait_variability : 0.045 coefficient_of_variation
-🔍 [10:20:50.463] [DEBUG] CENTRAL_NERVOUS_SYSTEM | posture_entropy : 0.170 sample_entropy
-[2026-02-14T04:50:50.463379+00:00] WARNING [app.core.extraction.cns] Insufficient visible wrist landmarks for tremor analysis
-🔍 [10:20:50.463] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_resting : 0.030 normalized_psd
-🔍 [10:20:50.463] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_postural : 0.030 normalized_psd
-🔍 [10:20:50.463] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_intention : 0.030 normalized_psd
-🔍 [10:20:50.468] [DEBUG] CENTRAL_NERVOUS_SYSTEM | cns_stability_score : 77.461 score_0_100
-🔍 [10:20:50.468] [DEBUG] CENTRAL_NERVOUS_SYSTEM | sway_amplitude_ap : 0.033 normalized_units
-🔍 [10:20:50.468] [DEBUG] CENTRAL_NERVOUS_SYSTEM | sway_amplitude_ml : 0.004 normalized_units
-[2026-02-14T04:50:50.469780+00:00] INFO [app.core.extraction.cns] CNS extraction complete: 8 biomarkers, 6.4ms, 0 heel strikes detected
-🔍 [10:20:50.469] [DEBUG] CENTRAL_NERVOUS_SYSTEM | thermal_stress_gradient : 5.630 delta_celsius
-🔍 [10:20:50.475] [DEBUG] SKELETAL | gait_symmetry_ratio : 0.964 ratio
-🔍 [10:20:50.475] [DEBUG] SKELETAL | average_joint_rom : 0.140 radians
-[2026-02-14T04:50:50.475212+00:00] WARNING [app.core.extraction.renal] RenalExtractor: No data sources available.
-🔍 [10:20:50.475] [DEBUG] RENAL | microcirculation_temp : 30.520 celsius
-🔍 [10:20:50.475] [DEBUG] RENAL | cold_extremity_flag : 1.000 flag
-[2026-02-14T04:50:50.478932+00:00] WARNING [app.core.extraction.eyes] Low landmark visibility: 0.00
-🔍 [10:20:50.478] [DEBUG] EYES | blink_rate : 18.121 blinks_per_min
-🔍 [10:20:50.478] [DEBUG] EYES | blink_count : 3.000 count
-🔍 [10:20:50.483] [DEBUG] EYES | gaze_stability_score : 97.762 score_0_100
-🔍 [10:20:50.483] [DEBUG] EYES | fixation_duration : 200.000 ms
-🔍 [10:20:50.483] [DEBUG] EYES | saccade_frequency : 2.919 saccades_per_sec
-🔍 [10:20:50.484] [DEBUG] EYES | eye_symmetry : 0.950 ratio
-🔍 [10:20:50.486] [DEBUG] NASAL | nostril_occlusion_score : 0.000 score_0_1
-🔍 [10:20:50.486] [DEBUG] NASAL | respiratory_effort_index : 0.515 ratio
-🔍 [10:20:50.488] [DEBUG] NASAL | nasal_cycle_balance : 0.337 score_0_1
-🧠 invoking ScreeningService (Risk Engine + LLM)...
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-C:\Users\Swetanjana Maity\Desktop\kblndt\techgium\venv\Lib\site-packages\google\protobuf\symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
-warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
-[2026-02-14T04:51:23.688293+00:00] INFO [app.core.inference.risk_engine] RiskEngine initialized (basic confidence scoring)
-[2026-02-14T04:51:23.689309+00:00] WARNING [app.core.llm.gemini_client] No Gemini API key provided - mock mode enabled
-[2026-02-14T04:51:23.689825+00:00] INFO [app.core.agents.hf_client] HuggingFaceClient in mock mode (no API key or InferenceClient unavailable)
-[2026-02-14T04:51:23.689825+00:00] INFO [app.core.llm.multi_llm_interpreter] MultiLLMInterpreter initialized with Sequential Quality Pipeline
-[2026-02-14T04:51:23.689825+00:00] INFO [app.core.ml.anomaly_detector] SignalAnomalyDetector initialized (sklearn=True)
-[2026-02-14T04:51:23.689825+00:00] INFO [app.core.validation.signal_quality] SignalQualityAssessor initialized WITH anomaly detection
-[2026-02-14T04:51:23.689825+00:00] INFO [app.services.screening] Processing system: pulmonary with 1 biomarkers
-[2026-02-14T04:51:23.691063+00:00] INFO [app.services.screening] Processing system: cardiovascular with 2 biomarkers
-[2026-02-14T04:51:23.691806+00:00] INFO [app.services.screening] Processing system: skin with 11 biomarkers
-[2026-02-14T04:51:23.691806+00:00] INFO [app.services.screening] Processing system: central_nervous_system with 9 biomarkers
-[2026-02-14T04:51:23.691806+00:00] INFO [app.services.screening] Processing system: skeletal with 2 biomarkers
-[2026-02-14T04:51:23.691806+00:00] INFO [app.services.screening] Processing system: renal with 2 biomarkers
-[2026-02-14T04:51:23.691806+00:00] INFO [app.services.screening] Processing system: eyes with 6 biomarkers
-[2026-02-14T04:51:23.691806+00:00] INFO [app.services.screening] Processing system: nasal with 3 biomarkers
-[2026-02-14T04:51:23.691806+00:00] INFO [app.core.llm.multi_llm_interpreter] Risk score 32.3 triggers FULL 3-LLM pipeline (forced)
-[2026-02-14T04:51:23.691806+00:00] INFO [app.core.llm.multi_llm_interpreter] Starting MultiLLM Phase 1 (Gemini)...
-[2026-02-14T04:51:23.695837+00:00] WARNING [app.core.llm.multi_llm_interpreter] Phase 1 returned MOCK response
-[2026-02-14T04:51:23.696715+00:00] INFO [app.services.screening] MultiLLM validation: mode=full_pipeline, passed=True
-✅ Processing Complete in 0.0s
-📊 Result: moderate (Score: 32.3)
-
-[5/5] Saving Detailed Logs...
-[2026-02-14T04:51:23.696715+00:00] INFO [app.core.hardware.manager] HardwareManager shutting down...
-[2026-02-14T04:51:23.735703+00:00] INFO [app.core.hardware.drivers] Camera capture thread stopped
-[2026-02-14T04:51:24.055617+00:00] INFO [app.core.hardware.drivers] Camera closed
-[2026-02-14T04:51:24.055617+00:00] INFO [app.core.hardware.drivers] Disconnected from Seeed Radar Kit (MR60BHA2)
-[2026-02-14T04:51:24.059385+00:00] INFO [app.core.hardware.drivers] Disconnected from ESP32 NodeMCU (Thermal MLX90640)
-[2026-02-14T04:51:24.059385+00:00] INFO [app.core.hardware.manager] HardwareManager shutdown complete
+[2026-02-14T07:08:36.961602+00:00] WARNING [app.core.hardware.drivers] ESP32 thermal error: invalid_frame
+[2026-02-14T07:08:51.773064+00:00] INFO [app.core.hardware.manager] Initiating scan for patient: PATIENT_001
+[2026-02-14T07:08:51.775585+00:00] INFO [app.core.hardware.manager] Launching scan thread...
+[2026-02-14T07:08:51.775585+00:00] INFO [app.core.hardware.manager] Target function: <bound method HardwareManager._run_scan of <app.core.hardware.manager.HardwareManager object at 0x00000232F74AF4A0>>
+[2026-02-14T07:08:51.775585+00:00] INFO [app.core.hardware.manager] Starting thread...
+[2026-02-14T07:08:51.775585+00:00] INFO [app.core.hardware.manager] ============================================================
+[2026-02-14T07:08:51.775585+00:00] INFO [app.core.hardware.manager] Thread started: True
+[2026-02-14T07:08:51.775585+00:00] INFO [app.core.hardware.manager] Starting scan for patient: PATIENT_001 (THREAD STARTED)
+[2026-02-14T07:08:51.775585+00:00] INFO [app.core.hardware.manager] Scan thread launched successfully
+[2026-02-14T07:08:51.778682+00:00] INFO [app.core.hardware.manager] ============================================================
+INFO: 127.0.0.1:65156 - "POST /api/v1/hardware/start-screening HTTP/1.1" 200 OK
+[2026-02-14T07:08:51.778682+00:00] INFO [app.core.hardware.manager] Clearing radar queue...
+[2026-02-14T07:08:51.778682+00:00] INFO [app.core.hardware.manager] Radar queue cleared.
+[2026-02-14T07:08:51.778682+00:00] INFO [app.core.hardware.manager] Clearing thermal queue...
+[2026-02-14T07:08:51.781325+00:00] INFO [app.core.hardware.manager] Thermal queue cleared.
+[2026-02-14T07:08:51.782766+00:00] INFO [app.core.hardware.manager] 🎯 Phase 0: Vitals Collection (10s)
+[2026-02-14T07:09:03.914526+00:00] INFO [app.core.hardware.manager] 📊 Aggregating vitals from Phase 0...
+[2026-02-14T07:09:03.917142+00:00] INFO [app.core.hardware.manager] ✅ Collected 23 Radar samples
+[2026-02-14T07:09:03.917142+00:00] INFO [app.core.hardware.manager] 🔍 Radar Logic:
+[2026-02-14T07:09:03.917142+00:00] INFO [app.core.hardware.manager] - Input HR: [0, 0, 0, 0, 63, 63, 63, 65, 65, 65, 69, 69, 69, 69, 69, 72, 72, 72, 72, 75, 75, 75, 75]
+[2026-02-14T07:09:03.919637+00:00] INFO [app.core.hardware.manager] - Median HR: 69
+[2026-02-14T07:09:03.919637+00:00] INFO [app.core.hardware.manager] - Input RR: [12.0, 11.0, 10.0, 9.0, 9.0, 8.0, 7.0, 7.0, 6.0, 5.0, 5.0, 6.0, 8.0, 9.0, 10.0, 10.0, 11.0, 12.0, 13.0, 13.0, 14.0, 15.0, 16.0]
+[2026-02-14T07:09:03.920914+00:00] INFO [app.core.hardware.manager] - Median RR: 10.0
+[2026-02-14T07:09:03.922480+00:00] INFO [app.core.hardware.manager] 📊 Collected 16 thermal samples
+[2026-02-14T07:09:03.928769+00:00] INFO [app.core.hardware.manager] Aggregated thermal (firmware - Median). Canthus: 33.33°C, Neck: 30.62°C, Stability: 2.08
+[2026-02-14T07:09:03.930398+00:00] INFO [app.core.hardware.manager] 🎯 Phase 0.5: Baseline Calibration (5s)
+[2026-02-14T07:09:03.930398+00:00] INFO [app.core.hardware.manager] ⏳ Waiting for alignment in FACE_ANALYSIS (timeout=3s)...
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+[2026-02-14T07:09:04.953465+00:00] INFO [app.core.hardware.manager] ✅ Alignment achieved for FACE_ANALYSIS
+[2026-02-14T07:09:10.001356+00:00] INFO [app.core.extraction.skin] Skin: Capturing session baseline from 8 thermal and 0 RGB frames
+[2026-02-14T07:09:10.007582+00:00] INFO [app.core.extraction.skin] Skin: Session baseline established: {'baseline_facial_temp': 37.199999999999996, 'baseline_canthus_temp': 36.699999999999996, 'baseline_redness': 128.0, 'baseline_yellowness': 128.0, 'ambient_background_temp': 25.0, 'ambient_light_level': 120.0}
+[2026-02-14T07:09:10.009759+00:00] INFO [app.core.hardware.manager] Checking if camera is available for Phase 1...
+[2026-02-14T07:09:10.009759+00:00] INFO [app.core.hardware.manager] Camera found. Updating status to FACE_ANALYSIS...
+[2026-02-14T07:09:10.009759+00:00] INFO [app.core.hardware.manager] ⏳ Waiting for alignment in FACE_ANALYSIS (timeout=Nones)...
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+[2026-02-14T07:09:11.011525+00:00] INFO [app.core.hardware.manager] ✅ Alignment achieved for FACE_ANALYSIS
+[2026-02-14T07:09:21.265140+00:00] INFO [app.core.hardware.drivers] Driver-level recording started
+[2026-02-14T07:09:31.590872+00:00] INFO [app.core.hardware.drivers] Driver-level recording stopped. Captured 279 frames.
+[2026-02-14T07:09:31.590872+00:00] INFO [app.core.hardware.manager] Captured 279 face frames from hardware driver
+[2026-02-14T07:09:39.217520+00:00] INFO [app.core.hardware.manager] Extracted 279 face ROIs, 279 landmark sets (CONSOLIDATED)
+[2026-02-14T07:09:39.217520+00:00] INFO [app.core.hardware.manager] 🚶 Phase 2: Body capture (10s)
+[2026-02-14T07:09:39.219332+00:00] INFO [app.core.hardware.manager] 🚶 Phase 2: Body capture (10s)
+[2026-02-14T07:09:39.220043+00:00] INFO [app.core.hardware.manager] ⏳ Waiting for alignment in BODY_ANALYSIS (timeout=5s)...
+[2026-02-14T07:09:56.424917+00:00] INFO [app.core.hardware.drivers] Driver-level recording started
+[2026-02-14T07:10:06.765843+00:00] INFO [app.core.hardware.drivers] Driver-level recording stopped. Captured 280 frames.
+[2026-02-14T07:10:06.779436+00:00] INFO [app.core.hardware.manager] Captured 280 body frames from hardware driver
+[2026-02-14T07:10:35.992623+00:00] INFO [app.core.hardware.manager] Extracted 280 pose frames
+🔍 [12:40:35.992] [DEBUG] PULMONARY | respiration_rate : 10.000 breaths/min
+🔍 [12:40:35.994] [DEBUG] CARDIOVASCULAR | heart_rate : 69.000 bpm
+[2026-02-14T07:10:35.994634+00:00] WARNING [app.core.extraction.cardiovascular] rPPG: Insufficient frames, need at least 10 seconds
+🔍 [12:40:35.995] [DEBUG] CARDIOVASCULAR | thermal_asymmetry : 3.925 delta_celsius
+🔍 [12:40:36.022] [DEBUG] SKIN | skin_temperature_deviation: -0.130 delta_celsius
+🔍 [12:40:36.022] [DEBUG] SKIN | skin_temperature_max : 37.070 celsius
+🔍 [12:40:36.022] [DEBUG] SKIN | inflammation_index : 10.000 percent
+🔍 [12:40:36.022] [DEBUG] SKIN | face_mean_temperature : 31.975 celsius
+🔍 [12:40:36.022] [DEBUG] SKIN | thermal_stability : 2.080 delta_celsius
+[2026-02-14T07:10:36.024180+00:00] WARNING [app.core.extraction.skin] Skin: High head rotation detected (Yaw: 8.0°, Pitch: 12.1°). Reducing asymmetry confidence.
+🔍 [12:40:36.024] [DEBUG] SKIN | thermal_asymmetry : 3.925 delta_celsius
+🔍 [12:40:36.062] [DEBUG] SKIN | texture_roughness : 2.498 glcm_contrast
+🔍 [12:40:36.259] [DEBUG] SKIN | skin_redness : 14.777 lab_deviation
+🔍 [12:40:36.259] [DEBUG] SKIN | skin_yellowness : 13.212 lab_deviation
+🔍 [12:40:36.259] [DEBUG] SKIN | color_uniformity : 0.372 entropy_inv
+🔍 [12:40:36.259] [DEBUG] SKIN | lesion_count : 0.000 count
+[2026-02-14T07:10:36.261513+00:00] INFO [app.core.extraction.skin] Skin: Visual head pose estimation - Yaw: 8.0°, Pitch: 12.1°
+[2026-02-14T07:10:36.263301+00:00] INFO [app.core.extraction.cns] Subject appears stationary, skipping gait analysis
+🔍 [12:40:36.263] [DEBUG] CENTRAL_NERVOUS_SYSTEM | gait_variability : 0.045 coefficient_of_variation
+🔍 [12:40:36.270] [DEBUG] CENTRAL_NERVOUS_SYSTEM | posture_entropy : 0.326 sample_entropy
+[2026-02-14T07:10:36.272560+00:00] WARNING [app.core.extraction.cns] Insufficient visible wrist landmarks for tremor analysis
+🔍 [12:40:36.272] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_resting : 0.030 normalized_psd
+🔍 [12:40:36.274] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_postural : 0.030 normalized_psd
+🔍 [12:40:36.274] [DEBUG] CENTRAL_NERVOUS_SYSTEM | tremor_intention : 0.030 normalized_psd
+🔍 [12:40:36.282] [DEBUG] CENTRAL_NERVOUS_SYSTEM | cns_stability_score : 85.658 score_0_100
+🔍 [12:40:36.282] [DEBUG] CENTRAL_NERVOUS_SYSTEM | sway_amplitude_ap : 0.003 normalized_units
+🔍 [12:40:36.282] [DEBUG] CENTRAL_NERVOUS_SYSTEM | sway_amplitude_ml : 0.003 normalized_units
+[2026-02-14T07:10:36.285169+00:00] INFO [app.core.extraction.cns] CNS extraction complete: 8 biomarkers, 22.9ms, 0 heel strikes detected
+🔍 [12:40:36.285] [DEBUG] CENTRAL_NERVOUS_SYSTEM | thermal_stress_gradient : 2.660 delta_celsius
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+🔍 [12:40:36.296] [DEBUG] SKELETAL | gait_symmetry_ratio : 0.726 ratio
+🔍 [12:40:36.298] [DEBUG] SKELETAL | average_joint_rom : 0.218 radians
+[2026-02-14T07:10:36.298769+00:00] WARNING [app.core.extraction.renal] RenalExtractor: No data sources available.
+🔍 [12:40:36.299] [DEBUG] RENAL | microcirculation_temp : 33.330 celsius
+🔍 [12:40:36.299] [DEBUG] RENAL | cold_extremity_flag : 1.000 flag
+[2026-02-14T07:10:36.301866+00:00] WARNING [app.core.extraction.eyes] Low landmark visibility: 0.00
+🔍 [12:40:36.304] [DEBUG] EYES | blink_rate : 12.903 blinks_per_min
+🔍 [12:40:36.305] [DEBUG] EYES | blink_count : 2.000 count
+🔍 [12:40:36.308] [DEBUG] EYES | gaze_stability_score : 99.234 score_0_100
+🔍 [12:40:36.309] [DEBUG] EYES | fixation_duration : 50.000 ms
+🔍 [12:40:36.309] [DEBUG] EYES | saccade_frequency : 1.720 saccades_per_sec
+🔍 [12:40:36.309] [DEBUG] EYES | eye_symmetry : 0.950 ratio
+🔍 [12:40:36.314] [DEBUG] NASAL | nostril_occlusion_score : 0.000 score_0_1
+🔍 [12:40:36.318] [DEBUG] NASAL | respiratory_effort_index : 0.048 ratio
+🔍 [12:40:36.322] [DEBUG] NASAL | nasal_cycle_balance : 0.324 score_0_1
+[2026-02-14T07:10:36.324497+00:00] INFO [app.core.hardware.manager] Screening request: 8 systems
+[2026-02-14T07:10:36.324497+00:00] INFO [app.core.hardware.manager] - pulmonary: 1 biomarkers
+[2026-02-14T07:10:36.325313+00:00] INFO [app.core.hardware.manager] - cardiovascular: 2 biomarkers
+[2026-02-14T07:10:36.325657+00:00] INFO [app.core.hardware.manager] - skin: 11 biomarkers
+[2026-02-14T07:10:36.325657+00:00] INFO [app.core.hardware.manager] - central_nervous_system: 9 biomarkers
+[2026-02-14T07:10:36.325657+00:00] INFO [app.core.hardware.manager] - skeletal: 2 biomarkers
+[2026-02-14T07:10:36.326671+00:00] INFO [app.core.hardware.manager] - renal: 2 biomarkers
+[2026-02-14T07:10:36.326671+00:00] INFO [app.core.hardware.manager] - eyes: 6 biomarkers
+[2026-02-14T07:10:36.327200+00:00] INFO [app.core.hardware.manager] - nasal: 3 biomarkers
+[2026-02-14T07:10:36.327816+00:00] INFO [app.services.screening] Processing system: pulmonary with 1 biomarkers
+[2026-02-14T07:10:36.327816+00:00] INFO [app.services.screening] Processing system: cardiovascular with 2 biomarkers
+[2026-02-14T07:10:36.327816+00:00] INFO [app.services.screening] Processing system: skin with 11 biomarkers
+[2026-02-14T07:10:36.329935+00:00] INFO [app.services.screening] Processing system: central_nervous_system with 9 biomarkers
+[2026-02-14T07:10:36.329935+00:00] INFO [app.services.screening] Processing system: skeletal with 2 biomarkers
+[2026-02-14T07:10:36.330867+00:00] INFO [app.services.screening] Processing system: renal with 2 biomarkers
+[2026-02-14T07:10:36.330867+00:00] INFO [app.services.screening] Processing system: eyes with 6 biomarkers
+[2026-02-14T07:10:36.331891+00:00] INFO [app.services.screening] Processing system: nasal with 3 biomarkers
+[2026-02-14T07:10:36.331891+00:00] INFO [app.core.llm.multi_llm_interpreter] Risk score 50.0 triggers FULL 3-LLM pipeline (forced)
+[2026-02-14T07:10:36.332919+00:00] INFO [app.core.llm.multi_llm_interpreter] Starting MultiLLM Phase 1 (Gemini)...
+[2026-02-14T07:10:36.335007+00:00] WARNING [app.core.llm.multi_llm_interpreter] Phase 1 returned MOCK response
+[2026-02-14T07:10:36.335537+00:00] INFO [app.services.screening] MultiLLM validation: mode=full_pipeline, passed=True
+[2026-02-14T07:10:36.336570+00:00] INFO [app.core.hardware.manager] ✅ Screening completed via service: SCR-424D0BC7
+[2026-02-14T07:10:36.336570+00:00] INFO [app.core.reports.patient_report] Skipping global AI explanations (no abnormal biomarkers or Gemini unavailable)
+[2026-02-14T07:10:36.338070+00:00] INFO [app.core.reports.patient_report] Generating PDF report for system: Pulmonary with biomarkers: ['respiration_rate']
+[2026-02-14T07:10:36.339634+00:00] INFO [app.core.reports.patient_report] Generating PDF report for system: Cardiovascular with biomarkers: ['heart_rate', 'thermal_asymmetry']
+[2026-02-14T07:10:36.341232+00:00] INFO [app.core.reports.patient_report] Generating PDF report for system: Skin with biomarkers: ['skin_temperature_deviation', 'skin_temperature_max', 'inflammation_index', 'face_mean_temperature', 'thermal_stability', 'thermal_asymmetry', 'texture_roughness', 'skin_redness', 'skin_yellowness', 'color_uniformity', 'lesion_count']
+[2026-02-14T07:10:36.346922+00:00] INFO [app.core.reports.patient_report] Generating PDF report for system: Central Nervous System with biomarkers: ['gait_variability', 'posture_entropy', 'tremor_resting', 'tremor_postural', 'tremor_intention', 'cns_stability_score', 'sway_amplitude_ap', 'sway_amplitude_ml', 'thermal_stress_gradient']
+[2026-02-14T07:10:36.349335+00:00] INFO [app.core.reports.patient_report] Generating PDF report for system: Skeletal with biomarkers: ['gait_symmetry_ratio', 'average_joint_rom']
+[2026-02-14T07:10:36.350366+00:00] INFO [app.core.reports.patient_report] Generating PDF report for system: Renal (Experimental) with biomarkers: ['microcirculation_temp', 'cold_extremity_flag']
+[2026-02-14T07:10:36.352013+00:00] INFO [app.core.reports.patient_report] Generating PDF report for system: Eyes with biomarkers: ['blink_rate', 'blink_count', 'gaze_stability_score', 'fixation_duration', 'saccade_frequency', 'eye_symmetry']
+[2026-02-14T07:10:36.354553+00:00] INFO [app.core.reports.patient_report] Generating PDF report for system: Nasal (Experimental) with biomarkers: ['nostril_occlusion_score', 'respiratory_effort_index', 'nasal_cycle_balance']
+INFO: 127.0.0.1:56914 - "GET /api/v1/hardware/scan-status HTTP/1.1" 200 OK
+[2026-02-14T07:10:36.488762+00:00] INFO [app.core.reports.patient_report] Enhanced patient report generated: reports\PR-20260214-124036.pdf
+[2026-02-14T07:10:36.488762+00:00] INFO [app.core.hardware.manager] Patient report generated: PR-20260214-124036
+[2026-02-14T07:10:36.549051+00:00] INFO [app.core.reports.doctor_report] Doctor report generated: reports\DR-20260214-124036.pdf
+[2026-02-14T07:10:36.550235+00:00] INFO [app.core.hardware.manager] Doctor report generated: DR-20260214-124036

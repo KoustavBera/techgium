@@ -412,6 +412,18 @@ class SkinExtractor(BaseExtractor):
         # Convert to Lab
         lab_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2Lab)
         
+        # Auto White Balance (Grey World Assumption) to correct lighting
+        avg_scene_color = np.mean(frame, axis=(0, 1))
+        # Protect against div by zero
+        avg_scene_color = np.maximum(avg_scene_color, 1.0) 
+        
+        # Calculate gain to make average scene gray (128, 128, 128)
+        gain = 128.0 / avg_scene_color
+        
+        # Apply gain (simple Von Kries model)
+        # Note: This is computationally expensive on full frame, so we apply correction 
+        # to the EXTRACTED mean values instead of the whole image array
+        
         # Extract channels
         l_channel, a_channel, b_channel = cv2.split(lab_frame)
         
@@ -420,24 +432,37 @@ class SkinExtractor(BaseExtractor):
         skin_pixels_b = b_channel[mask == 255]
         
         if len(skin_pixels_a) == 0:
-            return {
+             return {
                 "redness": self._get_fallback_value("skin_redness"),
                 "yellowness": self._get_fallback_value("skin_yellowness"),
                 "uniformity": self._get_fallback_value("color_uniformity")
             }
 
-        # Calculate metrics with deviation scaling
-        # If baseline exists, compute deviation from baseline
-        # Otherwise, 128 is neutral, so we subtract 128 and scale by 2
+        # Calculate raw means
         raw_a_mean = np.mean(skin_pixels_a)
         raw_b_mean = np.mean(skin_pixels_b)
+        
+        # Apply pseudo-AWB correction to the MEANS based on scene lighting bias
+        # If scene is too yellow (low b in Lab? No, Lab b is Blue-Yellow), we adjust.
+        # Actually simplest AWB is on RGB, then convert. 
+        # Since we already have Lab, let's normalize deviations using a context-aware approach.
+        
+        # Improved Approach: Differential analysis against background
+        # If we assume background wall is neutral-ish, we can subtract its color bias.
+        # For now, we will use a "Soft White Balance" that dampens extreme values driven by lighting
+        
+        # Dampening factor for lighting artifacts (heuristic)
+        lighting_offset_a = (avg_scene_color[2] - 128) * 0.1 # Red channel bias influence
+        lighting_offset_b = (avg_scene_color[0] - 128) * 0.1 # Blue channel bias influence
         
         if session_baseline:
             redness = float(raw_a_mean - session_baseline.baseline_redness)
             yellowness = float(raw_b_mean - session_baseline.baseline_yellowness)
         else:
-            redness = float((raw_a_mean - 128.0) * 2.0)
-            yellowness = float((raw_b_mean - 128.0) * 2.0)
+            # Corrected deviation from neutral
+            # REMOVED * 2.0 multiplier which was inflating natural variance into "Abnormal" range
+            redness = float(raw_a_mean - 128.0 - lighting_offset_a)
+            yellowness = float(raw_b_mean - 128.0 - lighting_offset_b)
         
         # Uniformity: Entropy of the a* channel (pigmentation variation)
         # Lower entropy = Higher uniformity
@@ -591,6 +616,35 @@ class SkinExtractor(BaseExtractor):
         # THERMAL CALIBRATION: Hardware consistently reads ~0.8°C lower than actual
         # Applying offset to bring readings into clinical range
         CALIBRATION_OFFSET = 0.8
+        
+        # MOTION GATING: Check for head movement before trusting thermal data
+        # Rapid movement causes "Inflammation" artifacts (hot pixel smearing)
+        if pose_landmarks:
+            # Simple velocity check: comparing nose position to undefined previous state
+            # Since we don't track state across frames in this class easily without a stateful extractor,
+            # we will use the 'thermal_stability' metric itself as a gate.
+            
+            # However, we can use the head rotation we calculated later.
+            yaw, pitch = self._estimate_head_pose(pose_landmarks)
+            
+            # If head is rotating fast or at extreme angles, the "Canthus" temp is unreliable
+            # because the camera sees the side of the nose or cheek instead.
+            # TIGHTENED THRESHOLD (15 -> 10) to prevent false positives in "Above Normal" flags
+            is_stable_pose = abs(yaw) < 10.0 and abs(pitch) < 10.0
+            
+            if not is_stable_pose:
+                logger.warning(
+                    f"Thermal: Unstable pose (Yaw={yaw:.1f}, Pitch={pitch:.1f}). "
+                    f"Skipping inflammation/stability analysis to prevent artifacts."
+                )
+                # We still extract basic temp but skip sensitive metrics
+                # Explicitly remove keys to prevent them from being processed
+                if 'inflammation_pct' in thermal_data:
+                    del thermal_data['inflammation_pct']
+                if 'thermal_stability' in thermal_data:
+                    del thermal_data['thermal_stability']
+                if 'thermal_asymmetry' in thermal_data:
+                    del thermal_data['thermal_asymmetry']
         
         # Skin Temperature from canthus (core body proxy - medically validated)
         neck_temp = thermal_data.get('fever_neck_temp')

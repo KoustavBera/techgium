@@ -237,19 +237,57 @@ class CardiovascularExtractor(BaseExtractor):
             return
         
         try:
-            # Extract green channel signal (most sensitive to blood volume)
-            green_signal = []
+            # POS Algorithm (Plane-Orthogonal-to-Skin) - Wang et al. 2017
+            # More robust to lighting variations/motion than Green channel only
+            r_signal = []
+            g_signal = []
+            b_signal = []
+            
             for frame in face_frames:
                 if len(frame.shape) == 3:
-                    # Extract green channel focusing on forehead (best perfusion ROI)
-                    # Upper 30% of face, centered horizontally
+                    # Extract ROI: Forehead (Upper 30% of face, centered)
                     h, w = frame.shape[:2]
-                    forehead_roi = frame[int(h*0.1):int(h*0.4), int(w*0.25):int(w*0.75), 1]
-                    green_signal.append(np.mean(forehead_roi))
+                    forehead_roi = frame[int(h*0.1):int(h*0.4), int(w*0.25):int(w*0.75)]
+                    
+                    # OpenCV is BGR
+                    b_val = np.mean(forehead_roi[:, :, 0])
+                    g_val = np.mean(forehead_roi[:, :, 1])
+                    r_val = np.mean(forehead_roi[:, :, 2])
+                    
+                    r_signal.append(r_val)
+                    g_signal.append(g_val)
+                    b_signal.append(b_val)
                 else:
-                    green_signal.append(np.mean(frame))
+                    # Fallback for greyscale
+                    val = np.mean(frame)
+                    r_signal.append(val)
+                    g_signal.append(val)
+                    b_signal.append(val)
             
-            green_signal = np.array(green_signal)
+            r_raw = np.array(r_signal)
+            g_raw = np.array(g_signal)
+            b_raw = np.array(b_signal)
+            
+            # POS Processing
+            # 1. Temporal Normalization
+            rn = r_raw / (np.mean(r_raw) + 1e-6)
+            gn = g_raw / (np.mean(g_raw) + 1e-6)
+            bn = b_raw / (np.mean(b_raw) + 1e-6)
+            
+            # 2. Projection
+            # S1 = G - B
+            # S2 = G + B - 2R
+            s1 = gn - bn
+            s2 = gn + bn - 2 * rn
+            
+            # 3. Tuning (Alpha fusion)
+            # Alpha = std(S1) / std(S2)
+            std_s1 = np.std(s1)
+            std_s2 = np.std(s2)
+            alpha = std_s1 / (std_s2 + 1e-6)
+            
+            # 4. Pulse Signal
+            green_signal = s1 + alpha * s2
             
             # Validate signal
             is_valid, confidence_factor = self.validate_signal(green_signal, fps)

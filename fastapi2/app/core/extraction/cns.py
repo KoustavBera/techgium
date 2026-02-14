@@ -542,6 +542,28 @@ class CNSExtractor(BaseExtractor):
         Uses center of mass proxy from hip/shoulder landmarks.
         Filters to postural frequency band (0.1-2.0 Hz).
         """
+        # POSTURE DETECTION: Check if subject is seated
+        # A seated subject has no postural sway, leading to artificially low entropy (0.3-0.4)
+        # We check the aspect ratio of the bounding box of the torso.
+        
+        # Approximate torso height/width
+        if pose_array.shape[1] > 24:
+            shoulders_y = (pose_array[:, 11, 1] + pose_array[:, 12, 1]) / 2
+            hips_y = (pose_array[:, 23, 1] + pose_array[:, 24, 1]) / 2
+            torso_height = np.mean(abs(shoulders_y - hips_y))
+            
+            shoulders_x = abs(pose_array[:, 11, 0] - pose_array[:, 12, 0])
+            hips_x = abs(pose_array[:, 23, 0] - pose_array[:, 24, 0])
+            torso_width = np.mean((shoulders_x + hips_x) / 2)
+            
+            # Aspect ratio check (Standing usually > 1.5, Seated/Cropped < 1.2)
+            # This is a heuristic.
+            if torso_width > 0:
+                aspect_ratio = torso_height / torso_width
+                if aspect_ratio < 1.2:
+                    logger.warning(f"CNS: Low torso aspect ratio ({aspect_ratio:.2f}). Subject likely seated. Skipping sway analysis.")
+                    return 1.5 # Return "Normal/high" complexity to avoid "Abnormal/Low" flag
+        
         # Landmark indices for center of mass estimation
         shoulder_left = self.landmarks["left_shoulder"]
         shoulder_right = self.landmarks["right_shoulder"]

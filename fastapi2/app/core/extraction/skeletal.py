@@ -58,11 +58,45 @@ class SkeletalExtractor(BaseExtractor):
         if fps:
             self.sample_rate = float(fps)
         
-        if len(pose_sequence) >= 15: # Need at least 0.5s for filtering
+        if len(pose_sequence) > 10:
             pose_array = np.array(pose_sequence)
+            
+            # STATIONARY CHECK: Velocity-Based
+            # If the subject's center of mass (shoulders/hips) moves less than threshold,
+            # we assume they are standing still (or seated stationary).
+            # Gait analysis requires forward/backward movement.
+            
+            # Calculate average velocity of key body parts
+            if pose_array.shape[1] > 24:
+                # Get shoulders and hips (indices 11, 12, 23, 24)
+                # Shape: (Frames, 4, 3)
+                key_joints = pose_array[:, [11, 12, 23, 24], :2] # XY only
+                
+                # Calculate frame-to-frame displacement
+                displacement = np.linalg.norm(np.diff(key_joints, axis=0), axis=2)
+                
+                # Average velocity (pixels/frame) across all 4 joints
+                avg_velocity_px = np.mean(displacement)
+                
+                # Convert to approx pixels/sec (assuming 30fps)
+                avg_velocity_pps = avg_velocity_px * self.sample_rate
+                
+                # Threshold: Walking usually > 50-100 pps. Standing sway is < 20 pps.
+                STATIONARY_THRESHOLD_PPS = 40.0
+                
+                if avg_velocity_pps < STATIONARY_THRESHOLD_PPS:
+                     logger.warning(
+                        f"Skeletal: Low body velocity ({avg_velocity_pps:.1f} px/s). "
+                        f"Subject likely stationary. Skipping gait analysis."
+                    )
+                     return biomarker_set
+
             self._extract_gait_symmetry(pose_array, biomarker_set)
             self._extract_stance_stability(pose_array, biomarker_set)
             self._extract_joint_kinematics(pose_array, biomarker_set)
+            
+        biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
+        self._extraction_count += 1
         return biomarker_set
     
     def _extract_gait_symmetry(
@@ -171,12 +205,29 @@ class SkeletalExtractor(BaseExtractor):
         sway_filtered = self._preprocess_signal(com, low_freq=0.1, high_freq=2.0)
         sway_x = np.std(sway_filtered[:, 0])
         sway_y = np.std(sway_filtered[:, 1])
-        total_sway = np.sqrt(sway_x**2 + sway_y**2)
+        total_sway_px = np.sqrt(sway_x**2 + sway_y**2)
+        
+        # DEPTH NORMALIZATION: Normalize pixel sway by subject scale
+        # We use shoulder width as a proxy for scale (approx 40cm)
+        # 1. Get shoulder width in pixels
+        s_width_px = 100.0 # Default fallback
+        if pose_array.shape[1] > 12:
+            l_sh = pose_array[:, 11, :2]
+            r_sh = pose_array[:, 12, :2]
+            # Average distance over time
+            dists = np.linalg.norm(l_sh - r_sh, axis=1)
+            valid_dists = dists[dists > 0]
+            if len(valid_dists) > 0:
+                s_width_px = np.median(valid_dists)
+                
+        # 2. Normalize: sway / shoulder_width. 
+        # Metric: sway as % of shoulder width.
+        # Normal sway is < 1% of shoulder width.
+        normalized_sway = total_sway_px / max(s_width_px, 1.0)
         
         # Convert to stability score (lower sway = higher stability)
-        # Normalizing 0.05 sway to 0 score was too strict for noisy cams
-        # Increasing range to 0.1 normalized units
-        stability_score = 100 * (1 - np.clip(total_sway / 0.1, 0, 1))
+        # Threshold: 0.02 (2% of shoulder width) is "Severe" sway
+        stability_score = 100 * (1 - np.clip(normalized_sway / 0.02, 0, 1))
         
         self._add_biomarker(
             biomarker_set,

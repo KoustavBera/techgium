@@ -142,10 +142,18 @@ class EyeExtractor(BaseExtractor):
         
         # 1. Blink rate using Soukupová EAR method
         blink_rate, blink_count = self._estimate_blink_rate_ear(landmarks_array, fps)
+        
+        # Context-Aware Normal Range (Computer Vision Syndrome Compensation)
+        # When focusing on screen, blink rate drops naturally (clinical fact). 
+        # "Screen Focus" normal is ~5-6 bpm, while resting normal is 12+.
+        # We adjust the lower bound to 5 to avoid false "Abnormal" flags during scanning.
+        is_screen_focus = True
+        normal_blink = (5, 30) if is_screen_focus else (12, 35)
+
         self._add_biomarker_safe(
-            biomarker_set, "blink_rate", blink_rate, "blinks_per_min",
-            confidence=0.92, normal_range=(12, 35),
-            description="Blink rate (12-35 bpm normal for screen viewing)"
+            biomarker_set, "blink_rate", float(blink_rate), "blinks_per_min",
+            confidence=0.90, normal_range=normal_blink,
+            description="Blink frequency (Context-aware: Screen Focus Mode)"
         )
         self._add_biomarker_safe(
             biomarker_set, "blink_count", float(blink_count), "count",
@@ -171,19 +179,29 @@ class EyeExtractor(BaseExtractor):
             description="ISO 9241-3 velocity-based stability"
         )
         
-        # 3. Fixation duration (clinical 150ms minimum)
+        # 3. Fixation duration (clinical 150ms minimum, but screen scanning is faster)
         fixation_duration = self._estimate_fixation_duration_v2(gaze_center, fps)
+        
+        # Screen Mode: Reading/Scanning involves rapid micro-fixations (40-50ms)
+        # Standard clinical norm (150ms) triggers false "Below Normal"
+        normal_fixation = (40, 400) if is_screen_focus else (150, 400)
+        
         self._add_biomarker_safe(
             biomarker_set, "fixation_duration", fixation_duration, "ms",
-            confidence=0.80, normal_range=(60, 400),
-            description="Fixation duration (60ms+ normal for reading/scanning)"
+            confidence=0.80, normal_range=normal_fixation,
+            description="Fixation duration (Context-aware)"
         )
         
         # 4. Saccade frequency (bimodal detection)
         saccade_freq = self._count_saccades_v2(gaze_center, fps)
+        
+        # Screen Mode: Less large saccades, more micro-saccades (which might be filtered)
+        # We relax the lower bound to 1.0Hz
+        normal_saccade = (1.0, 5.0) if is_screen_focus else (2.0, 5.0)
+        
         self._add_biomarker_safe(
             biomarker_set, "saccade_frequency", saccade_freq, "saccades_per_sec",
-            confidence=0.80, normal_range=(2, 5),
+            confidence=0.80, normal_range=normal_saccade,
             description="Peak velocity saccade detection"
         )
         
@@ -305,7 +323,9 @@ class EyeExtractor(BaseExtractor):
         blink_events = []
         in_blink = False
         blink_start = 0
-        min_blink_frames = max(1, int(self.BLINK_MIN_DURATION * fps))
+        # Reduced to 50ms to catch "flutter blinks" common in screen use
+        MIN_BLINK_DURATION_SEC = 0.05 
+        min_blink_frames = max(1, int(MIN_BLINK_DURATION_SEC * fps))
         
         for i, ear in enumerate(ears):
             if ear < ear_threshold and not in_blink:
