@@ -1,0 +1,8 @@
+transformers
+peft
+trl
+datasets
+accelerate
+bitsandbytes
+huggingface_hub
+scipy
