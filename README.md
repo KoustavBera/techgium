@@ -387,16 +387,6 @@ We believe in **Sovereign Health Data**.
 *   **Open Standards**: We utilize the **FHIR** (Fast Healthcare Interoperability Resources) data format for report export, ensuring that your data belongs to you and your provider—not the platform.
 
 ---
-
-## 📬 Contact & Enterprise Collaboration
-
-For strategic partnerships, YC network inquiries, or clinical validation trials:
-- **Stealth Site**: [chiranjeevi.alpha](https://chiranjeevi.alpha)
-- **Repo Architecture**: [github.com/chiranjeevi-labs/os](https://github.com/chiranjeevi-labs/os)
-- **Neural Engine Support**: [engine@chiranjeevi.ai](mailto:engine@chiranjeevi.ai)
-
----
-
 > **"He who masters the telemetry of life, masters life itself."**
 > 
 > *Thank you for participating in the Chiranjeevi Alpha. The future of healthcare is autonomous.*
