@@ -36,6 +36,7 @@
 - [🗺️ Strategic Roadmap](#️-strategic-roadmap)
 - [🧪 Scientific Foundations & Citations](#-scientific-foundations--citations)
 - [📖 Glossary of Sophisticated Terms](#-glossary-of-sophisticated-terms)
+- [⚖️ License](#⚖️-license)
 
 ---
 
@@ -385,6 +386,16 @@ We believe in **Sovereign Health Data**.
 *   **No Cloud Dependency**: The core extraction and logic engines are designed to run in air-gapped environments.
 *   **Verifiable Privacy**: All PII (Personally Identifiable Information) is scrubbed at the HAL layer before entering the Inference Layer.
 *   **Open Standards**: We utilize the **FHIR** (Fast Healthcare Interoperability Resources) data format for report export, ensuring that your data belongs to you and your provider—not the platform.
+
+---
+
+## ⚖️ License
+
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for the full text.
+
+- **Permissions**: Commercial use, Modification, Distribution, Private use.
+- **Constraints**: Includes License and copyright notice.
+- **Conditions**: The software is provided "as is", without warranty of any kind.
 
 ---
 > **"He who masters the telemetry of life, masters life itself."**
