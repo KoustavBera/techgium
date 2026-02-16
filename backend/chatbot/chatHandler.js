@@ -35,7 +35,8 @@ export const handleChat = (socket, io) => {
                         success: true,
                         mode: 'context-aware',
                         message: 'Medical report loaded. Ask questions about it.',
-                        hasContext: true
+                        hasContext: true,
+                        session_id: socket.id
                     });
                 } else {
                     session.mode = 'standalone';
@@ -43,7 +44,8 @@ export const handleChat = (socket, io) => {
                         success: true,
                         mode: 'standalone',
                         message: 'Report not found. General Q&A mode.',
-                        hasContext: false
+                        hasContext: false,
+                        session_id: socket.id
                     });
                 }
             } else {
@@ -51,7 +53,8 @@ export const handleChat = (socket, io) => {
                     success: true,
                     mode: 'standalone',
                     message: 'Welcome! Ask any health question.',
-                    hasContext: false
+                    hasContext: false,
+                    session_id: socket.id
                 });
             }
 

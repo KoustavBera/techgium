@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,7 +19,6 @@
         .chat-header {
             padding: 24px;
             background: var(--md-sys-color-surface-container);
-            border-bottom: 1px solid var(--md-sys-color-outline-variant);
             border-radius: var(--radius-large) var(--radius-large) 0 0;
             display: flex;
             justify-content: space-between;
@@ -38,7 +38,8 @@
             align-items: center;
         }
 
-        .language-toggle, .mode-toggle {
+        .language-toggle,
+        .mode-toggle {
             padding: 8px 16px;
             border-radius: var(--radius-full);
             border: 1px solid var(--md-sys-color-outline);
@@ -49,11 +50,13 @@
             transition: all 0.2s;
         }
 
-        .language-toggle:hover, .mode-toggle:hover {
+        .language-toggle:hover,
+        .mode-toggle:hover {
             background: var(--md-sys-color-surface-container-high);
         }
 
-        .language-toggle.active, .mode-toggle.active {
+        .language-toggle.active,
+        .mode-toggle.active {
             background: var(--md-sys-color-primary-container);
             color: var(--md-sys-color-on-primary-container);
             border-color: transparent;
@@ -66,7 +69,7 @@
             display: flex;
             flex-direction: column;
             gap: 16px;
-           background: var(--md-sys-color-surface);
+            background: var(--md-sys-color-surface);
         }
 
         .message {
@@ -77,8 +80,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .message.user {
@@ -141,12 +151,25 @@
             animation: typing 1.4s infinite;
         }
 
-        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
 
         @keyframes typing {
-            0%, 60%, 100% { transform: translateY(0); }
-            30% { transform: translateY(-10px); }
+
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+            }
+
+            30% {
+                transform: translateY(-10px);
+            }
         }
 
         .emergency-alert {
@@ -168,7 +191,6 @@
         .chat-input-container {
             padding: 24px;
             background: var(--md-sys-color-surface-container);
-            border-top: 1px solid var(--md-sys-color-outline-variant);
             display: flex;
             gap: 12px;
             align-items: center;
@@ -233,6 +255,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- Sidebar Navigation -->
     <nav class="app-sidebar">
@@ -301,11 +324,7 @@
 
             <!-- Input Area -->
             <div class="chat-input-container">
-                <textarea 
-                    class="chat-input" 
-                    id="chatInput" 
-                    placeholder="Type your message..."
-                    rows="1"></textarea>
+                <textarea class="chat-input" id="chatInput" placeholder="Type your message..." rows="1"></textarea>
                 <button class="send-button" id="sendButton">➤</button>
             </div>
         </div>
@@ -313,6 +332,7 @@
 
     <!-- Socket.IO Client -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
         // Socket.IO Connection
         const socket = io('http://localhost:5000');
@@ -337,7 +357,7 @@
             console.log('Connected to chatbot server');
             connectionStatus.textContent = 'Connected';
             connectionStatus.classList.remove('disconnected');
-            
+
             // Initialize session
             socket.emit('init_session', {
                 language: currentLanguage,
@@ -379,19 +399,19 @@
         function addMessage(text, sender) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
-            
+
             const avatar = document.createElement('div');
             avatar.className = 'message-avatar';
             avatar.textContent = sender === 'user' ? '👤' : '🤖';
-            
+
             const content = document.createElement('div');
             content.className = 'message-content';
-            content.textContent = text;
-            
+            content.innerHTML = marked.parse(text);
+
             messageDiv.appendChild(avatar);
             messageDiv.appendChild(content);
             chatDisplay.appendChild(messageDiv);
-            
+
             // Scroll to bottom
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
         }
@@ -399,13 +419,13 @@
         function sendMessage() {
             const text = chatInput.value.trim();
             if (!text || !sessionId) return;
-            
+
             addMessage(text, 'user');
             chatInput.value = '';
             chatInput.style.height = 'auto';
-            
+
             typingIndicator.classList.add('visible');
-            
+
             socket.emit('send_message', {
                 session_id: sessionId,
                 text: text,
@@ -415,7 +435,7 @@
 
         // Event Listeners
         sendButton.addEventListener('click', sendMessage);
-        
+
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -423,7 +443,7 @@
             }
         });
 
-        chatInput.addEventListener('input', function() {
+        chatInput.addEventListener('input', function () {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
@@ -449,4 +469,5 @@
         });
     </script>
 </body>
+
 </html>

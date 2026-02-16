@@ -18,6 +18,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
@@ -93,7 +94,12 @@ app.add_middleware(
 )
 
 # ---- Serve Frontend ----
-app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+frontend_path = Path(__file__).resolve().parent.parent.parent / "frontend"
+if not frontend_path.exists():
+    # Fallback to local directory if parent path fails
+    frontend_path = Path("frontend")
+
+app.mount("/frontend", StaticFiles(directory=str(frontend_path)), name="frontend")
 
 
 # ---- In-memory storage (replace with database in production) ----

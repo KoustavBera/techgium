@@ -387,6 +387,10 @@ class HardwareManager:
                     
                     # 2. Calculate and draw distance warnings (Throttle distance check too? No, fast feedback is good)
                     # We reuse the same analysis results. If we skipped inference, we use old results.
+                    
+                    warning_type = self._current_distance_warning
+                    face_detected = False
+
                     # Limit distance warning check to IDLE/FACE phases
                     if current_phase in ["IDLE", "INITIALIZING", "FACE_ANALYSIS"]:
                         warning_type, face_width = self.camera.calculate_face_distance(frame, results)
@@ -396,13 +400,19 @@ class HardwareManager:
                         
                         # Update status for frontend polling
                         self._current_distance_warning = warning_type
-                        self._update_scan_status(
-                            user_warnings={
-                                "distance_warning": warning_type,
-                                "face_detected": face_width is not None,
-                                "pose_detected": results.get("pose") is not None and results["pose"].pose_landmarks is not None,
-                            }
-                        )
+                        face_detected = face_width is not None
+                    elif current_phase == "BODY_ANALYSIS":
+                        # Clear distance warning so it doesn't interfere
+                        warning_type = None
+                        self._current_distance_warning = None
+
+                    self._update_scan_status(
+                        user_warnings={
+                            "distance_warning": warning_type,
+                            "face_detected": face_detected,
+                            "pose_detected": results.get("pose") is not None and results["pose"].pose_landmarks is not None,
+                        }
+                    )
                 
                 # Encode to JPEG
                 ret, jpeg = cv2.imencode('.jpg', frame, encode_params)

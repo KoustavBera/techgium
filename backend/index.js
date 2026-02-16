@@ -4,7 +4,7 @@ import { Server } from "socket.io";
 import dotenv from "dotenv";
 import cors from "cors";
 import errorHandler from "./utils/errorHandler.js";
-import connectDB from "./config/connectDB.js";
+
 import { handleChat } from "./chatbot/chatHandler.js";
 
 dotenv.config();
@@ -33,7 +33,7 @@ app.get("/", (req, res) => {
 // --- Socket.io ---
 io.on("connection", (socket) => {
 	console.log(`User connected: ${socket.id}`);
-	handleChat(socket, io); 
+	handleChat(socket, io);
 });
 
 // Error handling
@@ -42,10 +42,8 @@ app.use(errorHandler);
 // --- Start Server ---
 httpServer.listen(PORT, () => {
 	console.log(
-		`Server running in ${
-			process.env.NODE_ENV || "development"
+		`Server running in ${process.env.NODE_ENV || "development"
 		} mode on port ${PORT}`
 	);
 });
 
-connectDB();
