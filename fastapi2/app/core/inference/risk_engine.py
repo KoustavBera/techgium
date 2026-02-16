@@ -12,6 +12,7 @@ import numpy as np
 
 from app.core.extraction.base import BiomarkerSet, PhysiologicalSystem, Biomarker
 from app.utils import get_logger
+from app.config import settings
 
 # Optional confidence calibration (graceful fallback if not available)
 try:
@@ -397,7 +398,10 @@ class RiskEngine:
         
         if plausibility is not None:
             # Apply plausibility penalty to confidence
-            adjusted_confidence *= plausibility.overall_plausibility
+            # Use configurable penalty threshold from settings
+            penalty_intensity = settings.confidence_penalty_threshold
+            penalty_factor = 1.0 - ( (1.0 - plausibility.overall_plausibility) * penalty_intensity )
+            adjusted_confidence *= penalty_factor
             
             # Add warnings for moderate violations
             for v in plausibility.violations:

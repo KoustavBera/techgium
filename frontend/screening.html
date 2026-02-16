@@ -544,6 +544,32 @@
                     </div>
                 </div>
 
+                <!-- 5. DATA RELIABILITY (PHASE 3) -->
+                <div class="card" id="trustCard" style="display: none; border-left: 6px solid var(--md-sys-color-primary); transition: all 0.5s ease;">
+                    <h2 class="card-title">
+                        <span id="reliabilityIcon">🛡️</span> Data Reliability
+                    </h2>
+                    <div id="reliabilityIndicators">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+                            <span>System Confidence:</span>
+                            <strong id="reliabilityScore">--%</strong>
+                        </div>
+                        <div style="height: 8px; background: var(--md-sys-color-surface-container-high); border-radius: 4px; overflow: hidden; margin-bottom: 16px;">
+                            <div id="reliabilityProgress" style="height: 100%; background: var(--md-sys-color-primary); width: 0%; transition: width 1s ease-out;"></div>
+                        </div>
+                        <div id="safetyFlags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;"></div>
+                        <div id="trustGuidance" style="
+                            font-size: 13px; 
+                            color: var(--md-sys-color-on-surface-variant); 
+                            line-height: 1.5; 
+                            padding: 12px;
+                            background: var(--md-sys-color-surface);
+                            border-radius: 8px;
+                            border: 1px dashed var(--md-sys-color-outline-variant);
+                        "></div>
+                    </div>
+                </div>
+
                 <div style="
                             text-align: center;
                             color: var(--text-secondary);
@@ -701,6 +727,65 @@
 				document.getElementById("downloadPatient").href = `${API_BASE}/api/v1/reports/${status.patient_report_id}/download`;
 				document.getElementById("downloadSection").style.display = "block";
 			}
+            
+            // PHASE 3: Handle Trust Metadata
+            if (status.trust_metadata) {
+                const tm = status.trust_metadata;
+                const trustCard = document.getElementById("trustCard");
+                const score = Math.round(tm.overall_reliability * 100);
+                
+                document.getElementById("reliabilityScore").textContent = `${score}%`;
+                document.getElementById("reliabilityProgress").style.width = `${score}%`;
+                document.getElementById("trustGuidance").textContent = tm.interpretation_guidance || "Data analysis completed with standard reliability protocols.";
+                
+                // Color coding based on reliability
+                let color = "var(--md-sys-color-primary)";
+                let icon = "🛡️";
+                if (score < 50) {
+                    color = "#B00020"; // Error/Red
+                    icon = "⚠️";
+                    trustCard.style.borderLeftColor = color;
+                } else if (score < 80) {
+                    color = "#FBBC04"; // Warning/Yellow
+                    icon = "⚖️";
+                    trustCard.style.borderLeftColor = color;
+                } else {
+                    color = "#0F9D58"; // Success/Green
+                    icon = "✅";
+                    trustCard.style.borderLeftColor = color;
+                }
+                
+                document.getElementById("reliabilityIcon").textContent = icon;
+                document.getElementById("reliabilityProgress").style.backgroundColor = color;
+                
+                // Add Safety Flags
+                const flagsContainer = document.getElementById("safetyFlags");
+                flagsContainer.innerHTML = "";
+                if (tm.safety_flags && tm.safety_flags.length > 0) {
+                    tm.safety_flags.forEach(flag => {
+                        const badge = document.createElement("span");
+                        badge.style.cssText = `
+                            background: ${color}20;
+                            color: ${color};
+                            padding: 4px 10px;
+                            border-radius: 20px;
+                            font-size: 11px;
+                            font-weight: 600;
+                            border: 1px solid ${color}40;
+                        `;
+                        badge.textContent = flag.replace(/_/g, " ").toUpperCase();
+                        flagsContainer.appendChild(badge);
+                    });
+                } else if (score >= 80) {
+                    const badge = document.createElement("span");
+                    badge.style.cssText = "background: #0F9D5820; color: #0F9D58; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; border: 1px solid #0F9D5840;";
+                    badge.textContent = "HIGH RELIABILITY";
+                    flagsContainer.appendChild(badge);
+                }
+                
+                trustCard.style.display = "block";
+            }
+            
 			resetUI();
 		}
 
