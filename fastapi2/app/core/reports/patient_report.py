@@ -522,6 +522,48 @@ class EnhancedPatientReportGenerator:
             report.pdf_path = msg
         
         return report
+
+    def _draw_trust_envelope(self, story: List[Any], trust_envelope: Optional[TrustEnvelope]):
+        """Draw a beautiful trust envelope section in the PDF."""
+        if not trust_envelope or not REPORTLAB_AVAILABLE:
+            return
+        
+        story.append(Paragraph("DATA RELIABILITY & QUALITY", self._styles['SectionHeader']))
+        
+        # Reliability Indicator
+        score = trust_envelope.overall_reliability
+        status_text = "HIGH RELIABILITY" if score >= 0.8 else "MODERATE RELIABILITY" if score >= 0.5 else "LOW RELIABILITY"
+        
+        # Create a table for the reliability score and progress bar
+        # We need a custom flowable for the progress bar if we want it to look like the UI
+        # But for simplicity, we'll use a table + ConfidenceMeter
+        
+        trust_data = [
+            [
+                Paragraph(f"<b>System Confidence: {score:.0%}</b><br/><font size=8 color='#6B7280'>{status_text}</font>", self._styles['BodyText']),
+                ConfidenceMeter(score, width=200)
+            ]
+        ]
+        
+        t = Table(trust_data, colWidths=[3*inch, 3*inch])
+        t.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        story.append(t)
+        story.append(Spacer(1, 10))
+        
+        # Safety Flags
+        if trust_envelope.safety_flags:
+            flags_text = " • ".join([f.value.replace("_", " ").upper() for f in trust_envelope.safety_flags])
+            story.append(Paragraph(f"<b>Safety Observations:</b> {flags_text}", self._styles['Caveat']))
+            story.append(Spacer(1, 5))
+            
+        # Interpretation Guidance
+        if trust_envelope.interpretation_guidance:
+            story.append(Paragraph(f"<b>Guidance:</b> {trust_envelope.interpretation_guidance}", self._styles['BiomarkerExplanation']))
+        
+        story.append(Spacer(1, 15))
     
     def _generate_default_recommendations(self, system_results: Dict) -> List[str]:
         """Generate personalized recommendations based on findings."""
@@ -982,6 +1024,10 @@ BIOMARKERS:
         story.append(Spacer(1, 4))
         story.append(ConfidenceMeter(report.overall_confidence, width=300))
         story.append(Spacer(1, 15))
+        
+        # Phase 3: Add Trust Envelope
+        if trust_envelope:
+            self._draw_trust_envelope(story, trust_envelope)
         
         # Overall summary
         story.append(Paragraph(

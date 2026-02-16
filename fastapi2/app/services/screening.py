@@ -11,6 +11,10 @@ from app.core.extraction.base import PhysiologicalSystem, BiomarkerSet, Biomarke
 from app.core.inference.risk_engine import RiskEngine, CompositeRiskCalculator, SystemRiskResult, RiskScore
 from app.core.llm.multi_llm_interpreter import MultiLLMInterpreter
 from app.core.validation.signal_quality import SignalQualityAssessor, Modality
+from app.core.validation.biomarker_plausibility import BiomarkerPlausibilityValidator
+from app.core.validation.cross_system_consistency import CrossSystemConsistencyChecker
+from app.core.validation.trust_envelope import TrustEnvelopeAggregator, TrustEnvelope
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,17 @@ class ScreeningService:
         self.interpreter = interpreter or MultiLLMInterpreter()
         self.composite_calc = CompositeRiskCalculator()
         self.quality_assessor = SignalQualityAssessor()
+        
+        # Validation Modules (Initialized based on config)
+        self.plausibility_validator = BiomarkerPlausibilityValidator()
+        self.consistency_checker = CrossSystemConsistencyChecker()
+        self.trust_aggregator = TrustEnvelopeAggregator()
+        
+        # Load capability flags from central settings
+        self._enable_validation = settings.enable_validation
+        self._enable_plausibility = settings.enable_plausibility
+        self._enable_consistency = settings.enable_consistency
+        self._enable_trust_envelope = settings.enable_trust_envelope
 
     async def process_screening(
         self, 
@@ -50,6 +65,8 @@ class ScreeningService:
         
         trusted_results: Dict[PhysiologicalSystem, TrustedRiskResult] = {}
         system_results: Dict[PhysiologicalSystem, SystemRiskResult] = {}
+        plausibility_results: Dict[PhysiologicalSystem, Any] = {}
+        biomarker_sets: Dict[PhysiologicalSystem, BiomarkerSet] = {}
         response_results: List[Dict[str, Any]] = []
         
         for sys_input in systems_input:
@@ -75,9 +92,20 @@ class ScreeningService:
             
             # Create BiomarkerSet
             biomarker_set = BiomarkerSet(system=system, biomarkers=biomarkers)
+            biomarker_sets[system] = biomarker_set
+            
+            # Run plausibility validation
+            plausibility_result = None
+            if self._enable_validation and self._enable_plausibility:
+                try:
+                    plausibility_result = self.plausibility_validator.validate(biomarker_set)
+                    plausibility_results[system] = plausibility_result
+                    logger.info(f"[{system.value}] Plausibility: valid={plausibility_result.is_valid}, score={plausibility_result.overall_plausibility:.2f}")
+                except Exception as e:
+                    logger.error(f"Plausibility validation failed for {system.value}: {e}", exc_info=True)
             
             # Run risk calculation
-            trusted_result = self.risk_engine.compute_risk_with_validation(biomarker_set, plausibility=None)
+            trusted_result = self.risk_engine.compute_risk_with_validation(biomarker_set, plausibility=plausibility_result)
             trusted_results[system] = trusted_result
             
             # Build response item
@@ -110,6 +138,38 @@ class ScreeningService:
         # Calculate composite risk
         composite, rejected_systems = self.composite_calc.compute_composite_risk_from_trusted(trusted_results)
         
+        # Cross-System Consistency Check
+        consistency_result = None
+        if self._enable_validation and self._enable_consistency and len(biomarker_sets) > 1:
+            try:
+                consistency_result = self.consistency_checker.check_consistency(biomarker_sets, system_results)
+                logger.info(f"Cross-system consistency: {consistency_result.overall_consistency:.2f}")
+            except Exception as e:
+                logger.error(f"Consistency check failed: {e}", exc_info=True)
+        
+        # Trust Envelope Aggregation
+        trust_envelope = None
+        if self._enable_validation and self._enable_trust_envelope:
+            try:
+                # We need to assess quality first if we want it in the envelope
+                # But assess_data_quality takes raw 'data' which might not be here.
+                # For now, we'll use a placeholder or calculate it from confidences if needed.
+                # However, the aggregator handles None signal_quality gracefully.
+                trust_envelope = self.trust_aggregator.aggregate(
+                    signal_quality=None, # Raw data quality not easily accessible here without 'data'
+                    plausibility_results=plausibility_results,
+                    consistency_result=consistency_result
+                )
+                logger.info(f"Trust Envelope reliability: {trust_envelope.overall_reliability:.2f}")
+            except Exception as e:
+                logger.error(f"Trust aggregation failed: {e}", exc_info=True)
+        
+        # Enforce minimum reliability threshold
+        if trust_envelope and trust_envelope.overall_reliability < settings.min_trust_reliability:
+            logger.warning(f"Screening reliability ({trust_envelope.overall_reliability:.2f}) is below threshold ({settings.min_trust_reliability:.2f})")
+            validation_status = "low_reliability"
+            requires_review = True
+        
         # Validation (LLM)
         validation_status = None
         requires_review = False
@@ -120,7 +180,7 @@ class ScreeningService:
                 interpretation = await self.interpreter.interpret_composite_risk(
                     system_results=system_results,
                     composite_risk=composite,
-                    trust_envelope=None
+                    trust_envelope=trust_envelope
                 )
                 validation_status = "validated" if interpretation.validation_passed else "needs_review"
                 requires_review = not interpretation.validation_passed or len(rejected_systems) > 0
@@ -142,6 +202,7 @@ class ScreeningService:
             "trusted_results": trusted_results,
             "composite_risk": composite,
             "rejected_systems": rejected_systems,
+            "trust_metadata": trust_envelope.to_dict() if trust_envelope else None,
             "validation_status": validation_status,
             "requires_review": requires_review
         }

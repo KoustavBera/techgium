@@ -992,6 +992,7 @@ class HardwareManager:
                 screening_id=screening_id,
                 patient_report_id=patient_report_id,
                 doctor_report_id=doctor_report_id,
+                trust_metadata=result.get("trust_metadata")  # NEW: Expose trust metadata
             )
             
             logger.info("✅ Scan pipeline complete")

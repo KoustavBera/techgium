@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./health_screening.db"
 
+    # Validation & Reliability Configuration
+    enable_validation: bool = Field(default=True, description="Master switch for all validation logic")
+    enable_plausibility: bool = Field(default=True, description="Enable physiological plausibility checks")
+    enable_consistency: bool = Field(default=True, description="Enable cross-system consistency checks")
+    enable_trust_envelope: bool = Field(default=True, description="Enable trust envelope aggregation")
+    
+    # Thresholds
+    min_trust_reliability: float = Field(default=0.5, description="Reject if overall reliability is below this")
+    confidence_penalty_threshold: float = Field(default=0.2, description="Penalty intensity for low plausibility")
+
 
 @lru_cache()
 def get_settings() -> Settings:

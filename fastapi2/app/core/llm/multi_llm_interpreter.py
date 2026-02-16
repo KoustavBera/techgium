@@ -333,9 +333,19 @@ SYSTEM-BY-SYSTEM BREAKDOWN:
                 prompt += f"  - Alerts: {len(result.alerts)} items requiring attention\n"
         
         if trust_envelope:
-            prompt += f"\nDATA RELIABILITY: {trust_envelope.overall_reliability:.0%}\n"
+            prompt += f"\nDATA RELIABILITY CONTEXT:\n"
+            prompt += f"- Overall Reliability: {trust_envelope.overall_reliability:.0%}\n"
+            prompt += f"- Data Quality (Sensors): {trust_envelope.data_quality_score:.0%}\n"
+            prompt += f"- Physiological Plausibility: {trust_envelope.biomarker_plausibility:.0%}\n"
+            prompt += f"- Cross-System Consistency: {trust_envelope.cross_system_consistency:.0%}\n"
+            
             if trust_envelope.critical_issues:
-                prompt += f"CRITICAL ISSUES: {len(trust_envelope.critical_issues)}\n"
+                prompt += f"- CRITICAL ISSUES DETECTED: {'; '.join(trust_envelope.critical_issues[:5])}\n"
+            
+            if trust_envelope.warnings:
+                prompt += f"- Data Warnings: {'; '.join(trust_envelope.warnings[:5])}\n"
+            
+            prompt += f"- Reliability Guidance: {trust_envelope.interpretation_guidance}\n"
         
         prompt += """
 Provide a comprehensive interpretation in JSON format:
