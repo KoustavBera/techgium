@@ -35,6 +35,10 @@ from app.core.extraction.cns import CNSExtractor
 from app.core.extraction.skeletal import SkeletalExtractor
 from app.core.extraction.skin import SkinExtractor
 from app.core.extraction.pulmonary import PulmonaryExtractor
+<<<<<<< HEAD
+=======
+from app.core.extraction.renal import RenalExtractor
+>>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
 from app.core.extraction.eyes import EyeExtractor
 from app.core.extraction.nasal import NasalExtractor
 from app.core.extraction.base import BiomarkerSet
@@ -180,6 +184,10 @@ class HardwareManager:
         self.skeletal_extractor = None
         self.skin_extractor = None
         self.pulmonary_extractor = None
+<<<<<<< HEAD
+=======
+        self.renal_extractor = None
+>>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
         self.eye_extractor = None
         self.nasal_extractor = None
         
@@ -322,6 +330,10 @@ class HardwareManager:
         self.skeletal_extractor = SkeletalExtractor()
         self.skin_extractor = SkinExtractor()
         self.pulmonary_extractor = PulmonaryExtractor()
+<<<<<<< HEAD
+=======
+        self.renal_extractor = RenalExtractor()
+>>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
         self.eye_extractor = EyeExtractor(
             sample_rate=30.0,
             frame_width=1280,
@@ -1241,6 +1253,10 @@ class HardwareManager:
             ("Skin", self.skin_extractor),
             ("CNS", self.cns_extractor),
             ("Skeletal", self.skeletal_extractor),
+<<<<<<< HEAD
+=======
+            ("Renal", self.renal_extractor),
+>>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
             ("Eyes", self.eye_extractor),
             ("Nasal", self.nasal_extractor),
         ]

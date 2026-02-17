@@ -183,4 +183,34 @@ class NasalExtractor(BaseExtractor):
                     description="Elevated local surface temperature (Nostril vs Cheek ROI) [Experimental]."
                 )
             
+<<<<<<< HEAD
 
+=======
+        # 4. Airflow Thermal Symmetry Index
+        # Requires oscillation amplitude from thermal data (preprocessing usually done in `thermal.py` or similar)
+        # Expected keys: nostril_oscillation_amp_left, nostril_oscillation_amp_right
+        amp_left = thermal_data.get("nostril_oscillation_amp_left")
+        amp_right = thermal_data.get("nostril_oscillation_amp_right")
+        
+        symmetry_index = None
+        
+        if amp_left is not None and amp_right is not None:
+            total_amp = amp_left + amp_right
+            if total_amp > 1e-6:
+                symmetry_index = abs(amp_left - amp_right) / total_amp
+        elif "thermal_asymmetry" in thermal_data and thermal_data["thermal_asymmetry"] is not None:
+             # Fallback to general thermal asymmetry if specific oscillation is missing
+             # This isn't exactly airflow symmetry but is a related proxy validation
+             symmetry_index = float(thermal_data["thermal_asymmetry"])
+
+        if symmetry_index is not None:
+            self._add_biomarker(
+                biomarker_set,
+                name="airflow_thermal_symmetry_index",
+                value=float(symmetry_index),
+                unit="normalized_diff",
+                confidence=0.75,
+                normal_range=(0.0, 0.2), # < 20% difference is normal
+                description="Thermal oscillation symmetry between nostrils during breathing [Non-Diagnostic]."
+            )
+>>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135

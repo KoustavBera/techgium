@@ -257,6 +257,7 @@ class SkinExtractor(BaseExtractor):
         results = self.face_mesh.process(rgb_frame)
         
         if not results.multi_face_landmarks:
+<<<<<<< HEAD
             # FALLBACK: If FaceMesh fails (e.g. on a tight crop), assume the frame IS the face ROI
             # and generate a simple central elliptical mask.
             # This is critical because HardwareManager passes cropped ROIs which might confuse FaceMesh.
@@ -272,6 +273,9 @@ class SkinExtractor(BaseExtractor):
             
             # Return full frame as crop, no landmarks
             return mask, processed_crop, None
+=======
+            return None, None, None
+>>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
             
         landmarks = results.multi_face_landmarks[0].landmark
         

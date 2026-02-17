@@ -1,0 +1,158 @@
+"""
+Chiranjeevi Medical Agent — LangGraph Entry Point
+===================================================
+Assembles the Router → Researcher → Doctor graph and provides an
+interactive CLI for chatting with the agent.
+
+Usage
+-----
+    cd fastapi2
+    python -m agent.agent_graph
+
+The model is loaded once at startup and shared across all nodes.
+"""
+
+from __future__ import annotations
+
+import sys
+import os
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
+from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
+
+from agent.config import TEMPERATURE
+from agent.state import AgentState
+from agent.nodes import router_node, research_node, answer_node, set_llm
+from langchain_core.messages import HumanMessage
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Graph construction
+# ═══════════════════════════════════════════════════════════════════════
+
+def route_query(state: AgentState) -> str:
+    """Conditional edge: decide whether to research or answer directly."""
+    qt = state.get("query_type", "medical")
+    if qt == "medical":
+        return "research_node"
+    return "answer_node"
+
+
+def build_graph() -> StateGraph:
+    """Construct and compile the Chiranjeevi agent graph.
+
+    Graph topology::
+
+        START → router_node
+                  ├──(medical)──→ research_node → answer_node → END
+                  └──(other)────→ answer_node → END
+    """
+    graph = StateGraph(AgentState)
+
+    # Add nodes
+    graph.add_node("router_node", router_node)
+    graph.add_node("research_node", research_node)
+    graph.add_node("answer_node", answer_node)
+
+    # Edges
+    graph.add_edge(START, "router_node")
+    graph.add_conditional_edges(
+        "router_node",
+        route_query,
+        {
+            "research_node": "research_node",
+            "answer_node": "answer_node",
+        },
+    )
+    graph.add_edge("research_node", "answer_node")
+    graph.add_edge("answer_node", END)
+
+    memory = MemorySaver()
+    return graph.compile(checkpointer=memory)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Model loading
+# ═══════════════════════════════════════════════════════════════════════
+
+def load_model():
+    """Load the Chiranjeevi model via Hugging Face Inference API."""
+    
+    hf_token = os.getenv("HF_TOKEN")
+    if not hf_token:
+        raise ValueError("HF_TOKEN not found in .env file. Please add your Hugging Face token.")
+    
+    print(f"🧠 Loading Chiranjeevi model via Hugging Face API...")
+    print(f"   Model: Qwen/Qwen2.5-72B-Instruct")
+    print(f"   Temperature: {TEMPERATURE}")
+    print()
+    
+    llm = HuggingFaceEndpoint(
+        repo_id="Qwen/Qwen2.5-72B-Instruct",
+        huggingfacehub_api_token=hf_token,
+        task="conversational", 
+        temperature=TEMPERATURE,
+        max_new_tokens=512,
+        top_p=0.9,
+        streaming=True,
+    )
+    
+    chat_model = ChatHuggingFace(llm=llm)
+    
+    print("✅ Model endpoint connected successfully!\n")
+    return chat_model
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Interactive CLI
+# ═══════════════════════════════════════════════════════════════════════
+
+def main():
+    """Run the Chiranjeevi agent in an interactive terminal loop."""
+    print("=" * 60)
+    print("  🩺 CHIRANJEEVI — Medical AI Agent")
+    print("  Powered by LangGraph + Qwen-2.5-72B-Instruct (HF API)")
+    print("=" * 60)
+    print()
+
+    # Load model once
+    llm = load_model()
+    set_llm(llm)
+
+    # Build graph
+    app = build_graph()
+
+    print("Type your medical question below (or 'quit' to exit).\n")
+    print("-" * 60)
+
+    while True:
+        try:
+            user_input = input("\n👤 You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n👋 Goodbye! Stay healthy.")
+            break
+
+        if not user_input:
+            continue
+        if user_input.lower() in ("quit", "exit", "q"):
+            print("\n👋 Goodbye! Stay healthy.")
+            break
+
+        # Invoke the graph
+        print()
+        result = app.invoke({
+            "messages": [HumanMessage(content=user_input)],
+            "query_type": "",
+            "research_data": "",
+            "final_answer": "",
+        })
+
+        # Print the doctor's response
+        answer = result.get("final_answer", "I apologize, I could not generate a response.")
+        print(f"\n🩺 Dr. Chiranjeevi:\n{'─' * 40}")
+        print(answer)
+        print(f"{'─' * 40}")
+
+
+if __name__ == "__main__":
+    main()

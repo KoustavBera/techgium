@@ -99,6 +99,29 @@ class BiomarkerPlausibilityValidator:
             "systolic_bp": {"hard": (50.0, 260.0), "physiological": (90.0, 180.0)},
             "diastolic_bp": {"hard": (20.0, 200.0), "physiological": (40.0, 130.0)},
             "chest_micro_motion": {"hard": (0.0, 1.0), "physiological": (0.0001, 0.1)},
+<<<<<<< HEAD
+=======
+            
+            # Radar (Seeed MR60BHA2)
+            "radar_heart_rate": {"hard": (30.0, 220.0), "physiological": (40.0, 200.0)},
+            "radar_respiration_rate": {"hard": (4.0, 50.0), "physiological": (6.0, 40.0)},
+            
+            # Thermal (MLX90640)
+            "skin_temp_avg": {"hard": (25.0, 45.0), "physiological": (30.0, 40.0)},
+            "skin_temp_max": {"hard": (25.0, 50.0), "physiological": (32.0, 42.0)},
+            "thermal_asymmetry": {"hard": (0.0, 10.0), "physiological": (0.0, 3.5)},
+            
+            # Thermal biomarkers (ESP32 thermal bridge v2)
+            "skin_temperature": {"hard": (30.0, 45.0), "physiological": (33.0, 39.0)},
+            "skin_temperature_max": {"hard": (32.0, 50.0), "physiological": (36.0, 42.0)},
+            "inflammation_index": {"hard": (0.0, 100.0), "physiological": (0.0, 20.0)},
+            "face_mean_temperature": {"hard": (28.0, 42.0), "physiological": (33.0, 37.0)},
+            "facial_perfusion_temp": {"hard": (28.0, 42.0), "physiological": (32.0, 37.0)},
+            "microcirculation_temp": {"hard": (30.0, 42.0), "physiological": (34.0, 38.0)},
+            "thermal_stress_gradient": {"hard": (-5.0, 10.0), "physiological": (0.0, 3.0)},
+            "forehead_temperature": {"hard": (28.0, 42.0), "physiological": (33.0, 37.5)},
+            "thermal_stability": {"hard": (0.0, 10.0), "physiological": (0.0, 1.5)},
+>>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
             
             # Radar (Seeed MR60BHA2)
             "radar_heart_rate": {"hard": (30.0, 220.0), "physiological": (40.0, 200.0)},

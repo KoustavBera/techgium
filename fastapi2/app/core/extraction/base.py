@@ -44,7 +44,13 @@ class PhysiologicalSystem(str, Enum):
             "respiratory": cls.PULMONARY,
             "lung": cls.PULMONARY,
             "lungs": cls.PULMONARY,
+<<<<<<< HEAD
             "lungs": cls.PULMONARY,
+=======
+            "renal": cls.RENAL,
+            "kidney": cls.RENAL,
+            "kidneys": cls.RENAL,
+>>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
             "gastrointestinal": cls.GASTROINTESTINAL,
             "gi": cls.GASTROINTESTINAL,
             "gut": cls.GASTROINTESTINAL,
