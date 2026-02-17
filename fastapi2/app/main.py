@@ -19,6 +19,20 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+import asyncio
+import json
+from starlette.concurrency import run_in_threadpool
+from langchain_core.messages import HumanMessage
+
+# Medical Agent Imports
+try:
+    from agent.agent_graph import build_graph, load_model
+    from agent.nodes import set_llm, set_token_callback
+    AGENT_AVAILABLE = True
+except ImportError:
+    logger.warning("Medical Agent packages not found. Doctor chat will be disabled.")
+    AGENT_AVAILABLE = False
+
 
 # Load environment variables
 load_dotenv()
@@ -45,6 +59,12 @@ from app.models.screening import (
     ReportResponse,
     HealthResponse
 )
+
+class DoctorChatRequest(BaseModel):
+    """Request for medical doctor chat interaction."""
+    query: str
+    patient_id: Optional[str] = "GUEST"
+
 # ---- Hardware Manager Singleton ----
 _hw_manager = HardwareManager()
 
@@ -65,6 +85,20 @@ async def lifespan(app: FastAPI):
     )
     await _hw_manager.startup(config, screening_service=_screening_service)
     
+    # Initialize Medical Agent (Chiranjeevi)
+    if AGENT_AVAILABLE:
+        try:
+            logger.info("Initializing Medical Agent (Chiranjeevi)...")
+            llm = await run_in_threadpool(load_model)
+            set_llm(llm)
+            app.state.medical_agent = build_graph()
+            logger.info("Medical Agent ready")
+        except Exception as e:
+            logger.error(f"Failed to load Medical Agent: {e}")
+            app.state.medical_agent = None
+    else:
+        app.state.medical_agent = None
+
     logger.info("API ready to accept requests")
     yield
     
@@ -105,6 +139,7 @@ app.mount("/frontend", StaticFiles(directory=str(frontend_path)), name="frontend
 # ---- In-memory storage (replace with database in production) ----
 _screenings: Dict[str, Dict[str, Any]] = {}
 _reports: Dict[str, str] = {}
+START_TIME = datetime.now()
 
 # ---- Generators ----
 _patient_report_gen = PatientReportGenerator(output_dir="reports")
@@ -191,30 +226,38 @@ def _biomarkers_to_summary(biomarkers: List[BiomarkerInput]) -> Dict[str, Any]:
 @app.get("/", response_model=HealthResponse, tags=["Health"])
 async def root():
     """API root - health check."""
+    status = _hw_manager.get_sensor_status()
+    hardware_status = {
+        "radar": status.get("radar", {}).get("status", "unknown"),
+        "thermal": status.get("thermal", {}).get("status", "unknown"),
+        "camera": status.get("camera", {}).get("status", "unknown")
+    }
+    
     return HealthResponse(
         status="healthy",
         version="1.0.0",
         timestamp=datetime.now().isoformat(),
-        components={
-            "risk_engine": "ready",
-            "report_generator": "ready",
-            "validation_agents": "ready"
-        }
+        uptime_seconds=(datetime.now() - START_TIME).total_seconds(),
+        hardware=hardware_status
     )
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check():
     """Health check endpoint."""
+    status = _hw_manager.get_sensor_status()
+    hardware_status = {
+        "radar": status.get("radar", {}).get("status", "unknown"),
+        "thermal": status.get("thermal", {}).get("status", "unknown"),
+        "camera": status.get("camera", {}).get("status", "unknown")
+    }
+
     return HealthResponse(
         status="healthy",
         version="1.0.0",
         timestamp=datetime.now().isoformat(),
-        components={
-            "api": "healthy",
-            "inference": "ready",
-            "reports": "ready"
-        }
+        uptime_seconds=(datetime.now() - START_TIME).total_seconds(),
+        hardware=hardware_status
     )
 
 
@@ -477,7 +520,73 @@ async def get_scan_status():
     return _hw_manager.get_scan_status()
 
 
+# ---- Doctor Chat Agent Endpoint ----
+
+@app.post("/api/v1/doctor/chat", tags=["Doctor"])
+async def doctor_chat(request: DoctorChatRequest):
+    """
+    Direct chat with Dr. Chiranjeevi using the LangGraph agent.
+    Returns a streamed response of medical advice/responses with status updates.
+    """
+    if not app.state.medical_agent:
+        raise HTTPException(
+            status_code=503, 
+            detail="Medical Agent is not initialized or model file is missing."
+        )
+
+    async def stream_generator():
+        queue = asyncio.Queue()
+        
+        # Callback to put status events into the queue
+        def on_status(status_dict: dict):
+            # We use loop.call_soon_threadsafe because the agent runs in a threadpool
+            loop.call_soon_threadsafe(queue.put_nowait, {
+                "type": "status",
+                **status_dict
+            })
+        
+        # Callback to put tokens into the queue
+        def on_token(token: str):
+            # We use loop.call_soon_threadsafe because the agent runs in a threadpool
+            loop.call_soon_threadsafe(queue.put_nowait, {
+                "type": "token",
+                "token": token
+            })
+
+        # Function to run the agent in a thread
+        def run_agent():
+            from agent.nodes import set_status_callback
+            set_status_callback(on_status)
+            set_token_callback(on_token)
+            try:
+                app.state.medical_agent.invoke(
+                    {"messages": [HumanMessage(content=request.query)]},
+                    config={"configurable": {"thread_id": request.patient_id or "GUEST"}}
+                )
+            finally:
+                set_status_callback(None)  # Cleanup callback
+                set_token_callback(None)  # Cleanup callback
+                # Signal completion
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        loop = asyncio.get_event_loop()
+        # Start agent in threadpool
+        agent_task = asyncio.create_task(run_in_threadpool(run_agent))
+
+        while True:
+            event = await queue.get()
+            if event is None: # None is our end-of-stream signal
+                break
+            # Yield as Server-Sent Event (SSE)
+            yield f"data: {json.dumps(event)}\n\n"
+        
+        await agent_task
+
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+
 # ---- Sensor Status & Live Camera Feed Endpoints ----
+
 
 @app.get("/api/v1/hardware/sensor-status", tags=["Hardware"])
 async def check_sensor_status():
