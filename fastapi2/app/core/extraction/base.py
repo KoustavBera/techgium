@@ -20,7 +20,6 @@ class PhysiologicalSystem(str, Enum):
     CNS = "central_nervous_system"
     CARDIOVASCULAR = "cardiovascular"
     PULMONARY = "pulmonary"
-    RENAL = "renal"
     GASTROINTESTINAL = "gastrointestinal"
     SKELETAL = "skeletal"
     SKIN = "skin"
@@ -45,9 +44,7 @@ class PhysiologicalSystem(str, Enum):
             "respiratory": cls.PULMONARY,
             "lung": cls.PULMONARY,
             "lungs": cls.PULMONARY,
-            "renal": cls.RENAL,
-            "kidney": cls.RENAL,
-            "kidneys": cls.RENAL,
+            "lungs": cls.PULMONARY,
             "gastrointestinal": cls.GASTROINTESTINAL,
             "gi": cls.GASTROINTESTINAL,
             "gut": cls.GASTROINTESTINAL,

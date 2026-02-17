@@ -69,11 +69,7 @@ class MedicalContextGenerator:
             "Key indicators include heart rate, heart rate variability (HRV), "
             "and blood pressure measurements."
         ),
-        PhysiologicalSystem.RENAL: (
-            "The renal system filters blood and regulates fluid balance. "
-            "Bioimpedance measurements can indicate fluid distribution and "
-            "hydration status."
-        ),
+
         PhysiologicalSystem.GASTROINTESTINAL: (
             "The gastrointestinal system processes food and absorbs nutrients. "
             "Abdominal motion patterns and respiratory coupling provide indirect "
@@ -251,11 +247,7 @@ Keep responses concise and educational. Do not provide medical advice."""
                 "A balanced diet supports cardiovascular health",
                 "Stress management benefits heart function"
             ],
-            PhysiologicalSystem.RENAL: [
-                "Adequate hydration supports kidney function",
-                "Limiting sodium intake helps fluid balance",
-                "Regular monitoring if you have risk factors"
-            ],
+
             PhysiologicalSystem.GASTROINTESTINAL: [
                 "A fiber-rich diet supports digestive health",
                 "Regular meal patterns aid digestion",
@@ -308,11 +300,7 @@ Keep responses concise and educational. Do not provide medical advice."""
                 "Irregular heartbeat",
                 "Unexplained fatigue"
             ],
-            PhysiologicalSystem.RENAL: [
-                "Changes in urination patterns",
-                "Swelling in legs or ankles",
-                "Persistent fatigue"
-            ],
+
         }
         
         return specific.get(system, general)

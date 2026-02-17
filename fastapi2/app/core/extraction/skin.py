@@ -257,7 +257,21 @@ class SkinExtractor(BaseExtractor):
         results = self.face_mesh.process(rgb_frame)
         
         if not results.multi_face_landmarks:
-            return None, None, None
+            # FALLBACK: If FaceMesh fails (e.g. on a tight crop), assume the frame IS the face ROI
+            # and generate a simple central elliptical mask.
+            # This is critical because HardwareManager passes cropped ROIs which might confuse FaceMesh.
+            logger.warning("Skin: FaceMesh failed on frame. Using fallback elliptical mask.")
+            
+            mask = np.zeros((h, w), dtype=np.uint8)
+            center = (w // 2, int(h * 0.45))  # Slightly higher than center
+            axes = (int(w * 0.35), int(h * 0.45)) # Coverage: ~70% width, ~90% height
+            cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
+            
+            # Create a dummy "crop" (the whole frame masked)
+            processed_crop = cv2.bitwise_and(frame, frame, mask=mask)
+            
+            # Return full frame as crop, no landmarks
+            return mask, processed_crop, None
             
         landmarks = results.multi_face_landmarks[0].landmark
         

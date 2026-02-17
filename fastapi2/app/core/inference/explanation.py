@@ -185,12 +185,6 @@ class ExplanationGenerator:
                     "Monitor for chest pain or shortness of breath"
                 ]
             },
-            PhysiologicalSystem.RENAL: {
-                RiskLevel.LOW: ["Stay well hydrated", "Maintain balanced diet"],
-                RiskLevel.MODERATE: ["Monitor fluid intake", "Consider renal function testing"],
-                RiskLevel.HIGH: ["Schedule kidney function tests", "Review medications"],
-                RiskLevel.CRITICAL: ["Urgent nephrology consultation", "Monitor for swelling"]
-            },
             PhysiologicalSystem.GASTROINTESTINAL: {
                 RiskLevel.LOW: ["Maintain fiber-rich diet", "Stay hydrated"],
                 RiskLevel.MODERATE: ["Monitor digestive symptoms", "Consider dietary adjustments"],
@@ -492,7 +486,7 @@ class ExplanationGenerator:
         if system == PhysiologicalSystem.REPRODUCTIVE:
             caveats.append("Based on autonomic proxies only - direct assessment recommended")
         
-        if system in [PhysiologicalSystem.RENAL, PhysiologicalSystem.GASTROINTESTINAL]:
+        if system in [PhysiologicalSystem.GASTROINTESTINAL]:
             caveats.append("Non-invasive assessment has inherent limitations for this system")
         
         return caveats

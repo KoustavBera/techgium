@@ -35,7 +35,6 @@ from app.core.extraction.cns import CNSExtractor
 from app.core.extraction.skeletal import SkeletalExtractor
 from app.core.extraction.skin import SkinExtractor
 from app.core.extraction.pulmonary import PulmonaryExtractor
-from app.core.extraction.renal import RenalExtractor
 from app.core.extraction.eyes import EyeExtractor
 from app.core.extraction.nasal import NasalExtractor
 from app.core.extraction.base import BiomarkerSet
@@ -181,7 +180,6 @@ class HardwareManager:
         self.skeletal_extractor = None
         self.skin_extractor = None
         self.pulmonary_extractor = None
-        self.renal_extractor = None
         self.eye_extractor = None
         self.nasal_extractor = None
         
@@ -324,7 +322,6 @@ class HardwareManager:
         self.skeletal_extractor = SkeletalExtractor()
         self.skin_extractor = SkinExtractor()
         self.pulmonary_extractor = PulmonaryExtractor()
-        self.renal_extractor = RenalExtractor()
         self.eye_extractor = EyeExtractor(
             sample_rate=30.0,
             frame_width=1280,
@@ -1244,7 +1241,6 @@ class HardwareManager:
             ("Skin", self.skin_extractor),
             ("CNS", self.cns_extractor),
             ("Skeletal", self.skeletal_extractor),
-            ("Renal", self.renal_extractor),
             ("Eyes", self.eye_extractor),
             ("Nasal", self.nasal_extractor),
         ]

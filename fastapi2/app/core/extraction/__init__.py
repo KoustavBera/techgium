@@ -7,7 +7,6 @@ for 9 physiological systems.
 from .base import BaseExtractor, BiomarkerSet
 from .cns import CNSExtractor
 from .cardiovascular import CardiovascularExtractor
-from .renal import RenalExtractor
 from .gastrointestinal import GastrointestinalExtractor
 from .skeletal import SkeletalExtractor
 from .skin import SkinExtractor
@@ -19,7 +18,6 @@ __all__ = [
     "BiomarkerSet",
     "CNSExtractor",
     "CardiovascularExtractor",
-    "RenalExtractor",
     "GastrointestinalExtractor",
     "SkeletalExtractor",
     "SkinExtractor",

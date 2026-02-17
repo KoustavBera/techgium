@@ -108,7 +108,7 @@ BIOMARKER_NAMES = {
     "breath_depth": "Breath Depth",
     "respiratory_regularity_index": "Breathing Stability",
     "nasal_surface_temp_elevation": "Nasal Temperature Check",
-    "airflow_thermal_symmetry_index": "Airflow Symmetry",
+
     "gait_variability": "Walking Stability",
     "balance_score": "Balance Score",
     "tremor": "Hand Steadiness",
@@ -467,9 +467,7 @@ class EnhancedPatientReportGenerator:
         
         # Build system summaries WITH biomarker details for valid systems
         for system, result in system_results.items():
-            # Skip Renal system as requested by user
-            if system == PhysiologicalSystem.RENAL:
-                continue
+
 
             report.system_summaries[system] = {
                 "risk_level": result.overall_risk.level,
@@ -690,10 +688,7 @@ class EnhancedPatientReportGenerator:
                 "normal": "<b>Meaning:</b> No significant thermal inflammation detected.<br/><b>Details:</b> Temperature difference between nostril and cheek is normal (-0.2 to 1.0°C).<br/><b>Guidance:</b> Maintain nasal hygiene.",
                 "high": "<b>Meaning:</b> Elevated local temperature detected.<br/><b>Potential Causes:</b> Local inflammation, sinusitis, or congestion.<br/><b>Guidance:</b> If accompanied by pain or congestion, consider a check-up."
             },
-            "airflow_thermal_symmetry_index": {
-                "normal": "<b>Meaning:</b> Airflow appears balanced between nostrils.<br/><b>Details:</b> Both sides contribute to breathing equally.<br/><b>Guidance:</b> Healthy nasal function.",
-                "high": "<b>Meaning:</b> Significant asymmetry in airflow detected.<br/><b>Potential Causes:</b> Deviated septum, unilateral congestion, or nasal cycle peak.<br/><b>Guidance:</b> Common and often benign, but consult an ENT if breathing is difficult."
-            },
+
             "gait_variability": {
                 "normal": "<b>Meaning:</b> Your walking pattern is steady and rhythmic.<br/><b>Details:</b> This indicates good balance and neurological control.<br/><b>Guidance:</b> Maintain activity levels to preserve this mobility.",
                 "high": "<b>Meaning:</b> Your steps vary significantly in timing or length.<br/><b>Potential Causes:</b> Fatigue, joint pain, muscle weakness, or potential neurological concerns.<br/><b>Guidance:</b> Focus on strength training for legs/core. Wear supportive shoes. Consider a gait analysis if falls are a concern.",
@@ -1065,7 +1060,7 @@ BIOMARKERS:
             system_name = system.value.replace("_", " ").title()
             
             # Phase 2: Add Experimental tag for specific systems
-            is_experimental = system in [PhysiologicalSystem.NASAL, PhysiologicalSystem.RENAL]
+            is_experimental = system in [PhysiologicalSystem.NASAL]
             if is_experimental:
                 system_name += " (Experimental)"
             

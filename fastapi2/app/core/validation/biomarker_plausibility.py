@@ -120,12 +120,7 @@ class BiomarkerPlausibilityValidator:
             "forehead_temperature": {"hard": (28.0, 42.0), "physiological": (33.0, 37.5)},
             "thermal_stability": {"hard": (0.0, 10.0), "physiological": (0.0, 1.5)},
             
-            # Renal
-            "fluid_asymmetry_index": {"hard": (0.0, 1.0), "physiological": (0.0, 0.5)},
-            "total_body_water_proxy": {"hard": (0.0, 5.0), "physiological": (0.3, 2.0)},
-            "extracellular_fluid_ratio": {"hard": (0.0, 1.0), "physiological": (0.2, 0.6)},
-            "fluid_overload_index": {"hard": (-2.0, 2.0), "physiological": (-0.5, 0.5)},
-            
+
             # GI
             "abdominal_rhythm_score": {"hard": (0.0, 1.0), "physiological": (0.1, 1.0)},
             "visceral_motion_variance": {"hard": (0.0, 10000.0), "physiological": (1.0, 500.0)},
@@ -171,7 +166,6 @@ class BiomarkerPlausibilityValidator:
         return {
             PhysiologicalSystem.CNS: ["gait_variability", "cns_stability_score"],
             PhysiologicalSystem.CARDIOVASCULAR: ["heart_rate"],
-            PhysiologicalSystem.RENAL: ["fluid_asymmetry_index"],
             PhysiologicalSystem.GASTROINTESTINAL: ["abdominal_rhythm_score"],
             PhysiologicalSystem.SKELETAL: ["gait_symmetry_ratio"],
             PhysiologicalSystem.SKIN: ["color_uniformity"],

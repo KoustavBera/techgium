@@ -175,13 +175,6 @@ class RiskEngine:
                 "chest_micro_motion": 0.15,
                 "thermal_asymmetry": 0.10,  # Facial perfusion asymmetry
             },
-            PhysiologicalSystem.RENAL: {
-                "fluid_asymmetry_index": 0.25,
-                "total_body_water_proxy": 0.22,
-                "extracellular_fluid_ratio": 0.20,
-                "fluid_overload_index": 0.18,
-                "microcirculation_temp": 0.15,  # Diabetes/microvascular from thermal
-            },
             PhysiologicalSystem.GASTROINTESTINAL: {
                 "abdominal_rhythm_score": 0.40,
                 "visceral_motion_variance": 0.35,
@@ -579,7 +572,6 @@ class CompositeRiskCalculator:
         self.system_weights = system_weights or {
             PhysiologicalSystem.CNS: 1.0,
             PhysiologicalSystem.CARDIOVASCULAR: 1.2,  # Higher weight for critical system
-            PhysiologicalSystem.RENAL: 1.0,
             PhysiologicalSystem.GASTROINTESTINAL: 0.8,
             PhysiologicalSystem.SKELETAL: 0.9,
             PhysiologicalSystem.SKIN: 0.7,
@@ -591,7 +583,6 @@ class CompositeRiskCalculator:
         # Phase 2: Experimental systems with reduced impact
         self.experimental_systems = {
             PhysiologicalSystem.NASAL,
-            PhysiologicalSystem.RENAL
         }
     
     def compute_composite_risk(

@@ -62,7 +62,7 @@ class ConfidenceCalibrator:
         return {
             PhysiologicalSystem.CNS: 0.85,
             PhysiologicalSystem.CARDIOVASCULAR: 0.90,
-            PhysiologicalSystem.RENAL: 0.70,  # Harder to measure non-invasively
+
             PhysiologicalSystem.GASTROINTESTINAL: 0.65,
             PhysiologicalSystem.SKELETAL: 0.88,
             PhysiologicalSystem.SKIN: 0.75,
@@ -152,7 +152,6 @@ class ConfidenceCalibrator:
         expected_biomarkers = {
             PhysiologicalSystem.CNS: 5,
             PhysiologicalSystem.CARDIOVASCULAR: 5,
-            PhysiologicalSystem.RENAL: 4,
             PhysiologicalSystem.GASTROINTESTINAL: 3,
             PhysiologicalSystem.SKELETAL: 5,
             PhysiologicalSystem.SKIN: 5,
