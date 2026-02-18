@@ -457,6 +457,10 @@ class HardwareScreeningRequest(BaseModel):
     radar_port: str = Field(default="COM6", description="Serial port for mmRadar")
     camera_index: int = Field(default=0, description="Camera index for OpenCV")
     esp32_port: Optional[str] = Field(default="COM5", description="Optional ESP32 thermal port")
+    # Patient Context for Dynamic Validation
+    age: Optional[int] = Field(default=30, description="Patient age for physiological limits")
+    gender: Optional[str] = Field(default="male", description="Patient gender (male/female/other)")
+    activity_mode: Optional[str] = Field(default="resting", description="resting or post_exercise")
 
 
 class HardwareScreeningResponse(BaseModel):
@@ -490,9 +494,17 @@ async def start_hardware_screening(request: HardwareScreeningRequest):
     Launches background scan: face capture → body capture → extraction → risk assessment.
     Poll /api/v1/hardware/scan-status for progress.
     """
+    # Build patient context for dynamic validation
+    patient_context = {
+        "age": request.age,
+        "gender": request.gender,
+        "activity_mode": request.activity_mode
+    }
+
     started = _hw_manager.start_scan(
         patient_id=request.patient_id,
         screenings_dict=_screenings,
+        patient_context=patient_context,
     )
     
     if not started:

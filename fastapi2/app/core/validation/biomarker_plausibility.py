@@ -4,6 +4,9 @@ Biomarker Plausibility Validation Module
 Enforces hard physiological constraints on biomarker values.
 Detects impossible values, sudden jumps, and internal contradictions.
 NO ML/AI - purely physics and physiology based.
+
+Dynamic ranges: Pass a PatientContext to validate() to get age/gender/activity-
+adjusted physiological limits instead of the static adult defaults.
 """
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional, Tuple
@@ -14,6 +17,28 @@ from app.core.extraction.base import BiomarkerSet, Biomarker, PhysiologicalSyste
 from app.utils import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class PatientContext:
+    """
+    Patient demographic and activity context for dynamic biomarker validation.
+
+    Attributes:
+        age:           Patient age in years (default 30).
+        gender:        'male', 'female', or 'other' (default 'male').
+        activity_mode: 'resting' (screening context) or 'post_exercise'.
+                       Resting is the correct mode for a kiosk scan.
+    """
+    age: int = 30
+    gender: str = "male"
+    activity_mode: str = "resting"  # 'resting' | 'post_exercise'
+
+    def __post_init__(self):
+        self.age = max(1, min(int(self.age), 120))
+        self.gender = self.gender.lower() if self.gender else "male"
+        if self.activity_mode not in ("resting", "post_exercise"):
+            self.activity_mode = "resting"
 
 
 class ViolationType(str, Enum):
@@ -74,92 +99,152 @@ class BiomarkerPlausibilityValidator:
     """
     
     def __init__(self):
-        """Initialize validator with physiological limits."""
+        """Initialize validator with static hard limits and required biomarker registry."""
         self._validation_count = 0
-        self._limits = self._initialize_physiological_limits()
+        self._static_limits = self._initialize_static_limits()
         self._required_biomarkers = self._initialize_required_biomarkers()
-        logger.info("BiomarkerPlausibilityValidator initialized (NO-ML)")
-    
-    def _initialize_physiological_limits(self) -> Dict[str, Dict[str, Tuple[float, float]]]:
+        logger.info("BiomarkerPlausibilityValidator initialized (NO-ML, dynamic ranges enabled)")
+
+    # ------------------------------------------------------------------
+    # Dynamic limit calculation
+    # ------------------------------------------------------------------
+
+    def _get_limits(
+        self, context: Optional["PatientContext"] = None
+    ) -> Dict[str, Dict[str, Tuple[float, float]]]:
         """
-        Define HARD physiological limits (impossible outside these).
-        Different from "normal ranges" - these are physical impossibilities.
+        Return physiological limits adjusted for the patient's age, gender,
+        and activity mode.  Hard (impossible) limits are always static.
+
+        Formulas used:
+          - Max HR  : Tanaka et al. (2001) — 208 − 0.7 × age
+          - Min HR  : 40 bpm for athletes; 50 bpm for sedentary adults
+          - Sys BP  : Upper bound = 120 + 0.5 × max(0, age − 20) mmHg
+          - RR      : 12–20 adults; 15–30 children (<18); wider in post-exercise
+        """
+        limits = {k: dict(v) for k, v in self._static_limits.items()}  # deep copy
+
+        if context is None:
+            return limits  # Return static defaults unchanged
+
+        age = context.age
+        mode = context.activity_mode  # 'resting' | 'post_exercise'
+
+        # ── Heart Rate ────────────────────────────────────────────────
+        max_hr_tanaka = round(208 - 0.7 * age)          # Tanaka formula
+        min_hr = 40 if age < 40 else 50                 # Athletes tend to be younger
+        if mode == "resting":
+            # During a resting kiosk scan, >100 is tachycardia (flag it)
+            physio_hr_max = min(100, max_hr_tanaka)      # Never exceed age-predicted max
+        else:
+            # Post-exercise: allow up to 85% of age-predicted max
+            physio_hr_max = round(max_hr_tanaka * 0.85)
+        limits["heart_rate"]["physiological"] = (float(min_hr), float(physio_hr_max))
+        # Radar HR follows same logic
+        limits["radar_heart_rate"]["physiological"] = (float(min_hr), float(physio_hr_max + 20))
+
+        # ── Systolic Blood Pressure ───────────────────────────────────
+        # Normal SBP rises ~0.5 mmHg/year after age 20 (Framingham data)
+        age_adjustment = max(0, age - 20) * 0.5
+        sys_bp_max = round(120 + age_adjustment)         # e.g. 145 at age 70
+        sys_bp_max = min(sys_bp_max, 180)                # Cap at hypertensive crisis threshold
+        limits["systolic_bp"]["physiological"] = (85.0, float(sys_bp_max))
+
+        # ── Respiratory Rate ──────────────────────────────────────────
+        if age < 18:
+            rr_min, rr_max = 15.0, 30.0                 # Paediatric range
+        elif mode == "post_exercise":
+            rr_min, rr_max = 12.0, 40.0                 # Elevated after exercise
+        else:
+            rr_min, rr_max = 12.0, 20.0                 # Standard adult resting
+        limits["respiratory_rate"]["physiological"] = (rr_min, rr_max)
+        limits["abdominal_respiratory_rate"]["physiological"] = (rr_min - 4, rr_max + 5)
+        limits["radar_respiration_rate"]["physiological"] = (rr_min - 2, rr_max + 5)
+
+        logger.debug(
+            f"Dynamic limits for age={age}, gender={context.gender}, mode={mode}: "
+            f"HR=({min_hr},{physio_hr_max}), SysBP=(85,{sys_bp_max}), RR=({rr_min},{rr_max})"
+        )
+        return limits
+
+    def _initialize_static_limits(self) -> Dict[str, Dict[str, Tuple[float, float]]]:
+        """
+        HARD physiological limits — these are physical impossibilities regardless
+        of age or activity.  Dynamic adjustments are applied on top in _get_limits().
         """
         return {
-            # CNS biomarkers
-            "gait_variability": {"hard": (0.0, 1.0), "physiological": (0.01, 0.5)},
-            "posture_entropy": {"hard": (0.0, 10.0), "physiological": (0.5, 5.0)},
-            "tremor_resting": {"hard": (0.0, 100.0), "physiological": (0.0, 10.0)},
-            "tremor_postural": {"hard": (0.0, 100.0), "physiological": (0.0, 10.0)},
-            "cns_stability_score": {"hard": (0.0, 100.0), "physiological": (20.0, 100.0)},
-            
-            # Cardiovascular (widened for athletes/anxiety)
-            "heart_rate": {"hard": (25.0, 250.0), "physiological": (45.0, 200.0)},
-            "hrv_rmssd": {"hard": (0.0, 500.0), "physiological": (5.0, 200.0)},
-            "systolic_bp": {"hard": (50.0, 260.0), "physiological": (85.0, 200.0)},
-            "diastolic_bp": {"hard": (20.0, 200.0), "physiological": (40.0, 130.0)},
-            "chest_micro_motion": {"hard": (0.0, 1.0), "physiological": (0.0001, 0.1)},
+            # CNS
+            "gait_variability":       {"hard": (0.0, 1.0),      "physiological": (0.01, 0.5)},
+            "posture_entropy":        {"hard": (0.0, 10.0),     "physiological": (0.5, 5.0)},
+            "tremor_resting":         {"hard": (0.0, 100.0),    "physiological": (0.0, 10.0)},
+            "tremor_postural":        {"hard": (0.0, 100.0),    "physiological": (0.0, 10.0)},
+            "cns_stability_score":    {"hard": (0.0, 100.0),    "physiological": (20.0, 100.0)},
 
-            
-            # Radar (Seeed MR60BHA2)
-            "radar_heart_rate": {"hard": (30.0, 220.0), "physiological": (40.0, 200.0)},
-            "radar_respiration_rate": {"hard": (4.0, 50.0), "physiological": (6.0, 40.0)},
-            
+            # Cardiovascular — physiological bounds overridden by _get_limits()
+            "heart_rate":             {"hard": (20.0, 300.0),   "physiological": (50.0, 100.0)},
+            "hrv_rmssd":              {"hard": (0.0, 500.0),    "physiological": (5.0, 200.0)},
+            "systolic_bp":            {"hard": (50.0, 260.0),   "physiological": (85.0, 140.0)},
+            "diastolic_bp":           {"hard": (20.0, 200.0),   "physiological": (40.0, 120.0)},
+            "chest_micro_motion":     {"hard": (0.0, 1.0),      "physiological": (0.0001, 0.1)},
+
+            # Radar (Seeed MR60BHA2) — physiological bounds overridden by _get_limits()
+            "radar_heart_rate":       {"hard": (20.0, 300.0),   "physiological": (50.0, 120.0)},
+            "radar_respiration_rate": {"hard": (2.0, 70.0),     "physiological": (12.0, 20.0)},
+
             # Thermal (MLX90640)
-            "skin_temp_avg": {"hard": (25.0, 45.0), "physiological": (30.0, 40.0)},
-            "skin_temp_max": {"hard": (25.0, 50.0), "physiological": (32.0, 42.0)},
-            "thermal_asymmetry": {"hard": (0.0, 10.0), "physiological": (0.0, 3.5)},
-            
-            # Thermal biomarkers (ESP32 thermal bridge v2)
-            "skin_temperature": {"hard": (20.0, 45.0), "physiological": (28.0, 39.0)},  # 28C for cold hands/feet
-            "skin_temperature_max": {"hard": (32.0, 50.0), "physiological": (34.0, 42.0)},
-            "inflammation_index": {"hard": (0.0, 100.0), "physiological": (0.0, 20.0)},
-            "face_mean_temperature": {"hard": (28.0, 42.0), "physiological": (30.0, 38.0)},
-            "facial_perfusion_temp": {"hard": (28.0, 42.0), "physiological": (30.0, 38.0)},
-            "microcirculation_temp": {"hard": (30.0, 42.0), "physiological": (30.0, 39.0)},
-            "thermal_stress_gradient": {"hard": (-5.0, 10.0), "physiological": (0.0, 3.0)},
-            "forehead_temperature": {"hard": (28.0, 42.0), "physiological": (33.0, 37.5)},
-            "thermal_stability": {"hard": (0.0, 10.0), "physiological": (0.0, 1.5)},
-            
+            "skin_temp_avg":          {"hard": (20.0, 45.0),    "physiological": (28.0, 40.0)},
+            "skin_temp_max":          {"hard": (20.0, 50.0),    "physiological": (30.0, 42.0)},
+            "thermal_asymmetry":      {"hard": (0.0, 10.0),     "physiological": (0.0, 3.5)},
+
+            # Thermal (ESP32)
+            "skin_temperature":       {"hard": (15.0, 45.0),    "physiological": (25.0, 39.0)},
+            "skin_temperature_max":   {"hard": (20.0, 50.0),    "physiological": (30.0, 42.0)},
+            "inflammation_index":     {"hard": (0.0, 100.0),    "physiological": (0.0, 20.0)},
+            "face_mean_temperature":  {"hard": (25.0, 42.0),    "physiological": (30.0, 38.0)},
+            "facial_perfusion_temp":  {"hard": (25.0, 42.0),    "physiological": (30.0, 38.0)},
+            "microcirculation_temp":  {"hard": (25.0, 42.0),    "physiological": (30.0, 39.0)},
+            "thermal_stress_gradient":{"hard": (-5.0, 10.0),    "physiological": (0.0, 3.0)},
+            "forehead_temperature":   {"hard": (25.0, 42.0),    "physiological": (33.0, 37.5)},
+            "thermal_stability":      {"hard": (0.0, 10.0),     "physiological": (0.0, 1.5)},
 
             # GI
-            "abdominal_rhythm_score": {"hard": (0.0, 1.0), "physiological": (0.1, 1.0)},
-            "visceral_motion_variance": {"hard": (0.0, 10000.0), "physiological": (1.0, 500.0)},
-            "abdominal_respiratory_rate": {"hard": (2.0, 60.0), "physiological": (8.0, 30.0)},
-            
-            # Skeletal
-            "gait_symmetry_ratio": {"hard": (0.0, 2.0), "physiological": (0.5, 1.0)},
-            "step_length_symmetry": {"hard": (0.0, 2.0), "physiological": (0.5, 1.0)},
-            "stance_stability_score": {"hard": (0.0, 100.0), "physiological": (30.0, 100.0)},
-            "sway_velocity": {"hard": (0.0, 1.0), "physiological": (0.0, 0.1)},
-            "average_joint_rom": {"hard": (0.0, 3.14), "physiological": (0.1, 2.5)},
+            "abdominal_rhythm_score":     {"hard": (0.0, 1.0),      "physiological": (0.1, 1.0)},
+            "visceral_motion_variance":   {"hard": (0.0, 10000.0),  "physiological": (1.0, 500.0)},
+            "abdominal_respiratory_rate": {"hard": (2.0, 60.0),     "physiological": (8.0, 25.0)},
 
-            # Skin - values are normalized 0-1 (normalized_score unit)
-            "texture_roughness": {"hard": (0.0, 1000.0), "physiological": (0.0, 50.0)},
-            "skin_redness": {"hard": (0.0, 1.0), "physiological": (0.0, 0.7)},
-            "skin_yellowness": {"hard": (0.0, 1.0), "physiological": (0.0, 0.7)},
-            "color_uniformity": {"hard": (0.0, 1.0), "physiological": (0.1, 1.0)},
-            "lesion_count": {"hard": (0.0, 1000.0), "physiological": (0.0, 50.0)},
-            
+            # Skeletal
+            "gait_symmetry_ratio":    {"hard": (0.0, 2.0),      "physiological": (0.5, 1.0)},
+            "step_length_symmetry":   {"hard": (0.0, 2.0),      "physiological": (0.5, 1.0)},
+            "stance_stability_score": {"hard": (0.0, 100.0),    "physiological": (30.0, 100.0)},
+            "sway_velocity":          {"hard": (0.0, 1.0),      "physiological": (0.0, 0.1)},
+            "average_joint_rom":      {"hard": (0.0, 3.14),     "physiological": (0.1, 2.5)},
+
+            # Skin
+            "texture_roughness":      {"hard": (0.0, 1000.0),   "physiological": (0.0, 50.0)},
+            "skin_redness":           {"hard": (0.0, 1.0),      "physiological": (0.0, 0.7)},
+            "skin_yellowness":        {"hard": (0.0, 1.0),      "physiological": (0.0, 0.7)},
+            "color_uniformity":       {"hard": (0.0, 1.0),      "physiological": (0.1, 1.0)},
+            "lesion_count":           {"hard": (0.0, 1000.0),   "physiological": (0.0, 50.0)},
+
             # Eyes
-            "blink_rate": {"hard": (0.0, 100.0), "physiological": (2.0, 50.0)},  # <2.0 implies staring/frozen video
-            "blink_count": {"hard": (0.0, 1000.0), "physiological": (0.0, 100.0)},
-            "gaze_stability_score": {"hard": (0.0, 100.0), "physiological": (30.0, 100.0)},
-            "fixation_duration": {"hard": (10.0, 10000.0), "physiological": (50.0, 2000.0)},
-            "saccade_frequency": {"hard": (0.0, 20.0), "physiological": (0.5, 10.0)},
-            "eye_symmetry": {"hard": (0.0, 2.0), "physiological": (0.5, 1.0)},
-            
-            # Nasal/Respiratory
-            "breathing_regularity": {"hard": (0.0, 1.0), "physiological": (0.2, 1.0)},
-            "respiratory_rate": {"hard": (3.0, 70.0), "physiological": (8.0, 35.0)},  # 8 for athletes, 35 for stress
-            "breath_depth_index": {"hard": (0.0, 10.0), "physiological": (0.1, 3.0)},
-            "airflow_turbulence": {"hard": (0.0, 10.0), "physiological": (0.0, 1.0)},
-            
+            "blink_rate":             {"hard": (0.0, 100.0),    "physiological": (2.0, 50.0)},
+            "blink_count":            {"hard": (0.0, 1000.0),   "physiological": (0.0, 100.0)},
+            "gaze_stability_score":   {"hard": (0.0, 100.0),    "physiological": (30.0, 100.0)},
+            "fixation_duration":      {"hard": (10.0, 10000.0), "physiological": (50.0, 2000.0)},
+            "saccade_frequency":      {"hard": (0.0, 20.0),     "physiological": (0.5, 10.0)},
+            "eye_symmetry":           {"hard": (0.0, 2.0),      "physiological": (0.5, 1.0)},
+
+            # Nasal/Respiratory — physiological RR overridden by _get_limits()
+            "breathing_regularity":   {"hard": (0.0, 1.0),      "physiological": (0.2, 1.0)},
+            "respiratory_rate":       {"hard": (2.0, 70.0),     "physiological": (12.0, 20.0)},
+            "breath_depth_index":     {"hard": (0.0, 10.0),     "physiological": (0.1, 3.0)},
+            "airflow_turbulence":     {"hard": (0.0, 10.0),     "physiological": (0.0, 1.0)},
+
             # Reproductive (proxies)
-            "autonomic_imbalance_index": {"hard": (-2.0, 2.0), "physiological": (-1.0, 1.0)},
-            "stress_response_proxy": {"hard": (0.0, 100.0), "physiological": (10.0, 90.0)},
-            "regional_flow_variability": {"hard": (0.0, 1.0), "physiological": (0.0, 0.5)},
-            "thermoregulation_proxy": {"hard": (0.0, 1.0), "physiological": (0.2, 0.8)},
+            "autonomic_imbalance_index": {"hard": (-2.0, 2.0),  "physiological": (-1.0, 1.0)},
+            "stress_response_proxy":     {"hard": (0.0, 100.0), "physiological": (10.0, 90.0)},
+            "regional_flow_variability": {"hard": (0.0, 1.0),   "physiological": (0.0, 0.5)},
+            "thermoregulation_proxy":    {"hard": (0.0, 1.0),   "physiological": (0.2, 0.8)},
         }
     
     def _initialize_required_biomarkers(self) -> Dict[PhysiologicalSystem, List[str]]:
@@ -190,18 +275,22 @@ class BiomarkerPlausibilityValidator:
     def validate(
         self,
         biomarker_set: BiomarkerSet,
-        previous_set: Optional[BiomarkerSet] = None
+        previous_set: Optional[BiomarkerSet] = None,
+        context: Optional["PatientContext"] = None,
     ) -> PlausibilityResult:
         """
         Validate a biomarker set against physiological constraints.
-        
+
         Args:
             biomarker_set: Current biomarker set
-            previous_set: Optional previous set for rate-of-change validation
-            
+            previous_set:  Optional previous set for rate-of-change validation
+            context:       Optional PatientContext for dynamic limit calculation.
+                           If None, static adult defaults are used.
+
         Returns:
             PlausibilityResult with violations
         """
+        limits = self._get_limits(context)
         result = PlausibilityResult(system=biomarker_set.system)
         violations = []
         
@@ -218,9 +307,9 @@ class BiomarkerPlausibilityValidator:
                     severity=0.8
                 ))
         
-        # 2. Validate each biomarker
+        # 2. Validate each biomarker (using dynamic limits)
         for biomarker in biomarker_set.biomarkers:
-            bm_violations = self._validate_single_biomarker(biomarker)
+            bm_violations = self._validate_single_biomarker(biomarker, limits)
             violations.extend(bm_violations)
         
         # 3. Check for sudden jumps if previous set available
@@ -259,8 +348,14 @@ class BiomarkerPlausibilityValidator:
         self._validation_count += 1
         return result
     
-    def _validate_single_biomarker(self, biomarker: Biomarker) -> List[PlausibilityViolation]:
-        """Validate a single biomarker value."""
+    def _validate_single_biomarker(
+        self,
+        biomarker: Biomarker,
+        limits: Optional[Dict[str, Dict[str, Tuple[float, float]]]] = None,
+    ) -> List[PlausibilityViolation]:
+        """Validate a single biomarker value against the provided (possibly dynamic) limits."""
+        if limits is None:
+            limits = self._static_limits
         violations = []
         
         # Handle NaN/Inf
@@ -273,12 +368,12 @@ class BiomarkerPlausibilityValidator:
                 actual_value=0.0 # Placeholder
             )]
         
-        limits = self._limits.get(biomarker.name)
-        if limits is None:
+        biomarker_limits = limits.get(biomarker.name)
+        if biomarker_limits is None:
             return violations  # Unknown biomarker, skip
         
-        hard_min, hard_max = limits["hard"]
-        physio_min, physio_max = limits["physiological"]
+        hard_min, hard_max = biomarker_limits["hard"]
+        physio_min, physio_max = biomarker_limits["physiological"]
         value = biomarker.value
         
         # Check hard limits (impossible)
@@ -415,17 +510,21 @@ class BiomarkerPlausibilityValidator:
     def validate_all(
         self,
         biomarker_sets: List[BiomarkerSet],
-        previous_sets: Optional[Dict[PhysiologicalSystem, BiomarkerSet]] = None
+        previous_sets: Optional[Dict[PhysiologicalSystem, BiomarkerSet]] = None,
+        context: Optional["PatientContext"] = None,
     ) -> Dict[PhysiologicalSystem, PlausibilityResult]:
-        """Validate all biomarker sets."""
+        """Validate all biomarker sets with optional patient context for dynamic limits."""
         results = {}
         prev = previous_sets or {}
-        
+        # Pre-compute limits once for all systems
+        limits = self._get_limits(context)
+
         for bm_set in biomarker_sets:
             results[bm_set.system] = self.validate(
-                bm_set, 
-                prev.get(bm_set.system)
+                bm_set,
+                prev.get(bm_set.system),
+                context=context,
             )
-        
+
         return results
         

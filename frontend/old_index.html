@@ -588,6 +588,129 @@
 				transform: rotate(360deg);
 			}
 		}
+
+		/* Patient Context Modal */
+		.modal-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: rgba(0, 0, 0, 0.6);
+			backdrop-filter: blur(8px);
+			display: none;
+			justify-content: center;
+			align-items: center;
+			z-index: 1000;
+			opacity: 0;
+			transition: opacity 0.3s ease;
+		}
+
+		.modal-overlay.visible {
+			display: flex;
+			opacity: 1;
+		}
+
+		.modal-content {
+			background: var(--md-sys-color-surface);
+			width: 90%;
+			max-width: 400px;
+			padding: 24px;
+			border-radius: 28px;
+			box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+			transform: scale(0.95);
+			transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+		}
+
+		.modal-overlay.visible .modal-content {
+			transform: scale(1);
+		}
+
+		.modal-header {
+			margin-bottom: 24px;
+		}
+
+		.modal-title {
+			font-family: 'Google Sans', sans-serif;
+			font-size: 24px;
+			font-weight: 500;
+			color: var(--md-sys-color-on-surface);
+			margin-bottom: 8px;
+		}
+
+		.modal-subtitle {
+			font-size: 14px;
+			color: var(--md-sys-color-on-surface-variant);
+			line-height: 1.5;
+		}
+
+		.context-form-group {
+			margin-bottom: 20px;
+		}
+
+		.context-label {
+			display: block;
+			font-size: 12px;
+			font-weight: 500;
+			color: var(--md-sys-color-primary);
+			margin-bottom: 8px;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
+
+		.context-input, .context-select {
+			width: 100%;
+			padding: 12px 16px;
+			border: 1px solid var(--md-sys-color-outline);
+			border-radius: 8px;
+			background: transparent;
+			font-family: inherit;
+			font-size: 16px;
+			color: var(--md-sys-color-on-surface);
+			transition: border-color 0.2s;
+		}
+
+		.context-input:focus, .context-select:focus {
+			border-color: var(--md-sys-color-primary);
+			outline: 2px solid var(--md-sys-color-primary-container);
+		}
+
+		.modal-actions {
+			display: flex;
+			justify-content: flex-end;
+			gap: 12px;
+			margin-top: 32px;
+		}
+
+		.btn-text {
+			background: transparent;
+			color: var(--md-sys-color-primary);
+			border: none;
+			padding: 10px 24px;
+			border-radius: 24px;
+			font-weight: 500;
+			cursor: pointer;
+		}
+
+		.btn-text:hover {
+			background: var(--md-sys-color-primary-container);
+			opacity: 0.8;
+		}
+
+		.btn-primary {
+			background: var(--md-sys-color-primary);
+			color: var(--md-sys-color-on-primary);
+			border: none;
+			padding: 10px 24px;
+			border-radius: 24px;
+			font-weight: 500;
+			cursor: pointer;
+			box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+		}
+
+		.btn-primary:hover {
+			box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+		}
 	</style>
 </head>
 
@@ -824,6 +947,43 @@
 	</div>
 	</main>
 
+	<!-- PATIENT CONTEXT MODAL -->
+	<div id="contextModal" class="modal-overlay">
+		<div class="modal-content">
+			<div class="modal-header">
+				<div class="modal-title">Patient Profile</div>
+				<div class="modal-subtitle">Help Chiranjeevi calibrate physiological baselines for higher accuracy.</div>
+			</div>
+			
+			<div class="context-form-group">
+				<label class="context-label">Age</label>
+				<input type="number" id="ctxAge" class="context-input" value="30" min="5" max="100">
+			</div>
+
+			<div class="context-form-group">
+				<label class="context-label">Gender</label>
+				<select id="ctxGender" class="context-select">
+					<option value="male">Male</option>
+					<option value="female">Female</option>
+					<option value="other">Other</option>
+				</select>
+			</div>
+
+			<div class="context-form-group">
+				<label class="context-label">Activity Level (Current)</label>
+				<select id="ctxActivity" class="context-select">
+					<option value="resting">Resting (seated >5 mins)</option>
+					<option value="post_exercise">Post-Exercise / Active</option>
+				</select>
+			</div>
+
+			<div class="modal-actions">
+				<button class="btn-text" onclick="closeContextModal()">Cancel</button>
+				<button class="btn-primary" onclick="confirmContextAndStart()">Start Scan</button>
+			</div>
+		</div>
+	</div>
+
 	<script>
 		const API_BASE = "http://localhost:8000";
 		let cameraShowing = false;
@@ -971,10 +1131,44 @@
 			}
 		}
 
+		// ===== PATIENT CONTEXT MODAL LOGIC =====
+		function openContextModal() {
+			const modal = document.getElementById("contextModal");
+			modal.classList.add("visible");
+			// Focus age input
+			setTimeout(() => document.getElementById("ctxAge").focus(), 100);
+		}
+
+		function closeContextModal() {
+			document.getElementById("contextModal").classList.remove("visible");
+		}
+
+		function confirmContextAndStart() {
+			const age = parseInt(document.getElementById("ctxAge").value) || 30;
+			const gender = document.getElementById("ctxGender").value;
+			const activity = document.getElementById("ctxActivity").value;
+
+			const context = {
+				age: age,
+				gender: gender,
+				activity_mode: activity
+			};
+
+			closeContextModal();
+			// Call startScreening with the context, passing null for event
+			startScreening(null, context);
+		}
+
 		// ===== START SCREENING =====
-		async function startScreening(e) {
+		async function startScreening(e, context = null) {
 			console.log("Start button clicked");
 			if (e) e.preventDefault();
+
+			// Intercept: If no context, open modal first
+			if (!context) {
+				openContextModal();
+				return;
+			}
 
 			// Show status card, hide config
 			document.getElementById("statusCard").style.display = "block";
@@ -995,6 +1189,10 @@
 					radar_port: document.getElementById("radarPort").value,
 					esp32_port: document.getElementById("esp32Port").value,
 					camera_index: 0,
+					// Add Dynamic Validation Context
+					age: context.age,
+					gender: context.gender,
+					activity_mode: context.activity_mode
 				};
 
 				console.log("Starting screening...");

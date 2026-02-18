@@ -11,7 +11,7 @@ from app.core.extraction.base import PhysiologicalSystem, BiomarkerSet, Biomarke
 from app.core.inference.risk_engine import RiskEngine, CompositeRiskCalculator, SystemRiskResult, RiskScore
 from app.core.llm.multi_llm_interpreter import MultiLLMInterpreter
 from app.core.validation.signal_quality import SignalQualityAssessor, Modality
-from app.core.validation.biomarker_plausibility import BiomarkerPlausibilityValidator
+from app.core.validation.biomarker_plausibility import BiomarkerPlausibilityValidator, PatientContext
 from app.core.validation.cross_system_consistency import CrossSystemConsistencyChecker
 from app.core.validation.trust_envelope import TrustEnvelopeAggregator, TrustEnvelope
 from app.config import settings
@@ -42,22 +42,37 @@ class ScreeningService:
         self._enable_trust_envelope = settings.enable_trust_envelope
 
     async def process_screening(
-        self, 
-        patient_id: str, 
-        systems_input: List[Dict[str, Any]], 
-        include_validation: bool = True
+        self,
+        patient_id: str,
+        systems_input: List[Dict[str, Any]],
+        include_validation: bool = True,
+        patient_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Processes screening data and returns risk assessments.
-        
+
         Args:
-            patient_id: ID of the patient.
-            systems_input: List of system data (name and biomarkers).
+            patient_id:       ID of the patient.
+            systems_input:    List of system data (name and biomarkers).
             include_validation: Whether to run LLM validation.
-            
+            patient_context:  Optional dict with age/gender/activity_mode for dynamic
+                              plausibility validation. Falls back to static defaults if None.
+
         Returns:
             A dictionary containing the screening results.
         """
+        # Build PatientContext for dynamic plausibility limits
+        ctx: Optional[PatientContext] = None
+        if patient_context and isinstance(patient_context, dict):
+            ctx = PatientContext(
+                age=patient_context.get("age", 30),
+                gender=patient_context.get("gender", "male"),
+                activity_mode=patient_context.get("activity_mode", "resting"),
+            )
+            logger.info(
+                f"PatientContext received: age={ctx.age}, gender={ctx.gender}, "
+                f"activity_mode={ctx.activity_mode}"
+            )
         screening_id = f"SCR-{uuid.uuid4().hex[:8].upper()}"
         timestamp = datetime.now()
         
@@ -98,7 +113,9 @@ class ScreeningService:
             plausibility_result = None
             if self._enable_validation and self._enable_plausibility:
                 try:
-                    plausibility_result = self.plausibility_validator.validate(biomarker_set)
+                    plausibility_result = self.plausibility_validator.validate(
+                        biomarker_set, context=ctx
+                    )
                     plausibility_results[system] = plausibility_result
                     logger.info(f"[{system.value}] Plausibility: valid={plausibility_result.is_valid}, score={plausibility_result.overall_plausibility:.2f}")
                 except Exception as e:

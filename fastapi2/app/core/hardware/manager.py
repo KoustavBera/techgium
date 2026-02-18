@@ -584,22 +584,31 @@ class HardwareManager:
             )
             time.sleep(1.0)
     
-    def start_scan(self, patient_id: str, screenings_dict: Dict, app_internals: Dict = None) -> bool:
+    def start_scan(
+        self,
+        patient_id: str,
+        screenings_dict: Dict,
+        app_internals: Dict = None,
+        patient_context: Dict = None,
+    ) -> bool:
         """
         Launch analysis in a background thread.
-        
+
         Args:
-            patient_id: Patient identifier
+            patient_id:      Patient identifier
             screenings_dict: Reference to main.py's _screenings dict for direct injection
-            app_internals: Dict with references to _risk_engine, _multi_llm_interpreter etc.
-        
+            app_internals:   Dict with references to _risk_engine, _multi_llm_interpreter etc.
+            patient_context: Optional dict with keys: age (int), gender (str), activity_mode (str).
+                             Used for dynamic biomarker plausibility validation.
+                             Example: {"age": 35, "gender": "female", "activity_mode": "resting"}
+
         Returns:
             True if scan started, False if one is already running
         """
         if self._scan_active:
             logger.warning("Scan already in progress")
             return False
-        
+
         logger.info(f"Initiating scan for patient: {patient_id}")
         self._scan_active = True
         self._update_scan_status(
@@ -611,12 +620,12 @@ class HardwareManager:
             patient_report_id=None,
             doctor_report_id=None,
         )
-        
+
         logger.info("Launching scan thread...")
         logger.info(f"Target function: {self._run_scan}")
         self._scan_thread = threading.Thread(
             target=self._run_scan,
-            args=(patient_id, screenings_dict, app_internals),
+            args=(patient_id, screenings_dict, app_internals, patient_context),
             daemon=True,
             name="hw-scan"
         )
@@ -657,10 +666,16 @@ class HardwareManager:
             
         return thermal_frames, rgb_frames
     
-    def _run_scan(self, patient_id: str, screenings_dict: Dict, app_internals: Dict = None):
+    def _run_scan(
+        self,
+        patient_id: str,
+        screenings_dict: Dict,
+        app_internals: Dict = None,
+        patient_context: Dict = None,
+    ):
         """
         Full scanning pipeline (runs in background thread).
-        
+
         Mirrors bridge.py HardwareBridge.run_single_screening() logic:
         1. Clear sensor queues
         2. Phase 1: Face capture (face ROIs + FaceMesh landmarks)
@@ -669,8 +684,28 @@ class HardwareManager:
         5. Run all 8 extractors
         6. POST to internal screening endpoint for risk assessment
         7. Auto-generate reports
+
+        Args:
+            patient_context: Optional dict with age/gender/activity_mode for dynamic
+                             plausibility validation.  Falls back to static defaults if None.
         """
+        from app.core.validation.biomarker_plausibility import PatientContext
         import httpx
+
+        # Build PatientContext from the incoming dict (or use defaults)
+        if patient_context and isinstance(patient_context, dict):
+            ctx = PatientContext(
+                age=patient_context.get("age", 30),
+                gender=patient_context.get("gender", "male"),
+                activity_mode=patient_context.get("activity_mode", "resting"),
+            )
+            logger.info(
+                f"PatientContext: age={ctx.age}, gender={ctx.gender}, "
+                f"activity_mode={ctx.activity_mode}"
+            )
+        else:
+            ctx = None  # Validator will use static adult defaults
+            logger.info("No PatientContext provided — using static adult defaults for validation")
         
         try:
             logger.info("=" * 60)
