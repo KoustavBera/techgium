@@ -27,7 +27,7 @@ except ImportError:
 
 class GeminiModel(str, Enum):
     """Available Gemini models."""
-    FLASH_1_5_LATEST = "gemini-1.5-flash-latest"  # User requested
+    FLASH_1_5_LATEST = "gemini-1.5-flash"  # User requested
     FLASH_2_0_LITE = "gemini-2.0-flash-lite"  # 10 RPM free tier (Best for explanations)
     FLASH_LATEST = "gemini-2.5-flash"  # 5 RPM free tier
     FLASH_8B = "gemini-1.5-flash-8b"  # Cheapest & Fastest (Keep if available, else update)

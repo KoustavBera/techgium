@@ -33,6 +33,7 @@ except ImportError:
     logger.warning("Medical Agent packages not found. Doctor chat will be disabled.")
     AGENT_AVAILABLE = False
 
+
 # Load environment variables
 load_dotenv()
 import uuid
@@ -58,10 +59,12 @@ from app.models.screening import (
     ReportResponse,
     HealthResponse
 )
+
 class DoctorChatRequest(BaseModel):
     """Request for medical doctor chat interaction."""
     query: str
     patient_id: Optional[str] = "GUEST"
+
 # ---- Hardware Manager Singleton ----
 _hw_manager = HardwareManager()
 
@@ -87,14 +90,16 @@ async def lifespan(app: FastAPI):
         try:
             logger.info("Initializing Medical Agent (Chiranjeevi)...")
             llm = await run_in_threadpool(load_model)
+            # LLM is now set in load_model() for all modules
             set_llm(llm)
             app.state.medical_agent = build_graph()
-            logger.info("Medical Agent ready")
+            logger.info("Medical Agent ready with Trust Envelope™")
         except Exception as e:
             logger.error(f"Failed to load Medical Agent: {e}")
             app.state.medical_agent = None
     else:
         app.state.medical_agent = None
+
     logger.info("API ready to accept requests")
     yield
     
@@ -170,7 +175,6 @@ def _parse_system(system_name: str) -> PhysiologicalSystem:
         "respiratory": PhysiologicalSystem.PULMONARY,
         "lung": PhysiologicalSystem.PULMONARY,
         "lungs": PhysiologicalSystem.PULMONARY,
-
         "gastrointestinal": PhysiologicalSystem.GASTROINTESTINAL,
         "gi": PhysiologicalSystem.GASTROINTESTINAL,
         "gut": PhysiologicalSystem.GASTROINTESTINAL,
@@ -572,7 +576,7 @@ async def doctor_chat(request: DoctorChatRequest):
             if event is None: # None is our end-of-stream signal
                 break
             # Yield as Server-Sent Event (SSE)
-            yield f"data: {json.dumps(event)}\\n\\n"
+            yield f"data: {json.dumps(event)}\n\n"
         
         await agent_task
 
@@ -580,6 +584,8 @@ async def doctor_chat(request: DoctorChatRequest):
 
 
 # ---- Sensor Status & Live Camera Feed Endpoints ----
+
+
 @app.get("/api/v1/hardware/sensor-status", tags=["Hardware"])
 async def check_sensor_status():
     """

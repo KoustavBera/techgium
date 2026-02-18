@@ -249,12 +249,6 @@
             font-weight: 500;
         }
 
-<<<<<<< HEAD
-        .connection-status.disconnected {
-            background: var(--md-sys-color-error-container);
-            color: var(--md-sys-color-on-error-container);
-        }
-=======
         /* Citations Snippets & Pills */
         .sources-pill {
             display: inline-flex;
@@ -415,9 +409,7 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-
-     </style>
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
+    </style>
     </style>
 </head>
 
@@ -457,9 +449,6 @@
                 </div>
                 <div class="header-controls">
                     <div class="connection-status" id="connectionStatus">Connecting...</div>
-                    <button class="language-toggle active" id="langEn">English</button>
-                    <button class="language-toggle" id="langHi">हिंदी</button>
-                    <button class="mode-toggle" id="modeToggle">General Q&A</button>
                 </div>
             </div>
 
@@ -493,19 +482,6 @@
                 <button class="send-button" id="sendButton">➤</button>
             </div>
         </div>
-<<<<<<< HEAD
-    </main>
-
-    <!-- Socket.IO Client -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script>
-        // Socket.IO Connection
-        const socket = io('http://localhost:5000');
-        let currentLanguage = 'en';
-        let currentMode = 'general';
-        let sessionId = null;
-=======
 
         <!-- Sources Sidebar -->
         <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -529,7 +505,6 @@
         let currentMode = 'general';
         let isProcessing = false;
         let currentMessageDiv = null;
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
 
         // DOM Elements
         const chatDisplay = document.getElementById('chatDisplay');
@@ -539,55 +514,7 @@
         const emergencyAlert = document.getElementById('emergencyAlert');
         const emergencyText = document.getElementById('emergencyText');
         const connectionStatus = document.getElementById('connectionStatus');
-        const langEn = document.getElementById('langEn');
-        const langHi = document.getElementById('langHi');
-        const modeToggle = document.getElementById('modeToggle');
-<<<<<<< HEAD
 
-        // Socket Events
-        socket.on('connect', () => {
-            console.log('Connected to chatbot server');
-            connectionStatus.textContent = 'Connected';
-            connectionStatus.classList.remove('disconnected');
-
-            // Initialize session
-            socket.emit('init_session', {
-                language: currentLanguage,
-                mode: currentMode
-            });
-        });
-
-        socket.on('disconnect', () => {
-            console.log('Disconnected from chatbot server');
-            connectionStatus.textContent = 'Disconnected';
-            connectionStatus.classList.add('disconnected');
-        });
-
-        socket.on('session_initialized', (data) => {
-            sessionId = data.session_id;
-            console.log('Session initialized:', sessionId);
-        });
-
-        socket.on('receive_message', (data) => {
-            typingIndicator.classList.remove('visible');
-            addMessage(data.text, 'assistant');
-        });
-
-        socket.on('emergency_alert', (data) => {
-            emergencyText.textContent = data.message;
-            emergencyAlert.classList.add('visible');
-            setTimeout(() => {
-                emergencyAlert.classList.remove('visible');
-            }, 10000);
-        });
-
-        socket.on('error', (data) => {
-            console.error('Socket error:', data);
-            addMessage('Sorry, an error occurred. Please try again.', 'assistant');
-            typingIndicator.classList.remove('visible');
-        });
-=======
-        
         const sourcesSidebar = document.getElementById('sourcesSidebar');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
         const sidebarContent = document.getElementById('sidebarContent');
@@ -623,7 +550,7 @@
         function updateTypingIndicator(state, customText = null) {
             const indicator = document.getElementById('typingIndicator');
             const textSpan = indicator.querySelector('span');
-            
+
             const stateMessages = {
                 [AgentState.ANALYZING]: '🔀 Analyzing your question',
                 [AgentState.SEARCHING_WEB]: '🌐 Searching the web',
@@ -639,7 +566,6 @@
         function hideTypingIndicator() {
             document.getElementById('typingIndicator').classList.remove('visible');
         }
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
 
         // UI Functions
         function addMessage(text, sender) {
@@ -650,14 +576,6 @@
             avatar.className = 'message-avatar';
             avatar.textContent = sender === 'user' ? '👤' : '🤖';
 
-<<<<<<< HEAD
-            const content = document.createElement('div');
-            content.className = 'message-content';
-            content.innerHTML = marked.parse(text);
-
-            messageDiv.appendChild(avatar);
-            messageDiv.appendChild(content);
-=======
             const contentContainer = document.createElement('div');
             contentContainer.style.display = 'flex';
             contentContainer.style.flexDirection = 'column';
@@ -665,7 +583,7 @@
 
             const content = document.createElement('div');
             content.className = 'message-content';
-            
+
             if (sender === 'assistant') {
                 content.textContent = text; // Start with plain text for streaming
             } else {
@@ -675,20 +593,11 @@
             contentContainer.appendChild(content);
             messageDiv.appendChild(avatar);
             messageDiv.appendChild(contentContainer);
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
             chatDisplay.appendChild(messageDiv);
 
             // Scroll to bottom
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
-<<<<<<< HEAD
-        }
 
-        function sendMessage() {
-            const text = chatInput.value.trim();
-            if (!text || !sessionId) return;
-
-=======
-            
             return messageDiv;
         }
 
@@ -708,24 +617,12 @@
 
             isProcessing = true;
             sendButton.disabled = true;
-            
+
             // Add user message
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
             addMessage(text, 'user');
             chatInput.value = '';
             chatInput.style.height = 'auto';
 
-<<<<<<< HEAD
-            typingIndicator.classList.add('visible');
-
-            socket.emit('send_message', {
-                session_id: sessionId,
-                text: text,
-                language: currentLanguage
-            });
-        }
-
-=======
             // Prepare for streaming
             let accumulatedResponse = '';
             currentMessageDiv = null;
@@ -750,19 +647,23 @@
                 // Read SSE stream
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
+                let buffer = '';
 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
+                    const chunk = decoder.decode(value, { stream: true });
+                    buffer += chunk;
+
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // Keep the last incomplete line in buffer
 
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             try {
                                 const data = JSON.parse(line.slice(6));
-                                
+
                                 // Handle different event types
                                 if (data.type === 'status') {
                                     if (data.stage === 'citations') {
@@ -781,7 +682,7 @@
                                         hideTypingIndicator();
                                         currentMessageDiv = addMessage('', 'assistant');
                                     }
-                                    
+
                                     // Accumulate and display token
                                     accumulatedResponse += data.token;
                                     updateMessageContent(currentMessageDiv, accumulatedResponse, false);
@@ -827,17 +728,17 @@
 
         function createPill(sources) {
             const container = currentMessageDiv.querySelector('div:last-child');
-            
+
             // Remove existing pill if it exists (defensive)
             const oldPill = container.querySelector('.sources-pill');
             if (oldPill) oldPill.remove();
 
             const pill = document.createElement('div');
             pill.className = 'sources-pill';
-            
+
             const iconContainer = document.createElement('div');
             iconContainer.className = 'sources-pill-icons';
-            
+
             // Add up to 3 icons
             sources.slice(0, 3).forEach(s => {
                 const icon = document.createElement('div');
@@ -845,49 +746,49 @@
                 icon.textContent = s.source === 'PubMed' ? '📄' : '🌐';
                 iconContainer.appendChild(icon);
             });
-            
+
             pill.appendChild(iconContainer);
             const countText = document.createElement('span');
             countText.textContent = `${sources.length} sources`;
             pill.appendChild(countText);
-            
+
             pill.addEventListener('click', () => openSidebar(sources));
-            
+
             // Insert pill before the message content for better visual flow
             const content = container.querySelector('.message-content');
             container.insertBefore(pill, content);
-            
+
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
         }
 
         function openSidebar(sources) {
             sidebarContent.innerHTML = '';
-            
+
             sources.forEach(source => {
                 const item = document.createElement('a');
                 item.href = source.url;
                 item.className = 'sidebar-citation-item';
                 item.target = '_blank';
                 item.rel = 'noopener noreferrer';
-                
+
                 const sourceType = document.createElement('div');
                 sourceType.className = 'sidebar-citation-source';
                 sourceType.innerHTML = `${source.source === 'PubMed' ? '📄 PubMed' : '🌐 Web Search'}`;
-                
+
                 const title = document.createElement('div');
                 title.className = 'sidebar-citation-title';
                 title.textContent = source.title;
-                
+
                 const url = document.createElement('div');
                 url.className = 'sidebar-citation-url';
                 url.textContent = source.url;
-                
+
                 item.appendChild(sourceType);
                 item.appendChild(title);
                 item.appendChild(url);
                 sidebarContent.appendChild(item);
             });
-            
+
             sourcesSidebar.classList.add('visible');
             sidebarOverlay.classList.add('visible');
         }
@@ -900,7 +801,6 @@
         sidebarOverlay.addEventListener('click', closeSidebarHandler);
         closeSidebar.addEventListener('click', closeSidebarHandler);
 
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
         // Event Listeners
         sendButton.addEventListener('click', sendMessage);
 
@@ -916,37 +816,7 @@
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
-        langEn.addEventListener('click', () => {
-            currentLanguage = 'en';
-            langEn.classList.add('active');
-            langHi.classList.remove('active');
-<<<<<<< HEAD
-            socket.emit('switch_language', { session_id: sessionId, language: 'en' });
-=======
-            // Language switching can be implemented in FastAPI later
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
-        });
 
-        langHi.addEventListener('click', () => {
-            currentLanguage = 'hi';
-            langHi.classList.add('active');
-            langEn.classList.remove('active');
-<<<<<<< HEAD
-            socket.emit('switch_language', { session_id: sessionId, language: 'hi' });
-=======
-            // Language switching can be implemented in FastAPI later
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
-        });
-
-        modeToggle.addEventListener('click', () => {
-            currentMode = currentMode === 'general' ? 'diagnostic' : 'general';
-            modeToggle.textContent = currentMode === 'general' ? 'General Q&A' : 'Diagnostic Mode';
-<<<<<<< HEAD
-            socket.emit('switch_mode', { session_id: sessionId, mode: currentMode });
-=======
-            // Mode switching can be implemented in FastAPI later
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
-        });
     </script>
 </body>
 

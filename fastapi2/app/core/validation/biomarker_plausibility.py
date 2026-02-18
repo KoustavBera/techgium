@@ -133,12 +133,12 @@ class BiomarkerPlausibilityValidator:
             "stance_stability_score": {"hard": (0.0, 100.0), "physiological": (30.0, 100.0)},
             "sway_velocity": {"hard": (0.0, 1.0), "physiological": (0.0, 0.1)},
             "average_joint_rom": {"hard": (0.0, 3.14), "physiological": (0.1, 2.5)},
-            
-            # Skin
-            "texture_roughness": {"hard": (0.0, 1000.0), "physiological": (1.0, 100.0)},
-            "skin_redness": {"hard": (0.0, 1.0), "physiological": (0.05, 0.95)},
-            "skin_yellowness": {"hard": (0.0, 1.0), "physiological": (0.05, 0.8)},
-            "color_uniformity": {"hard": (0.0, 1.0), "physiological": (0.15, 1.0)},
+
+            # Skin - values are normalized 0-1 (normalized_score unit)
+            "texture_roughness": {"hard": (0.0, 1000.0), "physiological": (0.0, 50.0)},
+            "skin_redness": {"hard": (0.0, 1.0), "physiological": (0.0, 0.7)},
+            "skin_yellowness": {"hard": (0.0, 1.0), "physiological": (0.0, 0.7)},
+            "color_uniformity": {"hard": (0.0, 1.0), "physiological": (0.1, 1.0)},
             "lesion_count": {"hard": (0.0, 1000.0), "physiological": (0.0, 50.0)},
             
             # Eyes

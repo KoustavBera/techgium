@@ -5,6 +5,7 @@ env/
 
 # Environment variables (contains API keys)
 .env
+env
 
 # Python
 __pycache__/

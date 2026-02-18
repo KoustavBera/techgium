@@ -74,7 +74,7 @@ class SkinExtractor(BaseExtractor):
             static_image_mode=True,
             max_num_faces=1,
             refine_landmarks=True,
-            min_detection_confidence=0.5
+            min_detection_confidence=0.3  # Lowered from 0.5 for better detection on tight crops
         )
     
     def _safe_normal_range(self, bm_range: Any) -> Optional[tuple]:
@@ -109,13 +109,24 @@ class SkinExtractor(BaseExtractor):
         # Priority 1: Hardware Thermal Data (ESP32/MLX90640)
         has_thermal = False
         
+        # Prefer raw (uncropped) frames for FaceMesh — tight ROI crops confuse FaceMesh
+        # because it can't see the full face context. raw_face_frames are full camera frames.
+        raw_frames = data.get("raw_face_frames", [])
+        roi_frames = data.get("frames", data.get("face_frames", []))
+        # Use raw frames if available, otherwise fall back to ROI crops
+        best_frames_for_facemesh = raw_frames if raw_frames else roi_frames
+        
         # NEW FORMAT: Flattened thermal_data from bridge.py
         if "thermal_data" in data:
-            # Try to get landmarks from frames for pose gating
+            # Try to get landmarks from the best available frame for pose gating
             pose_landmarks = None
-            frames = data.get("frames", data.get("face_frames", []))
-            if frames:
-                _, _, pose_landmarks = self._get_face_mask(frames[0])
+            if best_frames_for_facemesh:
+                frame_for_pose = best_frames_for_facemesh[0]
+                if not isinstance(frame_for_pose, np.ndarray):
+                    frame_for_pose = np.array(frame_for_pose)
+                _, _, pose_landmarks = self._get_face_mask(frame_for_pose)
+                if pose_landmarks:
+                    logger.info("Skin: Got pose landmarks from raw frame for thermal gating.")
                 
             self._extract_from_thermal_v2(
                 data["thermal_data"], 
@@ -145,9 +156,12 @@ class SkinExtractor(BaseExtractor):
                         has_thermal = True
         
         # Priority 2: Visual Analysis (Webcam)
-        frames = data.get("frames", data.get("face_frames", []))
-        if len(frames) > 0:
-            frame = np.array(frames[0]) if not isinstance(frames[0], np.ndarray) else frames[0]
+        # Use raw uncropped frames for FaceMesh — much better detection than tight crops
+        if best_frames_for_facemesh:
+            frame = best_frames_for_facemesh[0]
+            if not isinstance(frame, np.ndarray):
+                frame = np.array(frame)
+            logger.info(f"Skin: Running visual analysis on {'raw' if raw_frames else 'ROI'} frame (shape: {frame.shape})")
             self._extract_from_frame(frame, biomarker_set, session_baseline)
         elif not has_thermal:
             logger.warning("SkinExtractor: No data sources available.")
@@ -194,20 +208,20 @@ class SkinExtractor(BaseExtractor):
             biomarker_set,
             name="skin_redness",
             value=color_metrics["redness"],
-            unit="lab_deviation",
+            unit="normalized_score",
             confidence=0.85,
-            normal_range=(-10.0, 10.0) if session_baseline else (0.0, 25.0),
-            description="Skin redness (Lab a* deviation from session baseline)" if session_baseline else "Skin redness (Lab a* deviation from neutral)"
+            normal_range=(0.0, 0.5),
+            description="Skin redness (normalized 0-1, higher = more red)"
         )
         
         self._add_biomarker(
             biomarker_set,
             name="skin_yellowness",
             value=color_metrics["yellowness"],
-            unit="lab_deviation",
+            unit="normalized_score",
             confidence=0.80,
-            normal_range=(-10.0, 10.0) if session_baseline else (0.0, 25.0),
-            description="Skin yellowness (Lab b* deviation from session baseline)" if session_baseline else "Skin yellowness (Lab b* deviation from neutral)"
+            normal_range=(0.0, 0.5),
+            description="Skin yellowness (normalized 0-1, higher = more yellow)"
         )
         
         self._add_biomarker(
@@ -470,13 +484,20 @@ class SkinExtractor(BaseExtractor):
         lighting_offset_b = (avg_scene_color[0] - 128) * 0.1 # Blue channel bias influence
         
         if session_baseline:
-            redness = float(raw_a_mean - session_baseline.baseline_redness)
-            yellowness = float(raw_b_mean - session_baseline.baseline_yellowness)
+            raw_redness = float(raw_a_mean - session_baseline.baseline_redness)
+            raw_yellowness = float(raw_b_mean - session_baseline.baseline_yellowness)
         else:
-            # Corrected deviation from neutral
-            # REMOVED * 2.0 multiplier which was inflating natural variance into "Abnormal" range
-            redness = float(raw_a_mean - 128.0 - lighting_offset_a)
-            yellowness = float(raw_b_mean - 128.0 - lighting_offset_b)
+            # Deviation from neutral (128 in OpenCV uint8 Lab)
+            raw_redness = float(raw_a_mean - 128.0 - lighting_offset_a)
+            raw_yellowness = float(raw_b_mean - 128.0 - lighting_offset_b)
+        
+        # Normalize to 0-1 range:
+        # CIELab a*/b* deviation range is roughly -50 to +50 for skin.
+        # We map: 0 deviation -> 0.0, +50 deviation -> 1.0
+        # Negative deviations (greenish/bluish) are clamped to 0.
+        MAX_LAB_DEVIATION = 50.0
+        redness = float(np.clip(raw_redness / MAX_LAB_DEVIATION, 0.0, 1.0))
+        yellowness = float(np.clip(raw_yellowness / MAX_LAB_DEVIATION, 0.0, 1.0))
         
         # Uniformity: Entropy of the a* channel (pigmentation variation)
         # Lower entropy = Higher uniformity
@@ -500,8 +521,8 @@ class SkinExtractor(BaseExtractor):
             uniformity = 0.8  # Fallback
              
         return {
-            "redness": float(redness),
-            "yellowness": float(yellowness),
+            "redness": redness,
+            "yellowness": yellowness,
             "uniformity": float(uniformity)
         }
     

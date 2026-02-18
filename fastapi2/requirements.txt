@@ -5,13 +5,8 @@ uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
 
 # Computer vision
-<<<<<<< HEAD
-opencv-python>=4.10.0
-mediapipe>=0.10.18
-=======
 opencv-python==4.9.0.80
 mediapipe==0.10.18
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135
 scikit-image>=0.24.0
 
 # Data processing
@@ -50,16 +45,11 @@ httpx>=0.28.0
 python-dotenv>=1.0.1
 aiofiles>=24.1.0
 pyserial>=3.5  # For ESP32 hardware bridge
-<<<<<<< HEAD
-rich
-=======
 rich
 
 # Medical Agent Dependencies
 langchain-community>=0.3.0
 langgraph>=0.2.0
 tavily-python>=0.5.0
-llama-cpp-python>=0.2.90
 xmltodict>=0.13.0
 arxiv>=2.1.0
->>>>>>> 5fb8453bef017d5d9f62d222de7a732819a54135

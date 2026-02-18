@@ -367,8 +367,9 @@ class HardwareManager:
                 current_phase = self._scan_status.get("phase", "IDLE")
                 is_scanning = current_phase in ["FACE_ANALYSIS", "BODY_ANALYSIS"]
                 
-                # Use a much higher interval (lower FPS) for overlays during active recording
-                dynamic_interval = 10 if is_scanning else self._inference_interval
+                # Use a slightly higher interval during active scans to reduce CPU load
+                # but keep it low enough for reliable face detection (~7.5 FPS at 30 FPS camera)
+                dynamic_interval = 4 if is_scanning else self._inference_interval
                 should_run_inference = (self._frame_counter % dynamic_interval == 0)
                 
                 if should_run_inference and active_models:
@@ -526,11 +527,15 @@ class HardwareManager:
         
         start_time = time.time()
         
+        # Default timeout for FACE_ANALYSIS if none provided (15s to avoid blocking forever)
+        if timeout is None and target_phase == "FACE_ANALYSIS":
+            timeout = 15
+        
         while self._scan_active:
             # Timeout Check
             if timeout and (time.time() - start_time > timeout):
                 logger.warning(f"Alignment timeout for {target_phase}. Proceeding anyway.")
-                self._update_scan_status(message="Proceeding with partial alignment...")
+                self._update_scan_status(message="Proceeding with scan...")
                 time.sleep(1.0) # Show message briefly
                 break
 
@@ -542,7 +547,9 @@ class HardwareManager:
             
             alignment_met = False
             if target_phase == "FACE_ANALYSIS":
-                if warning is None and user_warnings.get("face_detected"):
+                # Allow proceeding if face is detected OR if distance warning is None
+                # (face_detected may be unreliable due to inference throttling)
+                if user_warnings.get("face_detected") or warning is None:
                     alignment_met = True
             elif target_phase == "BODY_ANALYSIS":
                 if warning is None and user_warnings.get("pose_detected"):
@@ -561,7 +568,7 @@ class HardwareManager:
             elif target_phase == "BODY_ANALYSIS" and not user_warnings.get("pose_detected"):
                 msg = "Please step back so your full body is visible."
             elif target_phase == "FACE_ANALYSIS" and not user_warnings.get("face_detected"):
-                msg = "Face not detected. Please look directly at the camera."
+                msg = "Please look directly at the camera."
 
             self._update_scan_status(message=msg)
             time.sleep(0.2)
@@ -787,15 +794,27 @@ class HardwareManager:
                 
                 # Post-process frames (CONSOLIDATED extraction: ROI + Landmarks)
                 processed_data = []
+                # Also keep a sample of raw (uncropped) frames for skin extractor
+                # FaceMesh works much better on full frames than tight ROI crops
+                raw_face_frames_for_skin = []
+                
                 for item in raw_captures:
                      frame = item['frame']
                      roi, landmarks = self.camera.extract_face_features(frame)
                      if roi is not None:
-                         processed_data.append({'roi': roi, 'landmarks': landmarks})
+                         processed_data.append({'roi': roi, 'landmarks': landmarks, 'raw': frame})
+                     else:
+                         # Even if ROI extraction fails, keep raw frame for skin extractor
+                         raw_face_frames_for_skin.append(frame)
 
                 face_frames = [d['roi'] for d in processed_data]
                 face_landmarks_sequence = [d['landmarks'] for d in processed_data if d['landmarks'] is not None]
-                logger.info(f"Extracted {len(face_frames)} face ROIs, {len(face_landmarks_sequence)} landmark sets (CONSOLIDATED)")
+                # Collect raw frames from successful detections (better for FaceMesh)
+                raw_face_frames_for_skin = [d['raw'] for d in processed_data] + raw_face_frames_for_skin
+                # Sample every 10th raw frame to avoid passing too many large frames
+                raw_face_frames_for_skin = raw_face_frames_for_skin[::10] if len(raw_face_frames_for_skin) > 10 else raw_face_frames_for_skin
+                
+                logger.info(f"Extracted {len(face_frames)} face ROIs, {len(face_landmarks_sequence)} landmark sets, {len(raw_face_frames_for_skin)} raw frames for skin (CONSOLIDATED)")
                 
                 # Validation: Warn if faces detected but landmarks missing
                 if len(face_frames) > 0 and len(face_landmarks_sequence) == 0:
@@ -884,7 +903,8 @@ class HardwareManager:
                 pose_sequence=pose_sequence if pose_sequence else None,
                 face_landmarks_sequence=face_landmarks_sequence if face_landmarks_sequence else None,
                 fps=self.config.camera_fps,
-                session_baseline=session_baseline # NEW
+                session_baseline=session_baseline,
+                raw_face_frames=raw_face_frames_for_skin if raw_face_frames_for_skin else None  # Uncropped frames for skin FaceMesh
             )
             
             logger.info(f"Screening request: {len(request_payload['systems'])} systems")
@@ -1148,7 +1168,8 @@ class HardwareManager:
         pose_sequence: Optional[List[np.ndarray]] = None,
         face_landmarks_sequence: Optional[List[np.ndarray]] = None,
         fps: float = 30.0,
-        session_baseline: Optional[Any] = None # NEW
+        session_baseline: Optional[Any] = None,
+        raw_face_frames: Optional[List[np.ndarray]] = None  # Uncropped frames for skin FaceMesh
     ) -> Dict[str, Any]:
         """Build complete screening request using all 8 extractors.
         
@@ -1231,6 +1252,13 @@ class HardwareManager:
             
         if face_frames:
             raw_data_context["face_frames"] = face_frames
+        # Pass raw (uncropped) frames for skin extractor FaceMesh detection
+        # These give much better face detection than tight ROI crops
+        if raw_face_frames:
+            raw_data_context["raw_face_frames"] = raw_face_frames
+        elif face_frames:
+            # Fallback: use ROI crops if no raw frames available
+            raw_data_context["raw_face_frames"] = face_frames
         if pose_sequence:
             raw_data_context["pose_sequence"] = pose_sequence
         

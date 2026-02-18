@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # LLM Configuration
     gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API key")
     hf_token: Optional[str] = Field(default=None, description="Hugging Face API token")
-    gemini_model: str = "gemini-1.5-flash-latest"
+    gemini_model: str = "gemini-1.5-flash"
     # Medical AI models for validation and reports
     medical_model_1: str = "Intelligent-Internet/II-Medical-8B-1706:featherless-ai"  # User requested for validation
     medical_model_2: str = "openai/gpt-oss-120b:groq"  # GPT-OSS-120B via Groq for arbitration

@@ -65,6 +65,8 @@ class NasalExtractor(BaseExtractor):
         
         if not has_data:
             logger.warning("NasalExtractor: No valid sensor data available.")
+        else:
+            logger.info(f"Nasal: Extracted {len(biomarker_set.biomarkers)} biomarkers")
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
         self._extraction_count += 1
@@ -97,7 +99,7 @@ class NasalExtractor(BaseExtractor):
         # 1. Respiratory Rate (Primary Biomarker)
         resp_rate = source_data.get("respiration_rate")
         
-        if resp_rate is not None:
+        if resp_rate is not None and float(resp_rate) > 0:
             self._add_biomarker(
                 biomarker_set,
                 name="respiratory_rate",
@@ -110,13 +112,12 @@ class NasalExtractor(BaseExtractor):
         
         # 2. Respiratory Regularity Index
         breath_intervals = source_data.get("breath_intervals", [])
-        if len(breath_intervals) >= 5: # Need a few breaths to calc variability
+        if len(breath_intervals) >= 5:  # Need a few breaths to calc variability
             intervals = np.array(breath_intervals)
             mean_interval = np.mean(intervals)
             std_interval = np.std(intervals)
             
             # Coefficient of Variation
-            # Normal relaxed breathing CV can be up to 0.25 (User Request 1)
             regularity_index = std_interval / (mean_interval + 1e-6)
             
             self._add_biomarker(
@@ -125,7 +126,7 @@ class NasalExtractor(BaseExtractor):
                 value=float(regularity_index),
                 unit="coefficient_of_variation",
                 confidence=0.85,
-                normal_range=(0.02, 0.25), # WIDENED: Normal breathing CV allows for natural variation
+                normal_range=(0.02, 0.25),
                 description="Breath-to-breath interval variability (Autonomic stability metric) [Experimental]."
             )
 
@@ -134,58 +135,52 @@ class NasalExtractor(BaseExtractor):
         thermal_data: Dict[str, Any],
         biomarker_set: BiomarkerSet
     ) -> None:
-        """Extract nasal biomarkers from thermal imaging."""
+        """Extract nasal biomarkers from thermal imaging.
         
-        # Expected keys: nostril_temp_left, nostril_temp_right, cheek_temp_left, cheek_temp_right
-        # Or averages: nostril_temp_mean, cheek_temp_mean
-        # Or HardwareManager aggregated: nose_temp, face_mean_temp, thermal_asymmetry
+        Supports multiple key formats:
+        - Firmware format: fever_canthus_temp, face_mean_temp, thermal_stability
+        - Legacy format: nostril_temp_left/right, cheek_temp_left/right
+        - HardwareManager aggregated: nose_temp, face_mean_temp, thermal_asymmetry
+        """
         
+        # --- Resolve nostril temperature ---
         nostril_l = thermal_data.get("nostril_temp_left")
         nostril_r = thermal_data.get("nostril_temp_right")
+        
+        nostril_mean = thermal_data.get("nostril_temp_mean")
+        if nostril_mean is None:
+            nostril_mean = thermal_data.get("nose_temp")
+        if nostril_mean is None:
+            # Firmware format: use canthus temp as a nasal region proxy
+            nostril_mean = thermal_data.get("fever_canthus_temp")
+        if nostril_mean is None and nostril_l is not None and nostril_r is not None:
+            nostril_mean = (nostril_l + nostril_r) / 2
+
+        # --- Resolve cheek/reference temperature ---
         cheek_l = thermal_data.get("cheek_temp_left")
         cheek_r = thermal_data.get("cheek_temp_right")
         
-        # Calculate means if individual sides not available but mean is (or vice versa)
-        nostril_mean = thermal_data.get("nostril_temp_mean")
-        if nostril_mean is None:
-             # Try hardware manager key
-             nostril_mean = thermal_data.get("nose_temp")
-             
-        if nostril_mean is None and nostril_l is not None and nostril_r is not None:
-            nostril_mean = (nostril_l + nostril_r) / 2
-            
         cheek_mean = thermal_data.get("cheek_temp_mean")
         if cheek_mean is None:
-            # Try hardware manager key (face_mean_temp is a decent proxy for cheek mean)
             cheek_mean = thermal_data.get("face_mean_temp")
-            
         if cheek_mean is None and cheek_l is not None and cheek_r is not None:
             cheek_mean = (cheek_l + cheek_r) / 2
-            
-        # SANITY CHECK: Ignore thermal garbage frames (out of physiological range) (User Request 3)
-        if nostril_mean is not None:
-             if nostril_mean < 25.0 or nostril_mean > 42.0:
-                 pass # Don't return, just don't use it for this metric, maybe other metrics are ok
-            
-        # 3. Nasal Surface Thermal Elevation
+
+        # --- Biomarker 1: Nasal Surface Thermal Elevation ---
         if nostril_mean is not None and cheek_mean is not None:
-            if 25.0 <= nostril_mean <= 42.0: # Check validity here
-                delta_t = nostril_mean - cheek_mean
-                
+            if 25.0 <= float(nostril_mean) <= 42.0:
+                delta_t = float(nostril_mean) - float(cheek_mean)
                 self._add_biomarker(
                     biomarker_set,
                     name="nasal_surface_temp_elevation",
                     value=float(delta_t),
                     unit="delta_celsius",
                     confidence=0.80,
-                    # WIDENED: Accounts for ambient drift & airflow cooling (User Request 2)
-                    normal_range=(-0.2, 1.0), 
+                    normal_range=(-0.2, 1.0),
                     description="Elevated local surface temperature (Nostril vs Cheek ROI) [Experimental]."
                 )
-            
-        # 4. Airflow Thermal Symmetry Index
-        # Requires oscillation amplitude from thermal data (preprocessing usually done in `thermal.py` or similar)
-        # Expected keys: nostril_oscillation_amp_left, nostril_oscillation_amp_right
+
+        # --- Biomarker 2: Airflow Thermal Symmetry Index ---
         amp_left = thermal_data.get("nostril_oscillation_amp_left")
         amp_right = thermal_data.get("nostril_oscillation_amp_right")
         
@@ -195,10 +190,8 @@ class NasalExtractor(BaseExtractor):
             total_amp = amp_left + amp_right
             if total_amp > 1e-6:
                 symmetry_index = abs(amp_left - amp_right) / total_amp
-        elif "thermal_asymmetry" in thermal_data and thermal_data["thermal_asymmetry"] is not None:
-             # Fallback to general thermal asymmetry if specific oscillation is missing
-             # This isn't exactly airflow symmetry but is a related proxy validation
-             symmetry_index = float(thermal_data["thermal_asymmetry"])
+        elif thermal_data.get("thermal_asymmetry") is not None:
+            symmetry_index = float(thermal_data["thermal_asymmetry"])
 
         if symmetry_index is not None:
             self._add_biomarker(
@@ -207,6 +200,24 @@ class NasalExtractor(BaseExtractor):
                 value=float(symmetry_index),
                 unit="normalized_diff",
                 confidence=0.75,
-                normal_range=(0.0, 0.2), # < 20% difference is normal
+                normal_range=(0.0, 0.2),
                 description="Thermal oscillation symmetry between nostrils during breathing [Non-Diagnostic]."
             )
+
+        # --- Biomarker 3: Nasal Thermal Stability (firmware format fallback) ---
+        # When neither nostril_mean nor thermal_asymmetry is available,
+        # use thermal_stability (canthus_range) as a nasal congestion proxy.
+        # Higher instability may indicate nasal obstruction/congestion.
+        if not biomarker_set.biomarkers:
+            thermal_stability = thermal_data.get("thermal_stability")
+            if thermal_stability is not None:
+                self._add_biomarker(
+                    biomarker_set,
+                    name="nasal_thermal_stability",
+                    value=float(thermal_stability),
+                    unit="delta_celsius",
+                    confidence=0.50,  # Low confidence: indirect proxy
+                    normal_range=(0.0, 1.0),
+                    description="Thermal stability of nasal region (canthus range proxy) [Experimental]."
+                )
+                logger.info(f"Nasal: Using thermal_stability fallback = {thermal_stability}")

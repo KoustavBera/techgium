@@ -468,7 +468,8 @@ class EnhancedPatientReportGenerator:
         # Build system summaries WITH biomarker details for valid systems
         for system, result in system_results.items():
             # Skip Renal system as requested by user
-            if system == PhysiologicalSystem.RENAL:
+            # (Renal system has been removed from PhysiologicalSystem enum)
+            if system == "renal": 
                 continue
 
             report.system_summaries[system] = {
