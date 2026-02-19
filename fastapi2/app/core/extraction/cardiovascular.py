@@ -478,17 +478,9 @@ class CardiovascularExtractor(BaseExtractor):
     ) -> None:
         """Extract cardiovascular biomarkers from thermal camera data."""
         
-        # Thermal Asymmetry - indicates blood perfusion imbalance (CVD risk)
-        if thermal_data.get('thermal_asymmetry') is not None:
-            self._add_biomarker(
-                biomarker_set,
-                name="thermal_asymmetry",
-                value=float(thermal_data['thermal_asymmetry']),
-                unit="delta_celsius",
-                confidence=0.85,
-                normal_range=(0.0, 0.5),
-                description="Left-right facial thermal asymmetry (perfusion indicator)"
-            )
+        # NOTE: thermal_asymmetry removed — MLX90640 32×24 resolution produces
+        # cheek_asymmetry values of 3-5°C due to head pose noise, making it
+        # unreliable as a CVD perfusion indicator at this sensor resolution.
         
         # Cheek temperatures for context
         left_cheek = thermal_data.get('left_cheek_temp')

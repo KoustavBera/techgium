@@ -1092,6 +1092,20 @@ class HardwareManager:
         avg_hr = int(np.median(hr_values)) if hr_values else 0
         avg_resp = round(float(np.median(rr_values)), 1) if rr_values else 0.0
         
+        # Harmonic correction: MR60BHA2 commonly reports the 2nd harmonic of the
+        # true breathing rate (e.g. 24.5 bpm when real RR is ~12 bpm).
+        # If the median RR is above 22 and half of it falls in normal range (8–22),
+        # we apply harmonic correction.
+        NORMAL_RR_MAX = 22.0
+        if avg_resp > NORMAL_RR_MAX:
+            halved = round(avg_resp / 2.0, 1)
+            if 8.0 <= halved <= NORMAL_RR_MAX:
+                logger.warning(
+                    f"      ⚠️  RR harmonic detected: {avg_resp} bpm → corrected to {halved} bpm "
+                    f"(2nd harmonic of true RR)"
+                )
+                avg_resp = halved
+        
         result = items[-1].copy()
         result['radar']['heart_rate'] = avg_hr
         result['radar']['respiration_rate'] = avg_resp
@@ -1236,13 +1250,11 @@ class HardwareManager:
                 face_max = core.get('face_max')
                 canthus_range = stability.get('canthus_range')
                 
-                face_mean_temp = None
-                if canthus_mean is not None and neck_mean is not None:
-                    face_mean_temp = (canthus_mean + neck_mean) / 2.0
-                elif canthus_mean is not None:
-                    face_mean_temp = canthus_mean
-                elif neck_mean is not None:
-                    face_mean_temp = neck_mean
+                # face_mean_temp: use only canthus (facial measurement).
+                # Neck is a different anatomical site and averaging the two
+                # produces a meaninglessly low value (~30°C) that triggers
+                # a false 'Below Normal' flag for Facial Temperature.
+                face_mean_temp = canthus_mean if canthus_mean is not None else neck_mean
                 
                 inflammation_pct = None
                 if canthus_range is not None:

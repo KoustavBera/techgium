@@ -106,7 +106,7 @@ class NasalExtractor(BaseExtractor):
                 value=float(resp_rate),
                 unit="breaths_per_min",
                 confidence=0.90,  # mmRADAR is highly accurate for RR
-                normal_range=(12, 20),
+                normal_range=(10, 20),
                 description="Respiratory rate derived from micro-motion radar chest displacement (Non-Diagnostic)."
             )
         

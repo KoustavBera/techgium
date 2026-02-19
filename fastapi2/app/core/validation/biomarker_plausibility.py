@@ -120,7 +120,7 @@ class BiomarkerPlausibilityValidator:
           - Max HR  : Tanaka et al. (2001) — 208 − 0.7 × age
           - Min HR  : 40 bpm for athletes; 50 bpm for sedentary adults
           - Sys BP  : Upper bound = 120 + 0.5 × max(0, age − 20) mmHg
-          - RR      : 12–20 adults; 15–30 children (<18); wider in post-exercise
+          - RR      : 10–20 adults; 15–30 children (<18); wider in post-exercise
         """
         limits = {k: dict(v) for k, v in self._static_limits.items()}  # deep copy
 
@@ -156,7 +156,7 @@ class BiomarkerPlausibilityValidator:
         elif mode == "post_exercise":
             rr_min, rr_max = 12.0, 40.0                 # Elevated after exercise
         else:
-            rr_min, rr_max = 12.0, 20.0                 # Standard adult resting
+            rr_min, rr_max = 10.0, 20.0                 # Standard adult resting
         limits["respiratory_rate"]["physiological"] = (rr_min, rr_max)
         limits["abdominal_respiratory_rate"]["physiological"] = (rr_min - 4, rr_max + 5)
         limits["radar_respiration_rate"]["physiological"] = (rr_min - 2, rr_max + 5)
@@ -189,7 +189,7 @@ class BiomarkerPlausibilityValidator:
 
             # Radar (Seeed MR60BHA2) — physiological bounds overridden by _get_limits()
             "radar_heart_rate":       {"hard": (20.0, 300.0),   "physiological": (50.0, 120.0)},
-            "radar_respiration_rate": {"hard": (2.0, 70.0),     "physiological": (12.0, 20.0)},
+            "radar_respiration_rate": {"hard": (2.0, 70.0),     "physiological": (10.0, 20.0)},
 
             # Thermal (MLX90640)
             "skin_temp_avg":          {"hard": (20.0, 45.0),    "physiological": (28.0, 40.0)},
@@ -236,7 +236,7 @@ class BiomarkerPlausibilityValidator:
 
             # Nasal/Respiratory — physiological RR overridden by _get_limits()
             "breathing_regularity":   {"hard": (0.0, 1.0),      "physiological": (0.2, 1.0)},
-            "respiratory_rate":       {"hard": (2.0, 70.0),     "physiological": (12.0, 20.0)},
+            "respiratory_rate":       {"hard": (2.0, 70.0),     "physiological": (10.0, 20.0)},
             "breath_depth_index":     {"hard": (0.0, 10.0),     "physiological": (0.1, 3.0)},
             "airflow_turbulence":     {"hard": (0.0, 10.0),     "physiological": (0.0, 1.0)},
 

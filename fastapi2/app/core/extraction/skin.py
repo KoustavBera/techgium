@@ -767,15 +767,17 @@ class SkinExtractor(BaseExtractor):
             )
         
         # Face mean temperature for context
+        # Apply same +0.8°C calibration offset as neck/canthus/face_max paths above.
         if thermal_data.get('face_mean_temp') is not None:
+            face_mean_calibrated = float(thermal_data['face_mean_temp']) + CALIBRATION_OFFSET
             self._add_biomarker_safe(
                 biomarker_set,
                 name="face_mean_temperature",
-                value=float(thermal_data['face_mean_temp']),
+                value=face_mean_calibrated,
                 unit="celsius",
                 confidence=0.85,
-                normal_range=(34.0, 37.0),
-                description="Average face temperature (MLX90640)"
+                normal_range=(33.5, 37.0),  # mean face is ~0.5-1°C cooler than inner canthus hotspot
+                description="Average face temperature (MLX90640, calibrated)"
             )
         
         # Thermal Stability from canthus temperature range (temporal consistency)

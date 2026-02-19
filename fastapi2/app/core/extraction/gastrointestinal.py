@@ -141,7 +141,7 @@ class GastrointestinalExtractor(BaseExtractor):
                     value=resp_rate,
                     unit="breaths_per_min",
                     confidence=0.65,
-                    normal_range=(12, 20),
+                    normal_range=(10, 20),
                     description="Respiratory rate from abdominal motion"
                 )
         else:

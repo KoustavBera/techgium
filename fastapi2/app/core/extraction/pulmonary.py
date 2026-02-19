@@ -84,7 +84,7 @@ class PulmonaryExtractor(BaseExtractor):
                 return tuple(float(x) for x in bm_range)
         except (TypeError, ValueError):
             pass
-        return (12, 20)  # Default pulmonary range
+        return (10, 20)  # Default pulmonary range
     
     def _get_fallback_value(self, name: str) -> float:
         """Get physiological fallback value for invalid biomarker."""
