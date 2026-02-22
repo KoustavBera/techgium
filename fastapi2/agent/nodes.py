@@ -14,7 +14,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import ContextVar
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 from agent.config import (
     ROUTER_PROMPT_TEMPLATE,
@@ -224,4 +224,4 @@ def answer_node(state: AgentState) -> dict:
     
     print("  ✅ Response generated")
 
-    return {"final_answer": answer}
+    return {"final_answer": answer, "messages": [AIMessage(content=answer)]}

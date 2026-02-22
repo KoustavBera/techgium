@@ -14,6 +14,7 @@ import json
 import time
 import threading
 import queue
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple, Generator
@@ -173,6 +174,12 @@ class HardwareManager:
         self._recording_buffer: List[Dict[str, Any]] = []  # Stores {'frame': np.ndarray, 'timestamp': float}
         self._recording_active = False
         self._recording_lock = threading.Lock()
+        
+        # Concurrent rolling capture buffer (30s at 30fps)
+        # Always fills in background; face+vitals phase pulls from here — no wasted "Get Ready" wait
+        self._rolling_buffer: deque = deque(maxlen=900)
+        self._rolling_lock = threading.Lock()
+        self._rolling_capture_active = False
         
         # Extractors (same set as DataFusion)
         self._extractors_initialized = False
@@ -421,9 +428,26 @@ class HardwareManager:
                     with self._frame_lock:
                         self._latest_frame_jpeg = jpeg.tobytes()
                 
-                # Record frame if scan is active (HANDLED BY DRIVER Thread for 30FPS)
-                # We no longer need to append here; driver does it in background
-                pass
+                # ── Real-time signal quality gate (lightweight, runs every 15 frames) ──
+                # Updates the UI during capture so the user knows to hold still.
+                if self._scan_active and self._frame_counter % 15 == 0:
+                    try:
+                        gray = np.mean(frame, axis=2).astype(np.uint8) if len(frame.shape) == 3 else frame.astype(np.uint8)
+                        brightness = float(np.mean(gray))
+                        lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+                        quality_ok = bool(brightness >= 40 and lap_var >= 5)
+                        with self._scan_lock:
+                            warnings = self._scan_status.get("user_warnings", {}).copy()
+                            warnings["quality_ok"] = quality_ok
+                            warnings["brightness"] = round(brightness, 1)
+                            self._scan_status["user_warnings"] = warnings
+                    except Exception:
+                        pass
+                
+                # ── Push to rolling concurrent capture buffer ──
+                if self._rolling_capture_active:
+                    with self._rolling_lock:
+                        self._rolling_buffer.append({'frame': frame.copy(), 'timestamp': time.time()})
             else:
                 time.sleep(0.01)  # Brief sleep if no frame
     
@@ -738,124 +762,123 @@ class HardwareManager:
                 logger.info("Thermal queue cleared.")
 
             # ============================================================
-            # Phase 0: Vitals Collection (NEW)
+            # Phase 1: UNIFIED Concurrent Face + Vitals + Calibration
             # ============================================================
-            self._update_scan_status(
-                phase="VITALS_COLLECTION",
-                message="Collecting vitals... Please sit still.",
-                progress=7,
-            )
-            logger.info("🎯 Phase 0: Vitals Collection (10s)")
-            
-            # Wait for user to be stationary
-            time.sleep(2)
-            
-            # Capture vitals for 10 seconds
-            self._countdown(10, "Collecting Vitals...", "VITALS_COLLECTION")
-            
-            # Aggregate vitals immediately while user is stationary
-            logger.info("📊 Aggregating vitals from Phase 0...")
-            radar_data = self._aggregate_radar()
-            esp32_data = self._aggregate_thermal()
-            
+            # KEY IMPROVEMENT: All three previous phases (vitals, calibration, face)
+            # now run in a SINGLE synchronized 30-second window.
+            # Camera, radar, and thermal collect SIMULTANEOUSLY so timestamps align.
+            # 30s gives 6-10 full breath cycles for reliable FFT + 30-40 heartbeats for rPPG.
             # ============================================================
-            # Phase 0.5: Baseline Calibration
-            # ============================================================
-            self._update_scan_status(
-                phase="BASELINE_CALIBRATION",
-                message="Calibrating environment...",
-                progress=15,
-            )
-            logger.info("🎯 Phase 0.5: Baseline Calibration (5s)")
+            FACE_VITALS_DURATION = 30  # seconds — do NOT reduce; more data = higher confidence
             
-            # Wait for initial alignment if possible, but don't block too long
-            self._wait_for_alignment("FACE_ANALYSIS", timeout=3)
-            
-            thermal_baseline_frames, rgb_baseline_frames = self._get_calibration_data(duration_seconds=5)
-            
-            session_baseline = None
-            if self.skin_extractor:
-                try:
-                    # Filter and flatten thermal frames for baseline
-                    system_thermal = []
-                    for raw in thermal_baseline_frames:
-                        # Extract the inner 'thermal' part if it exists (standard ESP32Reader format)
-                        # We need 'fever_face_max' and 'background_temp'
-                        # Flatten it like _build_screening_request does
-                        t_data = raw.get('thermal', {})
-                        core = t_data.get('core_regions', {})
-                        stability = t_data.get('stability_metrics', {})
-                        
-                        system_thermal.append({
-                            'fever_face_max': core.get('face_max'),
-                            'background_temp': t_data.get('ambient_temp') or 25.0
-                        })
-                    
-                    session_baseline = self.skin_extractor.capture_session_baseline(
-                        thermal_frames=system_thermal,
-                        rgb_frames=rgb_baseline_frames
-                    )
-                except Exception as e:
-                    logger.error(f"Baseline capture failed: {e}")
-            
-            # ============================================================
-            # Phase 1: Face capture
-            # ============================================================
-            logger.info("Checking if camera is available for Phase 1...")
             if self.camera:
-                logger.info("Camera found. Updating status to FACE_ANALYSIS...")
                 self._update_scan_status(
-                    phase="FACE_ANALYSIS",
-                    message="Analyzing facial features...",
+                    phase="FACE_AND_VITALS",
+                    message="Please sit still and look at the camera...",
                     progress=10,
                 )
+                logger.info(f"🎯 Phase 1: Concurrent Face + Vitals ({FACE_VITALS_DURATION}s unified window)")
                 
-                # Wait for user to be correctly positioned
+                # Wait for user to be correctly positioned before we start the clock
                 self._wait_for_alignment("FACE_ANALYSIS")
                 
-                # Preparation Timer (10s)
-                self._countdown(10, "Get Ready...", "FACE_ANALYSIS")
+                # Brief 3s alert (replaces the wasted 10s countdown that threw data away)
+                self._countdown(3, "Hold still, capture starts in", "FACE_AND_VITALS")
                 
-                # Start recording (DRIVER LEVEL)
-                self.camera.start_recording()
+                # ── Sync Point: Clear ALL sensor queues simultaneously ──
+                # Everything collected AFTER this moment is temporally aligned with the camera.
+                logger.info("⏱️  Sync point: clearing all sensor queues simultaneously")
+                for q_reader in [self.radar, self.thermal]:
+                    if q_reader:
+                        while not q_reader.data_queue.empty():
+                            try: q_reader.data_queue.get_nowait()
+                            except: break
                 
-                # Capture Timer (10s)
-                self._countdown(self.config.face_capture_seconds, "Scanning Face...", "FACE_ANALYSIS")
+                # ── Activate rolling capture buffer ──
+                with self._rolling_lock:
+                    self._rolling_buffer.clear()
+                self._rolling_capture_active = True
                 
-                # Stop recording (DRIVER LEVEL)
-                raw_captures = self.camera.stop_recording()
+                # ── 30-second concurrent countdown ──
+                # Camera fills rolling buffer; radar + thermal collect from their threads.
+                # Real-time quality gate warns user if they move or light changes.
+                logger.info(f"▶️  Concurrent capture START: {FACE_VITALS_DURATION}s")
+                for i in range(FACE_VITALS_DURATION, 0, -1):
+                    if not self._scan_active:
+                        break
+                    quality_ok = self._scan_status.get("user_warnings", {}).get("quality_ok", True)
+                    brightness = self._scan_status.get("user_warnings", {}).get("brightness", 128)
+                    if not quality_ok:
+                        self._update_scan_status(
+                            message=f"⚠️ Hold still / improve lighting — {i}s remaining (Brightness: {brightness:.0f})",
+                            phase="FACE_AND_VITALS"
+                        )
+                    else:
+                        self._update_scan_status(
+                            message=f"Scanning... {i}s remaining",
+                            phase="FACE_AND_VITALS"
+                        )
+                    time.sleep(1.0)
                 
-                logger.info(f"Captured {len(raw_captures)} face frames from hardware driver")
+                logger.info("⏹  Concurrent capture STOP")
+                self._rolling_capture_active = False
                 
-                # Post-process frames (CONSOLIDATED extraction: ROI + Landmarks)
+                # ── Pull synchronized data from all sensors ──
+                # Radar + thermal queues contain exactly the same time window as camera frames.
+                with self._rolling_lock:
+                    raw_captures = list(self._rolling_buffer)
+                
+                logger.info(f"Rolling buffer yielded {len(raw_captures)} frames at sync point")
+                
+                # Aggregate radar + thermal NOW (perfectly synchronized with camera window)
+                radar_data = self._aggregate_radar()
+                esp32_data = self._aggregate_thermal()
+                
+                # ── Post-process face frames (ROI + Landmarks) ──
                 processed_data = []
-                # Also keep a sample of raw (uncropped) frames for skin extractor
-                # FaceMesh works much better on full frames than tight ROI crops
                 raw_face_frames_for_skin = []
-                
                 for item in raw_captures:
-                     frame = item['frame']
-                     roi, landmarks = self.camera.extract_face_features(frame)
-                     if roi is not None:
-                         processed_data.append({'roi': roi, 'landmarks': landmarks, 'raw': frame})
-                     else:
-                         # Even if ROI extraction fails, keep raw frame for skin extractor
-                         raw_face_frames_for_skin.append(frame)
+                    frame = item['frame']
+                    roi, landmarks = self.camera.extract_face_features(frame)
+                    if roi is not None:
+                        processed_data.append({'roi': roi, 'landmarks': landmarks, 'raw': frame})
+                    else:
+                        raw_face_frames_for_skin.append(frame)
 
                 face_frames = [d['roi'] for d in processed_data]
                 face_landmarks_sequence = [d['landmarks'] for d in processed_data if d['landmarks'] is not None]
-                # Collect raw frames from successful detections (better for FaceMesh)
                 raw_face_frames_for_skin = [d['raw'] for d in processed_data] + raw_face_frames_for_skin
                 # Sample every 10th raw frame to avoid passing too many large frames
                 raw_face_frames_for_skin = raw_face_frames_for_skin[::10] if len(raw_face_frames_for_skin) > 10 else raw_face_frames_for_skin
                 
-                logger.info(f"Extracted {len(face_frames)} face ROIs, {len(face_landmarks_sequence)} landmark sets, {len(raw_face_frames_for_skin)} raw frames for skin (CONSOLIDATED)")
+                logger.info(f"Extracted {len(face_frames)} face ROIs, {len(face_landmarks_sequence)} landmark sets, {len(raw_face_frames_for_skin)} raw frames for skin (UNIFIED)")
                 
                 # Validation: Warn if faces detected but landmarks missing
                 if len(face_frames) > 0 and len(face_landmarks_sequence) == 0:
                     logger.warning(f"⚠️ Face ROIs detected ({len(face_frames)}) but NO FaceMesh landmarks extracted. Eye blink detection will fail.")
                 elif len(face_frames) > 0 and len(face_landmarks_sequence) < len(face_frames) * 0.5:
-                    logger.warning(f"⚠️ Low landmark detection rate: {len(face_landmarks_sequence)}/{len(face_frames)} frames ({100*len(face_landmarks_sequence)/len(face_frames):.1f}%)")
+                    logger.warning(f"⚠️ Low landmark detection rate: {len(face_landmarks_sequence)}/{len(face_frames)} ({100*len(face_landmarks_sequence)/len(face_frames):.1f}%)")
+                
+                # ── Build session baseline from first ~10% of captured frames ──
+                # Previously a separate 5s phase; now derived from the same 30s window.
+                session_baseline = None
+                if self.skin_extractor and raw_face_frames_for_skin:
+                    try:
+                        system_thermal = []
+                        if esp32_data and 'thermal' in esp32_data:
+                            core = esp32_data['thermal'].get('core_regions', {})
+                            system_thermal = [{
+                                'fever_face_max': core.get('face_max'),
+                                'background_temp': esp32_data['thermal'].get('ambient_temp') or 25.0
+                            }]
+                        baseline_frames = raw_face_frames_for_skin[:max(1, len(raw_face_frames_for_skin) // 10)]
+                        session_baseline = self.skin_extractor.capture_session_baseline(
+                            thermal_frames=system_thermal,
+                            rgb_frames=baseline_frames
+                        )
+                        logger.info(f"Session baseline captured from {len(baseline_frames)} frames")
+                    except Exception as e:
+                        logger.error(f"Baseline capture failed: {e}")
             
             self._update_scan_status(progress=40)
             
@@ -873,14 +896,12 @@ class HardwareManager:
                 )
                 
                 logger.info(f"🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
-                logger.info(f"🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
                 
                 # Wait for user to be correctly positioned (max 5 seconds, then proceed)
-                # This makes it "less strict" - it warns but doesn't block forever
                 self._wait_for_alignment("BODY_ANALYSIS", timeout=5)
                 
-                # Preparation Timer (10s)
-                self._countdown(10, "Get Ready...", "BODY_ANALYSIS")
+                # Reduced from 10s to 3s — rolling buffer means we start fast
+                self._countdown(3, "Get Ready...", "BODY_ANALYSIS")
                 
                 # Start recording (DRIVER LEVEL)
                 self.camera.start_recording()
@@ -1208,6 +1229,61 @@ class HardwareManager:
             "biomarkers": [bm.to_dict() for bm in bm_set.biomarkers]
         }
     
+    def _compute_canthus_pixels(
+        self,
+        face_landmarks_sequence: List[np.ndarray],
+        frame_shape: Tuple[int, int]
+    ) -> Optional[Dict]:
+        """
+        Compute average RGB pixel positions of the inner canthi across landmark frames.
+
+        Uses MediaPipe FaceMesh indices:
+          - 133: right inner canthus (from user's perspective = left eye on screen)
+          - 362: left inner canthus
+
+        These are the tear-duct points — the medically recognised hottest facial site
+        for core body temperature measurement (ASTM E1965 compliant).
+
+        Returns:
+            {'right': (px, py), 'left': (px, py), 'frame_shape': (h, w)}
+            or None if no valid landmarks are available.
+        """
+        if not face_landmarks_sequence:
+            return None
+
+        h, w = frame_shape
+        RIGHT_IDX = 133   # right inner canthus (appears on left side of face on screen)
+        LEFT_IDX  = 362   # left inner canthus
+
+        right_pts, left_pts = [], []
+        for lm_arr in face_landmarks_sequence:
+            if lm_arr is None:
+                continue
+            if len(lm_arr) <= max(RIGHT_IDX, LEFT_IDX):
+                continue
+            # Landmarks are in normalised [0, 1] coords; columns 0=x, 1=y
+            right_pts.append((lm_arr[RIGHT_IDX, 0] * w, lm_arr[RIGHT_IDX, 1] * h))
+            left_pts.append((lm_arr[LEFT_IDX, 0]  * w, lm_arr[LEFT_IDX, 1]  * h))
+
+        if not right_pts:
+            return None
+
+        r_px = float(np.median([p[0] for p in right_pts]))
+        r_py = float(np.median([p[1] for p in right_pts]))
+        l_px = float(np.median([p[0] for p in left_pts]))
+        l_py = float(np.median([p[1] for p in left_pts]))
+
+        logger.info(
+            f"Canthus pixels (RGB frame {w}×{h}): "
+            f"right=({r_px:.1f},{r_py:.1f})  left=({l_px:.1f},{l_py:.1f})"
+        )
+        return {
+            "right": (r_px, r_py),
+            "left":  (l_px, l_py),
+            "rgb_frame_shape": (h, w),
+            "thermal_frame_shape": (24, 32),  # MLX90640 fixed resolution
+        }
+
     def _build_screening_request(
         self,
         patient_id: str,
@@ -1260,6 +1336,19 @@ class HardwareManager:
                 if canthus_range is not None:
                     inflammation_pct = min(10.0, max(0.0, (canthus_range - 0.8) * 8.33))
                 
+                # Compute homography guidance: average canthus pixel positions
+                # from the RGB FaceMesh landmarks and inject into thermal_data.
+                # skin.py uses these to map tear-duct coords onto the 32x24 thermal grid.
+                _canthus_pixels = None
+                if face_landmarks_sequence and raw_face_frames:
+                    # Use shape from first available raw frame
+                    _ref_frame = raw_face_frames[0]
+                    if isinstance(_ref_frame, np.ndarray) and _ref_frame.ndim >= 2:
+                        _canthus_pixels = self._compute_canthus_pixels(
+                            face_landmarks_sequence,
+                            (_ref_frame.shape[0], _ref_frame.shape[1])
+                        )
+
                 raw_data_context['thermal_data'] = {
                     'fever_neck_temp': neck_mean,
                     'fever_canthus_temp': canthus_mean,
@@ -1275,6 +1364,8 @@ class HardwareManager:
                     'stress_gradient': abs(gradients.get('forehead_nose_gradient', 0)) if gradients.get('forehead_nose_gradient') is not None else None,
                     'nose_temp': None,
                     'forehead_temp': None,
+                    # Homography guidance: RGB canthus coords for guided temperature extraction
+                    'rgb_canthus_pixels': _canthus_pixels,
                 }
             else:
                 raw_data_context['thermal_data'] = {

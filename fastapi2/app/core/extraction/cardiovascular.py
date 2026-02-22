@@ -215,6 +215,102 @@ class CardiovascularExtractor(BaseExtractor):
             logger.warning(f"HRV computation failed: {e}")
             return 40.0  # Safe default
     
+
+    
+
+    def _sample_roi_signals(
+        self,
+        face_frames: List[np.ndarray]
+    ) -> Optional[Dict]:
+        """
+        Sample mean R, G, B from three face ROIs: forehead, left cheek, right cheek.
+        Returns dict of {name: (R_arr, G_arr, B_arr)} or None if no valid data.
+        """
+        rois: Dict[str, tuple] = {
+            "forehead": ([], [], []),
+            "left":     ([], [], []),
+            "right":    ([], [], []),
+        }
+        # ROI boxes: (row_start%, row_end%, col_start%, col_end%)
+        roi_boxes = {
+            "forehead": (0.05, 0.35, 0.20, 0.80),
+            "left":     (0.50, 0.75, 0.55, 0.85),
+            "right":    (0.50, 0.75, 0.15, 0.45),
+        }
+        for frame in face_frames:
+            if frame is None or len(frame.shape) < 3:
+                continue
+            h, w = frame.shape[:2]
+            if h < 10 or w < 10:
+                continue
+            for name, (r0, r1, c0, c1) in roi_boxes.items():
+                patch = frame[int(h*r0):int(h*r1), int(w*c0):int(w*c1)]
+                if patch.size == 0:
+                    continue
+                # OpenCV is BGR
+                rois[name][0].append(float(np.mean(patch[:, :, 2])))
+                rois[name][1].append(float(np.mean(patch[:, :, 1])))
+                rois[name][2].append(float(np.mean(patch[:, :, 0])))
+
+        result = {}
+        for name, (rs, gs, bs) in rois.items():
+            if len(rs) >= 30:
+                result[name] = (np.array(rs), np.array(gs), np.array(bs))
+        return result if result else None
+
+    def _chrom_signal_from_roi(
+        self,
+        r_raw: np.ndarray,
+        g_raw: np.ndarray,
+        b_raw: np.ndarray,
+        fps: float,
+        window_sec: float = 2.0
+    ) -> np.ndarray:
+        """
+        CHROM algorithm — De Haan & Jeanne (IEEE TBME, 2013).
+
+        Per sliding 2-second Hann-windowed segment:
+          Rn = R / mean(R);  Gn = G / mean(G);  Bn = B / mean(B)
+          X = 3*Rn - 2*Gn   (coefficients sum to 1 → specular glare cancels)
+          Y = 1.5*Rn + Gn - 1.5*Bn (same property)
+          S = X - alpha * Y  where alpha = std(X) / std(Y)  (motion shadow cancels)
+        Overlap-adds windows with Hann weighting into a full-length pulse signal.
+        """
+        n = len(r_raw)
+        win = int(fps * window_sec)
+        step = max(1, win // 2)
+        pulse = np.zeros(n)
+        weight = np.zeros(n)
+        hann = np.hanning(win)
+
+        for start in range(0, n - win + 1, step):
+            end = start + win
+            rn = r_raw[start:end] / (np.mean(r_raw[start:end]) + 1e-6)
+            gn = g_raw[start:end] / (np.mean(g_raw[start:end]) + 1e-6)
+            bn = b_raw[start:end] / (np.mean(b_raw[start:end]) + 1e-6)
+
+            X = 3.0 * rn - 2.0 * gn          # sum of coefficients = 1
+            Y = 1.5 * rn + gn - 1.5 * bn     # sum of coefficients = 1
+            alpha_chrom = np.std(X) / (np.std(Y) + 1e-6)
+            S = X - alpha_chrom * Y
+
+            pulse[start:end] += S * hann
+            weight[start:end] += hann
+
+        valid = weight > 1e-6
+        pulse[valid] /= weight[valid]
+        # Bandpass 0.7–3.5 Hz (42–210 bpm) — slightly wider for robustness
+        return self.preprocess_signal(pulse, fps, lowcut=0.7, highcut=3.5)
+
+    def _pearson_r(self, a: np.ndarray, b: np.ndarray) -> float:
+        """Pearson correlation coefficient between two equal-length arrays."""
+        if len(a) != len(b) or len(a) < 2:
+            return 0.0
+        a_z = a - np.mean(a)
+        b_z = b - np.mean(b)
+        denom = np.std(a_z) * np.std(b_z) * len(a)
+        return float(np.sum(a_z * b_z) / denom) if denom > 1e-9 else 0.0
+
     def _extract_from_rppg(
         self,
         face_frames: List[np.ndarray],
@@ -222,147 +318,134 @@ class CardiovascularExtractor(BaseExtractor):
         biomarker_set: BiomarkerSet
     ) -> None:
         """
-        Extract cardiovascular metrics from face video using rPPG.
-        
-        Remote Photoplethysmography (rPPG) detects blood volume pulse
-        from subtle color changes in facial skin captured by camera.
-        
-        Args:
-            face_frames: List of face crop frames (RGB numpy arrays)
-            fps: Video frame rate
-            biomarker_set: BiomarkerSet to add biomarkers to
+        Extract cardiovascular metrics from face video using CHROM rPPG.
+
+        Replaces the old POS algorithm with:
+          - Multi-ROI sampling (forehead + 2 cheeks)
+          - CHROM chrominance projection (immune to glare & motion shadows)
+          - Pearson cross-correlation fusion (discard noisy ROIs)
+          - Cleaner pulse waveform fed into compute_proper_hrv for true HRV
         """
-        if len(face_frames) < int(fps * 10):  # Need at least 10 seconds
-            logger.warning("rPPG: Insufficient frames, need at least 10 seconds")
+        min_frames = int(fps * 10)
+        if len(face_frames) < min_frames:
+            logger.warning(f"CHROM rPPG: {len(face_frames)} frames < {min_frames} needed. Skipping.")
             return
-        
+
         try:
-            # POS Algorithm (Plane-Orthogonal-to-Skin) - Wang et al. 2017
-            # More robust to lighting variations/motion than Green channel only
-            r_signal = []
-            g_signal = []
-            b_signal = []
-            
-            for frame in face_frames:
-                if len(frame.shape) == 3:
-                    # Extract ROI: Forehead (Upper 30% of face, centered)
-                    h, w = frame.shape[:2]
-                    forehead_roi = frame[int(h*0.1):int(h*0.4), int(w*0.25):int(w*0.75)]
-                    
-                    # OpenCV is BGR
-                    b_val = np.mean(forehead_roi[:, :, 0])
-                    g_val = np.mean(forehead_roi[:, :, 1])
-                    r_val = np.mean(forehead_roi[:, :, 2])
-                    
-                    r_signal.append(r_val)
-                    g_signal.append(g_val)
-                    b_signal.append(b_val)
-                else:
-                    # Fallback for greyscale
-                    val = np.mean(frame)
-                    r_signal.append(val)
-                    g_signal.append(val)
-                    b_signal.append(val)
-            
-            r_raw = np.array(r_signal)
-            g_raw = np.array(g_signal)
-            b_raw = np.array(b_signal)
-            
-            # POS Processing
-            # 1. Temporal Normalization
-            rn = r_raw / (np.mean(r_raw) + 1e-6)
-            gn = g_raw / (np.mean(g_raw) + 1e-6)
-            bn = b_raw / (np.mean(b_raw) + 1e-6)
-            
-            # 2. Projection
-            # S1 = G - B
-            # S2 = G + B - 2R
-            s1 = gn - bn
-            s2 = gn + bn - 2 * rn
-            
-            # 3. Tuning (Alpha fusion)
-            # Alpha = std(S1) / std(S2)
-            std_s1 = np.std(s1)
-            std_s2 = np.std(s2)
-            alpha = std_s1 / (std_s2 + 1e-6)
-            
-            # 4. Pulse Signal
-            green_signal = s1 + alpha * s2
-            
-            # Validate signal
-            is_valid, confidence_factor = self.validate_signal(green_signal, fps)
-            if not is_valid:
-                logger.warning(f"rPPG: Signal validation failed, confidence={confidence_factor:.2f}")
-            
-            # Preprocess: detrend, bandpass filter, normalize
-            processed_signal = self.preprocess_signal(green_signal, fps, lowcut=0.8, highcut=3.0)
-            
-            # Compute signal quality
-            quality = self.compute_signal_quality(processed_signal, fps)
-            base_confidence = 0.85 * quality * confidence_factor
-            
-            # Extract heart rate using FFT peak detection with parabolic interpolation
-            n = len(processed_signal)
-            freqs = np.fft.fftfreq(n, d=1/fps)
-            fft_vals = np.abs(np.fft.fft(processed_signal))
-            
-            # Find peak in cardiac range (0.8-3 Hz = 48-180 bpm)
+            # 1. Sample RGB time-series from each ROI
+            roi_data = self._sample_roi_signals(face_frames)
+            if not roi_data:
+                logger.warning("CHROM rPPG: no valid ROI data from face frames.")
+                return
+
+            # 2. Compute CHROM pulse waveform per ROI
+            roi_signals: Dict[str, np.ndarray] = {}
+            for name, (r, g, b) in roi_data.items():
+                sig = self._chrom_signal_from_roi(r, g, b, fps)
+                if sig is not None and len(sig) > 0:
+                    roi_signals[name] = sig
+
+            if not roi_signals:
+                logger.warning("CHROM rPPG: all ROI signals failed preprocessing.")
+                return
+
+            # 3. Multi-ROI Pearson fusion
+            min_len = min(len(s) for s in roi_signals.values())
+            aligned = {k: v[:min_len] for k, v in roi_signals.items()}
+            names = list(aligned.keys())
+            signals = [aligned[n] for n in names]
+
+            if len(signals) == 1:
+                fused = signals[0]
+                n_used = 1
+            else:
+                # For each ROI, compute its mean Pearson r against peers
+                avg_r = []
+                for i, s in enumerate(signals):
+                    peers = [signals[j] for j in range(len(signals)) if j != i]
+                    avg_r.append(float(np.mean([self._pearson_r(s, p) for p in peers])))
+
+                good_idx = [i for i, r in enumerate(avg_r) if r >= 0.4]
+                if not good_idx:
+                    good_idx = [int(np.argmax(avg_r))]  # take best even if low
+
+                fused = np.mean([signals[i] for i in good_idx], axis=0)
+                n_used = len(good_idx)
+                logger.info(
+                    f"CHROM rPPG: {n_used}/{len(names)} ROIs passed Pearson ≥0.4: "
+                    f"{[names[i] for i in good_idx]}"
+                )
+
+            # 4. Signal quality gate
+            is_valid, cf = self.validate_signal(fused, fps)
+            quality = self.compute_signal_quality(fused, fps)
+            base_confidence = 0.88 * quality * cf   # ceiling slightly above old POS 0.85
+
+            if quality < 0.35:
+                logger.warning(f"CHROM rPPG: quality {quality:.2f} too low — skipping biomarkers.")
+                return
+
+            # 5. Heart rate via FFT + parabolic interpolation
+            n = len(fused)
+            freqs = np.fft.fftfreq(n, d=1.0 / fps)
+            fft_vals = np.abs(np.fft.fft(fused))
+
             cardiac_mask = (freqs > 0.8) & (freqs < 3.0)
-            if np.any(cardiac_mask):
-                cardiac_freqs = freqs[cardiac_mask]
-                cardiac_power = fft_vals[cardiac_mask]
-                peak_idx = np.argmax(cardiac_power)
-                
-                # Parabolic interpolation for sub-bin accuracy
-                if 0 < peak_idx < len(cardiac_power) - 1:
-                    alpha = cardiac_power[peak_idx - 1]
-                    beta = cardiac_power[peak_idx]
-                    gamma = cardiac_power[peak_idx + 1]
-                    p = 0.5 * (alpha - gamma) / (alpha - 2*beta + gamma)
-                    peak_freq = cardiac_freqs[peak_idx] + p * (cardiac_freqs[1] - cardiac_freqs[0])
+            if not np.any(cardiac_mask):
+                logger.warning("CHROM rPPG: no cardiac frequency band — skipping.")
+                return
+
+            cardiac_freqs = freqs[cardiac_mask]
+            cardiac_power = fft_vals[cardiac_mask]
+            peak_idx = int(np.argmax(cardiac_power))
+
+            if 0 < peak_idx < len(cardiac_power) - 1:
+                a_p = cardiac_power[peak_idx - 1]
+                b_p = cardiac_power[peak_idx]
+                c_p = cardiac_power[peak_idx + 1]
+                denom_p = a_p - 2.0 * b_p + c_p
+                if abs(denom_p) > 1e-9:
+                    p_off = 0.5 * (a_p - c_p) / denom_p
+                    peak_freq = cardiac_freqs[peak_idx] + p_off * (cardiac_freqs[1] - cardiac_freqs[0])
                 else:
                     peak_freq = cardiac_freqs[peak_idx]
-                
-                hr = float(abs(peak_freq) * 60)
-                hr = np.clip(hr, 45, 180)
             else:
-                logger.warning("rPPG: No cardiac frequency peak found; skipping heart_rate biomarker")
-                return
-            
+                peak_freq = cardiac_freqs[peak_idx]
+
+            hr = float(np.clip(abs(peak_freq) * 60.0, 40.0, 200.0))
+
             self._add_biomarker(
                 biomarker_set,
                 name="heart_rate",
                 value=hr,
                 unit="bpm",
-                confidence=float(np.clip(base_confidence, 0.3, 0.95)),
+                confidence=float(np.clip(base_confidence, 0.30, 0.95)),
                 normal_range=(60, 100),
-                description="Heart rate from rPPG (webcam)"
+                description=f"Heart rate from CHROM rPPG (webcam, {n_used} ROI{'s' if n_used > 1 else ''})"
             )
-            
-            # Compute HRV using proper peak detection (signal already preprocessed)
-            hrv = self.compute_proper_hrv(processed_signal, fps, is_preprocessed=True)
+
+            # 6. HRV (RMSSD) — uses the clean CHROM pulse as peak-detection input
+            hrv = self.compute_proper_hrv(fused, fps, is_preprocessed=True)
             self._add_biomarker(
                 biomarker_set,
                 name="hrv_rmssd",
                 value=hrv,
                 unit="ms",
-                confidence=float(np.clip(base_confidence * 0.9, 0.25, 0.90)),
+                confidence=float(np.clip(base_confidence * 0.90, 0.22, 0.90)),
                 normal_range=(20, 80),
-                description="HRV (RMSSD) from rPPG"
+                description="HRV (RMSSD) from CHROM rPPG beat-to-beat intervals"
             )
-            
-            # QUALITY GUARD: Only add biomarkers if quality is sufficient
-            if quality < 0.4:
-                logger.warning(f"rPPG: Signal quality too low ({quality:.2f}), skipping")
-                return
 
-            logger.info(f"rPPG extraction: HR={hr:.1f}bpm, HRV={hrv:.1f}ms, quality={quality:.2f}")
-            
+            logger.info(
+                f"CHROM rPPG ✅  HR={hr:.1f}bpm  HRV={hrv:.1f}ms  "
+                f"quality={quality:.2f}  ROIs={n_used}/{len(names)}  frames={len(face_frames)}"
+            )
+
         except Exception as e:
-            logger.error(f"rPPG extraction failed: {e}")
-    
+            logger.error(f"CHROM rPPG extraction failed: {e}", exc_info=True)
 
     def extract(self, data: Dict[str, Any]) -> BiomarkerSet:
+
         """
         Extract cardiovascular biomarkers.
         

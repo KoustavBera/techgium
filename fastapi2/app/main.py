@@ -8,7 +8,7 @@ Main application entry point with API endpoints for:
 - Hardware management (Camera, Radar, Thermal)
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Response, UploadFile, File, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, Response, UploadFile, File, BackgroundTasks, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +23,9 @@ import asyncio
 import json
 from starlette.concurrency import run_in_threadpool
 from langchain_core.messages import HumanMessage
+import qrcode
+import socket
+import io
 
 # Medical Agent Imports
 try:
@@ -219,6 +222,20 @@ def _biomarkers_to_summary(biomarkers: List[BiomarkerInput]) -> Dict[str, Any]:
     return summary
 
 
+def _get_local_ip():
+    """Get the local IP address of the server on the network."""
+    try:
+        # Create a dummy socket to detect the preferred outbound IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Doesn't need to be reachable
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
 # ---- API Endpoints ----
 
 @app.get("/", response_model=HealthResponse, tags=["Health"])
@@ -404,6 +421,47 @@ async def download_report(report_id: str):
     )
 
 
+@app.get("/api/v1/reports/{report_id}/qr", tags=["Reports"])
+async def get_report_qr(report_id: str, request: Request):
+    """
+    Generate a QR code linking to the report download.
+    The QR URL uses the same host the browser used to reach this server,
+    so a phone on the same Wi-Fi can scan it and reach the correct address.
+    """
+    if report_id not in _reports:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Use the Host header from the incoming request (e.g. 192.168.1.x:8000).
+    # This ensures the QR code points to the same IP the PC is reachable on.
+    host_header = request.headers.get("host", "")
+    if host_header and not host_header.startswith(("localhost", "127.0.0.1")):
+        # host_header already contains host:port (e.g. 192.168.1.5:8000)
+        download_url = f"http://{host_header}/api/v1/reports/{report_id}/download"
+    else:
+        # Fallback: auto-detect LAN IP
+        local_ip = _get_local_ip()
+        download_url = f"http://{local_ip}:8000/api/v1/reports/{report_id}/download"
+    
+    # Generate QR code
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(download_url)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Save to bytes
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    
+    return StreamingResponse(img_byte_arr, media_type="image/png")
+
+
 @app.get("/api/v1/screening/{screening_id}", tags=["Screening"])
 async def get_screening(screening_id: str):
     """
@@ -546,6 +604,7 @@ async def doctor_chat(request: DoctorChatRequest):
 
     async def stream_generator():
         queue = asyncio.Queue()
+        tokens_emitted = False  # Track if answer_node streamed any tokens
         
         # Callback to put status events into the queue
         def on_status(status_dict: dict):
@@ -557,6 +616,8 @@ async def doctor_chat(request: DoctorChatRequest):
         
         # Callback to put tokens into the queue
         def on_token(token: str):
+            nonlocal tokens_emitted
+            tokens_emitted = True
             # We use loop.call_soon_threadsafe because the agent runs in a threadpool
             loop.call_soon_threadsafe(queue.put_nowait, {
                 "type": "token",
@@ -565,14 +626,24 @@ async def doctor_chat(request: DoctorChatRequest):
 
         # Function to run the agent in a thread
         def run_agent():
+            nonlocal tokens_emitted
             from agent.nodes import set_status_callback
             set_status_callback(on_status)
             set_token_callback(on_token)
             try:
-                app.state.medical_agent.invoke(
+                result = app.state.medical_agent.invoke(
                     {"messages": [HumanMessage(content=request.query)]},
                     config={"configurable": {"thread_id": request.patient_id or "GUEST"}}
                 )
+                # If clarification path was taken (answer_node skipped),
+                # final_answer exists but was never streamed via on_token.
+                # Emit it now so the frontend receives the response.
+                final = result.get("final_answer", "")
+                if final and not tokens_emitted:
+                    on_token(final)
+            except Exception as e:
+                logger.error(f"Agent error: {e}")
+                on_token(f"I'm sorry, I encountered an error processing your request. Please try again. 💙")
             finally:
                 set_status_callback(None)  # Cleanup callback
                 set_token_callback(None)  # Cleanup callback

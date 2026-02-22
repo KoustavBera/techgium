@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional, Tuple
 from enum import Enum
 import numpy as np
+import cv2
 from scipy import signal as scipy_signal
 from scipy import stats
 
@@ -148,27 +149,58 @@ class SignalQualityAssessor:
         else:
             score.continuity = 0.8  # Assume good if no timestamps
         
-        # Noise level: Estimate from high-frequency content
-        noise_estimates = []
+        # Noise level: True blur detection using Laplacian variance (standard CV method)
+        # Also check exposure (brightness) which directly impacts rPPG signal quality
+        laplacian_estimates = []
+        brightness_values = []
         for frame in frames[:min(10, n_frames)]:  # Sample first 10 frames
             if frame is not None and frame.size > 0:
-                gray = np.mean(frame, axis=2) if len(frame.shape) == 3 else frame
-                # Laplacian variance as noise proxy
-                laplacian_var = np.var(gray)
-                noise_estimates.append(laplacian_var)
+                gray = np.mean(frame, axis=2).astype(np.uint8) if len(frame.shape) == 3 else frame.astype(np.uint8)
+                # True Laplacian variance: measures edge sharpness / focus quality
+                laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+                laplacian_estimates.append(laplacian_var)
+                # Track mean brightness for exposure check
+                brightness_values.append(float(np.mean(gray)))
         
-        if noise_estimates:
-            avg_noise = np.mean(noise_estimates)
-            # Normalize: high variance = good detail, low variance = blurry
-            # Optimal range: 50-3000
-            if avg_noise < 50:
-                score.noise_level = 0.3  # Too blurry/flat
-                issues.append("Low image variance - possibly underexposed or blurry")
-            elif avg_noise > 3000:
-                score.noise_level = 0.6  # Excessive noise but still usable
-                issues.append("High image variance detected")
+        if laplacian_estimates:
+            avg_laplacian = np.mean(laplacian_estimates)
+            avg_brightness = np.mean(brightness_values) if brightness_values else 128.0
+            
+            # --- Blur / Focus Score ---
+            # Laplacian variance thresholds for 8-bit camera frames:
+            # < 5  → heavily blurred / out of focus
+            # 5-15 → soft / slightly blurred (borderline usable)
+            # 15-200 → good focus (optimal)
+            # > 200 → very sharp, possibly noisy
+            if avg_laplacian < 5:
+                score.noise_level = 0.3  # Heavily blurred
+                issues.append(f"Image is heavily blurred or out-of-focus (Laplacian={avg_laplacian:.1f})")
+            elif avg_laplacian < 15:
+                score.noise_level = float(np.interp(avg_laplacian, [5, 15], [0.3, 0.6]))
+                issues.append(f"Soft focus detected (Laplacian={avg_laplacian:.1f})")
+            elif avg_laplacian > 500:
+                score.noise_level = 0.7  # Excessive high-freq noise (sensor noise)
+                issues.append("Excessive image noise detected")
             else:
-                score.noise_level = float(np.clip((avg_noise - 50) / 2950, 0.3, 1.0))
+                # Map [15, 500] → [0.6, 1.0]
+                score.noise_level = float(np.clip(np.interp(avg_laplacian, [15, 500], [0.6, 1.0]), 0.3, 1.0))
+            
+            # --- Exposure Penalty (applied to SNR) ---
+            # Poor exposure means rPPG signal extraction will be unreliable regardless of focus
+            if avg_brightness < 40:
+                # Severely underexposed — the rPPG green channel is in sensor noise floor
+                exposure_penalty = float(np.interp(avg_brightness, [0, 40], [0.5, 0.0]))
+                score.noise_level = max(0.25, score.noise_level - exposure_penalty)
+                issues.append(f"Severe underexposure (brightness={avg_brightness:.0f}/255) — rPPG unreliable")
+            elif avg_brightness < 80:
+                # Moderately underexposed
+                exposure_penalty = float(np.interp(avg_brightness, [40, 80], [0.25, 0.0]))
+                score.noise_level = max(0.3, score.noise_level - exposure_penalty)
+                issues.append(f"Low lighting detected (brightness={avg_brightness:.0f}/255)")
+            elif avg_brightness > 240:
+                # Overexposed — clipping destroys the AC component of the rPPG signal
+                score.noise_level = max(0.3, score.noise_level - 0.3)
+                issues.append(f"Image overexposed (brightness={avg_brightness:.0f}/255) — rPPG unreliable")
         else:
             score.noise_level = 0.5
         
