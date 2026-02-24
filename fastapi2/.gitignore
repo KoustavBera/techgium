@@ -36,3 +36,5 @@ uploads/*
 # OS
 .DS_Store
 Thumbs.db
+
+hackathon_winning_strategy.md
