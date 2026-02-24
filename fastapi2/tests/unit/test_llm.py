@@ -60,7 +60,7 @@ def gemini_config() -> GeminiConfig:
     """Create test Gemini config."""
     return GeminiConfig(
         api_key=None,  # Will use mock mode
-        model=GeminiModel.FLASH_1_5,
+        model=GeminiModel.FLASH_2_0,
         temperature=0.3
     )
 

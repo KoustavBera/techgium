@@ -195,10 +195,31 @@ Your output should:
             InterpretationResult for overall health
         """
         if self.use_multi_llm:
-            # Use multi-LLM interpreter
-            multi_result = self.multi_interpreter.interpret_composite_risk(
-                system_results, composite_risk, trust_envelope
-            )
+            # Use multi-LLM interpreter.
+            # interpret_composite_risk is async — run it from this sync context.
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                # Already inside an event loop (e.g., FastAPI) — create a task
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(
+                        asyncio.run,
+                        self.multi_interpreter.interpret_composite_risk(
+                            system_results, composite_risk, trust_envelope
+                        )
+                    )
+                    multi_result = future.result()
+            else:
+                multi_result = asyncio.run(
+                    self.multi_interpreter.interpret_composite_risk(
+                        system_results, composite_risk, trust_envelope
+                    )
+                )
             
             # Convert to InterpretationResult format
             result = InterpretationResult(

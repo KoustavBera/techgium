@@ -339,18 +339,34 @@ class RiskEngine:
         biomarker_sets: List[BiomarkerSet]
     ) -> Dict[PhysiologicalSystem, SystemRiskResult]:
         """
-        Compute risks for all provided biomarker sets.
-        
-        Args:
-            biomarker_sets: List of BiomarkerSets from all extractors
-            
-        Returns:
-            Dict mapping system to risk result
+        Compute risks for all provided biomarker sets in parallel.
+
+        Each system's computation is independent (pure CPU + numpy, no shared
+        state), so we dispatch them concurrently.  Workers are capped at 4 to
+        avoid over-subscribing the interpreter process on constrained hardware.
         """
-        results = {}
-        for bm_set in biomarker_sets:
-            results[bm_set.system] = self.compute_risk(bm_set)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        if not biomarker_sets:
+            return {}
+
+        max_workers = min(len(biomarker_sets), 4)
+        results: Dict[PhysiologicalSystem, SystemRiskResult] = {}
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_system = {
+                executor.submit(self.compute_risk, bm_set): bm_set.system
+                for bm_set in biomarker_sets
+            }
+            for future in as_completed(future_to_system):
+                system = future_to_system[future]
+                try:
+                    results[system] = future.result()
+                except Exception as exc:
+                    logger.error(f"Risk computation failed for {system.value}: {exc}")
+
         return results
+
     
     def compute_risk_with_validation(
         self,

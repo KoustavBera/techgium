@@ -26,22 +26,24 @@ except ImportError:
 
 
 class GeminiModel(str, Enum):
-    """Available Gemini models."""
-    FLASH_1_5_LATEST = "gemini-1.5-flash"  # User requested
-    FLASH_2_0_LITE = "gemini-2.0-flash-lite"  # 10 RPM free tier (Best for explanations)
-    FLASH_LATEST = "gemini-2.5-flash"  # 5 RPM free tier
-    FLASH_8B = "gemini-1.5-flash-8b"  # Cheapest & Fastest (Keep if available, else update)
-    FLASH_1_5 = "gemini-2.0-flash"  # Fallback to 2.0
-    FLASH_2_0 = "gemini-2.0-flash"  # New Flash model
-    PRO_1_5 = "gemini-1.5-pro"  # Legacy
+    """Available Gemini models in 2026."""
+    FLASH_3_0 = "gemini-3.0-flash"  # Newest state-of-the-art
+    FLASH_3_0_PREVIEW = "gemini-3.0-flash-preview"
+    FLASH_2_5 = "gemini-2.5-flash"  # Stable standard
+    FLASH_2_5_LITE = "gemini-2.5-flash-lite"
+    PRO_3_0 = "gemini-3.0-pro"  # High reasoning
+    FLASH_2_0 = "gemini-2.0-flash"  # Legacy stable
+    FLASH_1_5_LEGACY = "gemini-1.5-flash"  # Retired September 2025
+
 
 
 @dataclass
 class GeminiConfig:
     """Configuration for Gemini client."""
-    api_key: Optional[str] = None
-    model: GeminiModel = GeminiModel.FLASH_1_5_LATEST
-    temperature: float = 0.7  # Gemini 1.5 defaults
+    api_key: Optional[str] = field(default_factory=lambda: os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+    model: GeminiModel = GeminiModel.FLASH_2_5
+    temperature: float = 0.5  # Gemini 2.5/3.0 defaults
+
     max_output_tokens: int = 2048
     top_p: float = 0.8
     top_k: int = 40
@@ -105,8 +107,8 @@ class GeminiClient:
         self._request_count = 0
         self._last_request_time = None
         self._initialized = False
-        self._cache = {}  # Simple in-memory cache: {cache_key: response_text}
-        self._cache_ttl_seconds = 300  # 5 minutes cache TTL
+        self._cache = {}  # In-memory cache: {cache_key: (timestamp, response_text)}
+        self._cache_ttl_seconds = 900  # 15 minutes — matches typical screening session length
         
         self._initialize()
     
@@ -116,16 +118,23 @@ class GeminiClient:
             logger.info("LangChain Gemini not available - mock mode enabled")
             self._initialized = False
             return
-        
+
         if not self.config.api_key:
             logger.warning("No Gemini API key provided - mock mode enabled")
             self._initialized = False
             return
-        
+
         try:
-            # Initialize LangChain ChatGoogleGenerativeAI
+            # Safely resolve model name — config.model may be a GeminiModel enum
+            # member OR a plain string (e.g. when constructed from settings).
+            model_name = (
+                self._model_name
+                if hasattr(self.config.model, "value")
+                else str(self.config.model)
+            )
+
             self._llm = ChatGoogleGenerativeAI(
-                model=self.config.model.value,
+                model=model_name,
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_output_tokens,
                 top_p=self.config.top_p,
@@ -136,19 +145,25 @@ class GeminiClient:
                 response_mime_type=self.config.response_mime_type,
                 response_schema=self.config.response_schema
             )
-            
+
             self._initialized = True
-            logger.info(f"LangChain Gemini client initialized with model: {self.config.model.value}")
-            
+            logger.info(f"LangChain Gemini client initialized with model: {model_name}")
+
         except Exception as e:
             logger.error(f"Failed to initialize LangChain Gemini: {e}")
             self._initialized = False
-    
+
     @property
     def is_available(self) -> bool:
         """Check if Gemini is available for use."""
         return self._initialized
-    
+
+    @property
+    def _model_name(self) -> str:
+        """Safely resolve model name whether config.model is an enum or a plain string."""
+        m = self.config.model
+        return m.value if hasattr(m, "value") else str(m)
+
     def generate(
         self,
         prompt: str,
@@ -179,7 +194,7 @@ class GeminiClient:
                 logger.info(f"Cache hit for prompt hash {hash(cache_key) % 10000}")
                 return GeminiResponse(
                     text=cached,
-                    model=f"{self.config.model.value} (cached)",
+                    model=f"{self._model_name} (cached)",
                     finish_reason="CACHED",
                     latency_ms=1.0,
                     is_mock=False
@@ -216,7 +231,7 @@ class GeminiClient:
             
             return GeminiResponse(
                 text=text,
-                model=self.config.model.value,
+                model=self._model_name,
                 finish_reason="STOP",
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
@@ -231,15 +246,68 @@ class GeminiClient:
     async def generate_async(
         self,
         prompt: str,
-        system_instruction: Optional[str] = None
+        system_instruction: Optional[str] = None,
+        use_cache: bool = True
     ) -> GeminiResponse:
-        """Async version of generate."""
-        # For now, run sync in executor
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, 
-            lambda: self.generate(prompt, system_instruction)
-        )
+        """
+        True async generate using LangChain's ainvoke.
+
+        Unlike run_in_executor, ainvoke yields control to the event loop
+        during the HTTP round-trip, supporting real concurrency in FastAPI.
+        """
+        if not self.is_available:
+            return self._mock_response(prompt)
+
+        # Check cache first (same logic as sync path)
+        cache_key = None
+        if use_cache:
+            cache_key = self._get_cache_key(prompt, system_instruction)
+            cached = self._get_from_cache(cache_key)
+            if cached:
+                logger.info(f"Async cache hit for prompt hash {hash(cache_key) % 10000}")
+                return GeminiResponse(
+                    text=cached,
+                    model=f"{self._model_name} (cached)",
+                    finish_reason="CACHED",
+                    latency_ms=1.0,
+                    is_mock=False
+                )
+
+        start_time = datetime.now()
+        try:
+            full_prompt = f"{system_instruction}\n\n{prompt}" if system_instruction else prompt
+
+            # True async — yields event loop during I/O, no thread blocking
+            response = await self._llm.ainvoke(full_prompt)
+
+            latency = (datetime.now() - start_time).total_seconds() * 1000
+            text = response.content if hasattr(response, "content") else str(response)
+
+            prompt_tokens = 0
+            completion_tokens = 0
+            if hasattr(response, "usage_metadata"):
+                prompt_tokens = response.usage_metadata.get("input_tokens", 0)
+                completion_tokens = response.usage_metadata.get("output_tokens", 0)
+
+            self._request_count += 1
+            self._last_request_time = datetime.now()
+
+            if use_cache and cache_key:
+                self._add_to_cache(cache_key, text)
+
+            return GeminiResponse(
+                text=text,
+                model=self._model_name,
+                finish_reason="STOP",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                latency_ms=latency,
+                is_mock=False
+            )
+
+        except Exception as e:
+            logger.error(f"Async Gemini generation failed: {e}")
+            return self._mock_response(prompt, error=str(e))
     
     def _mock_response(self, prompt: str, error: Optional[str] = None) -> GeminiResponse:
         """Generate a mock response when Gemini is unavailable."""
@@ -284,37 +352,53 @@ class GeminiClient:
         )
     
     def _get_cache_key(self, prompt: str, system_instruction: Optional[str]) -> str:
-        """Generate cache key from prompt and system instruction."""
-        import hashlib
-        content = f"{system_instruction or ''}|||{prompt}"
+        """
+        Generate cache key that is robust to minor floating-point noise.
+
+        Raw prompts embed live risk scores like 42.731 or confidence 0.8312,
+        which differ slightly each session even for identical health profiles.
+        We normalise these to 1 decimal place before hashing so that a score
+        of 42.7 and 42.8 can share a cache entry (within normal rounding margin).
+        """
+        import hashlib, re
+        # Round all floats to 1 decimal to absorb sensor-level noise
+        def _round_float(m: re.Match) -> str:
+            try:
+                return f"{round(float(m.group()), 1)}"
+            except ValueError:
+                return m.group()
+
+        normalized = re.sub(r"\d+\.\d+", _round_float, prompt)
+        # Also collapse whitespace / newlines for stability
+        normalized = " ".join(normalized.split())
+        content = f"{system_instruction or ''}|||{normalized}"
         return hashlib.md5(content.encode()).hexdigest()
-    
+
     def _get_from_cache(self, cache_key: str) -> Optional[str]:
-        """Retrieve from cache if still valid."""
+        """Retrieve from cache if still valid (15-minute TTL)."""
         if cache_key in self._cache:
             cached_time, cached_text = self._cache[cache_key]
             age = (datetime.now() - cached_time).total_seconds()
             if age < self._cache_ttl_seconds:
                 return cached_text
             else:
-                # Expired, remove
                 del self._cache[cache_key]
         return None
-    
+
     def _add_to_cache(self, cache_key: str, text: str):
-        """Add response to cache."""
+        """Add response to cache with a max size of 500 entries."""
         self._cache[cache_key] = (datetime.now(), text)
-        # Simple cache size limit
-        if len(self._cache) > 100:
-            # Remove oldest entry
+        if len(self._cache) > 500:
+            # Evict the oldest entry
             oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][0])
             del self._cache[oldest_key]
+
     
     def get_stats(self) -> Dict[str, Any]:
         """Get client statistics."""
         return {
             "is_available": self.is_available,
-            "model": self.config.model.value,
+            "model": self._model_name,
             "request_count": self._request_count,
             "last_request": self._last_request_time.isoformat() if self._last_request_time else None
         }

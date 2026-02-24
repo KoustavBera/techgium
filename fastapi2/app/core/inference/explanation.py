@@ -189,37 +189,37 @@ class ExplanationGenerator:
                 RiskLevel.LOW: ["Maintain fiber-rich diet", "Stay hydrated"],
                 RiskLevel.MODERATE: ["Monitor digestive symptoms", "Consider dietary adjustments"],
                 RiskLevel.HIGH: ["Consult gastroenterologist", "Keep food diary"],
-                RiskLevel.CRITICAL: ["Urgent GI evaluation needed", "Monitor for severe symptoms"]
+                RiskLevel.ACTION_REQUIRED: ["Urgent GI evaluation needed", "Monitor for severe symptoms"]
             },
             PhysiologicalSystem.SKELETAL: {
                 RiskLevel.LOW: ["Continue regular physical activity", "Maintain good posture"],
                 RiskLevel.MODERATE: ["Consider physical therapy assessment", "Focus on balance exercises"],
                 RiskLevel.HIGH: ["Orthopedic evaluation recommended", "Use assistive devices if needed"],
-                RiskLevel.CRITICAL: ["Urgent orthopedic consultation", "Fall prevention measures"]
+                RiskLevel.ACTION_REQUIRED: ["Urgent orthopedic consultation", "Fall prevention measures"]
             },
             PhysiologicalSystem.SKIN: {
                 RiskLevel.LOW: ["Maintain good skincare routine", "Use sun protection"],
                 RiskLevel.MODERATE: ["Monitor skin changes", "Consider dermatology consult"],
                 RiskLevel.HIGH: ["Schedule dermatological examination", "Document any lesions"],
-                RiskLevel.CRITICAL: ["Urgent dermatology referral", "Biopsy may be needed"]
+                RiskLevel.ACTION_REQUIRED: ["Urgent dermatology referral", "Biopsy may be needed"]
             },
             PhysiologicalSystem.EYES: {
                 RiskLevel.LOW: ["Regular eye exams", "Reduce screen time"],
                 RiskLevel.MODERATE: ["Consider ophthalmology visit", "Monitor vision changes"],
                 RiskLevel.HIGH: ["Eye examination recommended", "Test for underlying conditions"],
-                RiskLevel.CRITICAL: ["Urgent eye examination", "Watch for vision deterioration"]
+                RiskLevel.ACTION_REQUIRED: ["Urgent eye examination", "Watch for vision deterioration"]
             },
             PhysiologicalSystem.NASAL: {
                 RiskLevel.LOW: ["Practice breathing exercises", "Maintain indoor air quality"],
                 RiskLevel.MODERATE: ["Monitor breathing patterns", "Consider allergy testing"],
                 RiskLevel.HIGH: ["Pulmonary function testing", "ENT evaluation"],
-                RiskLevel.CRITICAL: ["Urgent respiratory assessment", "Monitor for breathing difficulty"]
+                RiskLevel.ACTION_REQUIRED: ["Urgent respiratory assessment", "Monitor for breathing difficulty"]
             },
             PhysiologicalSystem.REPRODUCTIVE: {
                 RiskLevel.LOW: ["Maintain healthy lifestyle", "Regular health screenings"],
                 RiskLevel.MODERATE: ["Monitor stress levels", "Consider hormonal evaluation"],
                 RiskLevel.HIGH: ["Endocrine evaluation recommended", "Lifestyle modifications"],
-                RiskLevel.CRITICAL: ["Specialist consultation needed", "Comprehensive hormonal workup"]
+                RiskLevel.ACTION_REQUIRED: ["Specialist consultation needed", "Comprehensive hormonal workup"]
             }
         }
     

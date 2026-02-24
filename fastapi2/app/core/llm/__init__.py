@@ -1,7 +1,7 @@
 """
 LLM Interpretation Module
 
-Uses Gemini 1.5 Flash to explain already-computed risk assessments.
+Uses Gemini 2.5/3.0 Flash to explain already-computed risk assessments.
 LLM is NON-DECISIONAL - it explains, does NOT diagnose.
 
 ARCHITECTURE CONSTRAINTS:

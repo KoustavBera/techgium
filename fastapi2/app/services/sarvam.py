@@ -151,7 +151,7 @@ class SarvamAIService:
             "target_language_code": t_lang,
             "speaker_gender": "Female",
             "mode": "formal",
-            "model": "sarvam-translate"
+            "model": "sarvam-translate:v1"
         }
 
         try:

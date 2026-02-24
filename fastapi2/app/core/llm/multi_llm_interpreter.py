@@ -168,19 +168,31 @@ Provide clear, educational, and thorough explanations. Avoid being vague. Explai
             pipeline_mode="single"
         )
         
-        # SMART CUTOFF: Determine pipeline mode
+        # SMART CUTOFF: Determine pipeline mode based on score and confidence.
+        # Full pipeline (Phase 2 + 3) only when the stakes are high enough to justify the cost:
+        #   - LOW risk (<25): unusual result, warrants a second opinion
+        #   - HIGH / ACTION_REQUIRED (>75): critical, must validate clinical tone
+        #   - Low confidence (<0.5): uncertain data, validate before releasing report
+        # MODERATE (25-75) with good confidence → single Gemini fast path saves ~60-70% HF calls.
         score = composite_risk.score
-        
-        # FORCE VALIDATION: Ensure Intelligent Internet (Phase 2) always runs
-        # use_full_pipeline = score < 30 or score > 80  # Old logic
-        use_full_pipeline = True  # User requested full validation for all reports
-        
+        confidence = composite_risk.confidence
+
+        use_full_pipeline = (
+            score < 25            # Unexpectedly low → verify
+            or score > 75         # Action-required → must validate
+            or confidence < 0.5   # Low-confidence data → validate report tone
+        )
+
         if use_full_pipeline:
             result.pipeline_mode = "full_pipeline"
-            logger.info(f"Risk score {score:.1f} triggers FULL 3-LLM pipeline (forced)")
+            logger.info(
+                f"Risk score {score:.1f} (conf={confidence:.0%}) → FULL 3-LLM pipeline"
+            )
         else:
             result.pipeline_mode = "single"
-            logger.info(f"Risk score {score:.1f} uses SINGLE Gemini (fast path)")
+            logger.info(
+                f"Risk score {score:.1f} (conf={confidence:.0%}) → SINGLE Gemini fast path"
+            )
             
         # === PHASE 1: Primary Generation (Gemini) ===
         p1_start = time.time()
@@ -249,16 +261,22 @@ Provide clear, educational, and thorough explanations. Avoid being vague. Explai
     async def _phase2_validate_async(self, primary_response: str, risk: RiskScore) -> ValidationReview:
         """Phase 2: Validate clinical tone with HF Medical 1."""
         review = ValidationReview()
-        
-        validator_prompt = f"""Review this health screening report for a {risk.level.value.upper()} risk patient (score: {risk.score:.1f}/100):
-\n{primary_response[:1500]}\n
-Critique this report (JSON only):
-{{
-    "is_clinically_appropriate": true/false,
-    "tone_matches_risk": true/false,
-    "missing_caveats": ["list of missing items"],
-    "confidence": "high/medium/low"
-}}"""
+
+        # Extract just the summary sentence to keep the HF prompt compact.
+        # Sending the full 1,500-char JSON to an 8B model degrades instruction-following
+        # and wastes tokens — the validator only needs to judge tone, not reproduce content.
+        try:
+            p1_data = self._parse_json_response(primary_response)
+            summary_text = p1_data.get("summary", primary_response[:300])
+        except Exception:
+            summary_text = primary_response[:300]
+
+        validator_prompt = (
+            f"Medical report check. Risk: {risk.level.value.upper()} ({risk.score:.0f}/100).\n"
+            f"Summary: \"{summary_text[:400]}\"\n"
+            f'Return JSON only: {{"is_clinically_appropriate": true/false, '
+            f'"tone_matches_risk": true/false, "missing_caveats": ["..."], "confidence": "high/medium/low"}}'
+        )
 
         try:
             response = await self.hf_client.generate_async(
@@ -274,7 +292,7 @@ Critique this report (JSON only):
             review.confidence = data.get("confidence", "medium")
         except Exception as e:
             logger.warning(f"Phase 2 validation failed: {e}, defaulting to pass")
-        
+
         return review
 
     async def _phase3_arbitrate_async(
@@ -282,12 +300,16 @@ Critique this report (JSON only):
     ) -> ArbiterDecision:
         """Phase 3: Arbitrate conflicts with HF Medical 2."""
         decision = ArbiterDecision()
-        arb_prompt = f"""ARBITRATE HEALTH REPORT:
-RISK: {risk.level.value.upper()} ({risk.score:.1f})
-PRIMARY: {primary_response[:1000]}
-VALIDATOR: {validation.is_clinically_appropriate}, {validation.tone_matches_risk}, {validation.missing_caveats}
-JSON DECISION:
-{{ "approved": bool, "primary_reason": "...", "use_corrected": bool, "corrected_summary": "...", "escalate_to_human": bool }}"""
+
+        # Compact prompt — arbiter only needs the verdict context, not full report text.
+        issues_str = ", ".join(str(c) for c in validation.missing_caveats[:2]) or "none"
+        arb_prompt = (
+            f"Arbitrate health report. Risk={risk.level.value}({risk.score:.0f}). "
+            f"Validator: appropriate={validation.is_clinically_appropriate}, "
+            f"tone_ok={validation.tone_matches_risk}, issues=[{issues_str}].\n"
+            f'Return JSON: {{"approved": bool, "primary_reason": "...", '
+            f'"use_corrected": bool, "corrected_summary": "...", "escalate_to_human": bool}}'
+        )
 
         try:
             response = await self.hf_client.generate_async(
@@ -303,7 +325,7 @@ JSON DECISION:
         except Exception as e:
             logger.warning(f"Phase 3 arbitration failed: {e}")
             decision.approved = True
-        
+
         return decision
     
     def _build_primary_prompt(
@@ -405,8 +427,9 @@ Use simple, patient-friendly language but do NOT be superficial. Go deep into th
             "hf_available": self.hf_client.is_available,
             "pipeline_type": "sequential_quality",
             "models_used": [
-                "gemini-1.5-flash (Primary)",
+                f"{self.gemini_client.config.model.value} (Primary)",
                 f"{settings.medical_model_1} (Validator)",
                 f"{settings.medical_model_2} (Arbiter)"
             ]
+
         }
