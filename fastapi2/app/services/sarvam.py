@@ -203,7 +203,6 @@ class SarvamAIService:
             "target_language_code": t_lang,
             "speaker": speaker,
             "pace": 1.0,
-            "speech_sample_rate": 8000,
             "enable_preprocessing": True,
             "model": "bulbul:v3"
         }
