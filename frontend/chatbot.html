@@ -14,6 +14,10 @@
             flex-direction: column;
             height: 100%;
             background: var(--md-sys-color-surface);
+            position: relative;
+            /* Contain absolute overlay */
+            overflow: hidden;
+            border-radius: var(--radius-large);
         }
 
         .chat-header {
@@ -240,6 +244,48 @@
             cursor: not-allowed;
         }
 
+        /* ── Mic Button ── */
+        .mic-button {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            background: var(--md-sys-color-surface-container-high);
+            color: var(--md-sys-color-on-surface-variant);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .mic-button:hover {
+            background: var(--md-sys-color-secondary-container);
+            color: var(--md-sys-color-on-secondary-container);
+        }
+
+        .mic-button.listening {
+            background: #c0392b;
+            color: #fff;
+            animation: mic-pulse 1.2s infinite;
+        }
+
+        @keyframes mic-pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.5);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(192, 57, 43, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(192, 57, 43, 0);
+            }
+        }
+
         .connection-status {
             padding: 8px 16px;
             background: var(--md-sys-color-success-container);
@@ -394,7 +440,7 @@
             align-items: center;
             gap: 6px;
         }
-        
+
         .sidebar-citation-title {
             font-size: 15px;
             font-weight: 500;
@@ -409,7 +455,100 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-    </style>
+
+        /* Language Overlay Styles - Material 3 Tonal Surface */
+        .lang-overlay {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            background-color: rgba(253, 251, 255, 0.9) !important;
+            background: rgba(253, 251, 255, 0.95) !important;
+            backdrop-filter: blur(12px);
+            z-index: 50 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: var(--radius-large);
+        }
+
+        .lang-overlay.hidden {
+            display: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transform: scale(1.05);
+        }
+
+        .lang-title {
+            font-size: 28px;
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface, #1f1f1f);
+            margin-bottom: 8px;
+            text-align: center;
+            letter-spacing: -0.5px;
+        }
+
+        .lang-subtitle {
+            font-size: 14px;
+            color: var(--md-sys-color-on-surface-variant, #44474f);
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .lang-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            max-width: 520px;
+            width: 90%;
+            padding: 10px;
+        }
+
+        .lang-card {
+            background: var(--md-sys-color-surface-container-low, #ffffff);
+            border: 1px solid var(--md-sys-color-outline-variant, #c4c6cf);
+            border-radius: var(--radius-medium, 16px);
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .lang-card:hover {
+            border-color: var(--md-sys-color-primary, #0b57d0);
+            background: var(--md-sys-color-primary-container, #d3e3fd);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(11, 87, 208, 0.15);
+        }
+
+        .lang-native {
+            font-size: 22px;
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface, #1f1f1f);
+        }
+
+        .lang-english {
+            font-size: 12px;
+            color: var(--md-sys-color-on-surface-variant, #44474f);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Translated message style */
+        .message-translated {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--md-sys-color-outline-variant);
+            font-weight: 500;
+        }
     </style>
 </head>
 
@@ -424,7 +563,7 @@
                 <span class="nav-icon">🏠</span>
                 <span class="nav-text">Home</span>
             </a>
-            <a href="old_index.html" class="nav-item">
+            <a href="screening.html" class="nav-item">
                 <span class="nav-icon">🩺</span>
                 <span class="nav-text">Screening</span>
             </a>
@@ -441,6 +580,31 @@
     <!-- Main Content -->
     <main class="main-content">
         <div class="chatbot-container">
+            <!-- Language Selection Overlay -->
+            <div class="lang-overlay" id="langOverlay">
+                <h1 class="lang-title">Welcome to Chiranjeevi</h1>
+                <p class="lang-subtitle">Please select your preferred language<br>कृपया अपनी पसंदीदा भाषा चुनें</p>
+
+                <div class="lang-grid">
+                    <div class="lang-card" onclick="selectLanguage('en-IN')">
+                        <span class="lang-native">English</span>
+                        <span class="lang-english">English</span>
+                    </div>
+                    <div class="lang-card" onclick="selectLanguage('hi-IN')">
+                        <span class="lang-native">हिंदी</span>
+                        <span class="lang-english">Hindi</span>
+                    </div>
+                    <div class="lang-card" onclick="selectLanguage('bn-IN')">
+                        <span class="lang-native">বাংলা</span>
+                        <span class="lang-english">Bengali</span>
+                    </div>
+                    <div class="lang-card" onclick="selectLanguage('kn-IN')">
+                        <span class="lang-native">ಕನ್ನಡ</span>
+                        <span class="lang-english">Kannada</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Header -->
             <div class="chat-header">
                 <div>
@@ -449,6 +613,7 @@
                 </div>
                 <div class="header-controls">
                     <div class="connection-status" id="connectionStatus">Connecting...</div>
+                    <div class="language-toggle active" id="currentLangPill">English</div>
                 </div>
             </div>
 
@@ -479,6 +644,7 @@
             <!-- Input Area -->
             <div class="chat-input-container">
                 <textarea class="chat-input" id="chatInput" placeholder="Type your message..." rows="1"></textarea>
+                <button class="mic-button" id="micButton" title="Speak your message">🎙️</button>
                 <button class="send-button" id="sendButton">➤</button>
             </div>
         </div>
@@ -501,10 +667,31 @@
     <script>
         // FastAPI Agent Connection (SSE Streaming)
         const API_BASE = 'http://localhost:8000';
-        let currentLanguage = 'en';
+        let currentLanguage = 'en-IN'; // Default
         let currentMode = 'general';
         let isProcessing = false;
         let currentMessageDiv = null;
+
+        // Audio playback
+        const audioPlayer = new Audio();
+
+        function selectLanguage(langCode) {
+            currentLanguage = langCode;
+            document.getElementById('langOverlay').classList.add('hidden');
+
+            const langNames = {
+                'en-IN': 'English',
+                'hi-IN': 'हिंदी (Hindi)',
+                'bn-IN': 'বাংলা (Bengali)',
+                'kn-IN': 'ಕನ್ನಡ (Kannada)'
+            };
+            document.getElementById('currentLangPill').textContent = langNames[langCode];
+
+            // Add a welcome message in the new language if not English
+            if (langCode !== 'en-IN') {
+                addMessage('You have selected ' + langNames[langCode] + '. I will now interact in your language.', 'assistant');
+            }
+        }
 
         // DOM Elements
         const chatDisplay = document.getElementById('chatDisplay');
@@ -514,6 +701,7 @@
         const emergencyAlert = document.getElementById('emergencyAlert');
         const emergencyText = document.getElementById('emergencyText');
         const connectionStatus = document.getElementById('connectionStatus');
+
         const sourcesSidebar = document.getElementById('sourcesSidebar');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
         const sidebarContent = document.getElementById('sidebarContent');
@@ -602,11 +790,47 @@
 
         function updateMessageContent(messageDiv, text, isComplete = false) {
             const content = messageDiv.querySelector('.message-content');
+
+            // If we have a translated part, keep it. Otherwise just update the main html.
+            const existingTranslated = content.querySelector('.message-translated');
+
             if (isComplete) {
-                content.innerHTML = marked.parse(text);
+                // If it's pure English (no translation expected yet)
+                if (!existingTranslated) {
+                    content.innerHTML = marked.parse(text);
+                } else {
+                    // Update only the English part (the top part), keep translation
+                    // This scenario is rare but protects the DOM if tokens arrive late
+                    const EnglishHTML = marked.parse(text);
+                    content.innerHTML = EnglishHTML;
+                    content.appendChild(existingTranslated);
+                }
             } else {
-                content.textContent = text;
+                if (!existingTranslated) {
+                    content.textContent = text;
+                }
             }
+            chatDisplay.scrollTop = chatDisplay.scrollHeight;
+        }
+
+        function applyFinalTranslation(messageDiv, translatedText, audioBase64) {
+            const content = messageDiv.querySelector('.message-content');
+
+            if (currentLanguage === 'en-IN') {
+                // English session: just render the final markdown (streamed text was plain text)
+                content.innerHTML = marked.parse(translatedText);
+            } else {
+                // Non-English session: REPLACE the raw English streamed tokens entirely 
+                // with the final translated text. This eliminates the duplicate text issue.
+                content.innerHTML = marked.parse(translatedText);
+            }
+
+            // Play TTS Audio
+            if (audioBase64) {
+                audioPlayer.src = 'data:audio/wav;base64,' + audioBase64;
+                audioPlayer.play().catch(e => console.log("Audio play failed:", e));
+            }
+
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
         }
 
@@ -635,7 +859,8 @@
                     },
                     body: JSON.stringify({
                         query: text,
-                        patient_id: 'WEB_USER'
+                        patient_id: 'WEB_USER',
+                        language: currentLanguage
                     }),
                 });
 
@@ -685,6 +910,15 @@
                                     // Accumulate and display token
                                     accumulatedResponse += data.token;
                                     updateMessageContent(currentMessageDiv, accumulatedResponse, false);
+
+                                } else if (data.type === 'final_translated') {
+                                    // Received the final payload from Sarvam Translate & TTS
+                                    if (currentMessageDiv) {
+                                        // First ensure the english stream is rendered as markdown
+                                        updateMessageContent(currentMessageDiv, accumulatedResponse, true);
+                                        // Then append translation and play audio
+                                        applyFinalTranslation(currentMessageDiv, data.text, data.audio_base64);
+                                    }
                                 }
                             } catch (e) {
                                 // Ignore parse errors for incomplete chunks
@@ -814,6 +1048,72 @@
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
+
+        // ── Browser Speech-to-Text (Web Speech API) ───────────────────────────
+        // Uses the browser's native STT engine — 100% free, zero backend changes.
+        // recognition.lang is set to the user's session language for accurate
+        // multilingual transcription (e.g. bn-IN, hi-IN, kn-IN).
+        const micButton = document.getElementById('micButton');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            // Browser doesn't support Web Speech API (e.g. Firefox without flag)
+            micButton.title = 'Speech recognition not supported in this browser. Please use Chrome or Edge.';
+            micButton.style.opacity = '0.4';
+            micButton.style.cursor = 'not-allowed';
+        } else {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;       // Single utterance per click
+            recognition.interimResults = false;   // Only return final transcripts
+            recognition.maxAlternatives = 1;
+
+            let isListening = false;
+
+            micButton.addEventListener('click', () => {
+                if (isListening) {
+                    recognition.stop();
+                    return;
+                }
+                // Dynamically set language to match user's session language
+                recognition.lang = currentLanguage;  // e.g. 'bn-IN', 'hi-IN', 'en-IN'
+                recognition.start();
+            });
+
+            recognition.onstart = () => {
+                isListening = true;
+                micButton.classList.add('listening');
+                micButton.title = 'Listening... Click to stop';
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                // Append to existing text (supports multi-word sentences)
+                chatInput.value = (chatInput.value + ' ' + transcript).trim();
+                // Trigger auto-resize
+                chatInput.dispatchEvent(new Event('input'));
+                chatInput.focus();
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                micButton.classList.remove('listening');
+                micButton.title = 'Speak your message';
+            };
+
+            recognition.onerror = (event) => {
+                isListening = false;
+                micButton.classList.remove('listening');
+                micButton.title = 'Speak your message';
+                if (event.error === 'not-allowed') {
+                    addMessage('⚠️ Microphone access was denied. Please allow microphone permissions in your browser settings.', 'assistant');
+                } else if (event.error === 'no-speech') {
+                    // Silent fail — user just didn't say anything
+                    console.log('STT: No speech detected.');
+                } else {
+                    console.warn('STT error:', event.error);
+                }
+            };
+        }
 
 
     </script>

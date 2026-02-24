@@ -35,6 +35,7 @@ class AgentState(TypedDict):
 
     messages: Annotated[List[BaseMessage], add_messages]
     query_type: str
+    smart_search_query: str
     research_data: str
     final_answer: str
     clarification_needed: bool

@@ -43,6 +43,12 @@ def route_after_clarification(state: AgentState) -> str:
     """Route after clarification: ask more questions or proceed to research."""
     if state.get("clarification_needed", False):
         return "end"  # Return clarification questions to user
+    return "research_evaluator_node"
+
+def route_after_evaluator(state: AgentState) -> str:
+    """Route after evaluator: do we need research or straight to answer?"""
+    if state.get("research_data") == "NO_RESEARCH_NEEDED":
+        return "answer_node"
     return "research_node"
 
 
@@ -54,14 +60,19 @@ def build_graph() -> StateGraph:
         START → router_node
                   ├──(medical)──→ clarification_node
                   │                 ├──(needs_clarification)──→ END (ask questions)
-                  │                 └──(sufficient_context)───→ research_node → answer_node → END
+                  │                 └──(sufficient)───────────→ research_evaluator_node
+                  │                                                 ├──(NO)──→ answer_node → END
+                  │                                                 └──(YES)─→ research_node → answer_node → END
                   └──(other)────→ answer_node → END
     """
+    from agent.nodes import research_evaluator_node
+    
     graph = StateGraph(AgentState)
 
     # Add nodes
     graph.add_node("router_node", router_node)
     graph.add_node("clarification_node", clarification_node)
+    graph.add_node("research_evaluator_node", research_evaluator_node)
     graph.add_node("research_node", research_node)
     graph.add_node("answer_node", answer_node)
 
@@ -80,6 +91,14 @@ def build_graph() -> StateGraph:
         route_after_clarification,
         {
             "end": END,
+            "research_evaluator_node": "research_evaluator_node",
+        },
+    )
+    graph.add_conditional_edges(
+        "research_evaluator_node",
+        route_after_evaluator,
+        {
+            "answer_node": "answer_node",
             "research_node": "research_node",
         },
     )
@@ -124,6 +143,15 @@ def load_model():
     set_llm(chat_model)
     set_clarification_llm(chat_model)
     
+    # Enable Semantic Caching
+    import langchain
+    from langchain_community.cache import SQLiteCache
+    try:
+        langchain.llm_cache = SQLiteCache(database_path=".langchain.db")
+        print("✅ SQLite Cache enabled!\n")
+    except Exception as e:
+        print(f"⚠️ Could not enable SQLite Cache: {e}\n")
+    
     return chat_model
 
 
@@ -164,15 +192,19 @@ def main():
 
         # Invoke the graph
         print()
-        result = app.invoke({
-            "messages": [HumanMessage(content=user_input)],
-            "query_type": "",
-            "research_data": "",
-            "final_answer": "",
-            "clarification_needed": False,
-            "clarification_count": 0,
-            "context_quality": 0.0,
-        })
+        result = app.invoke(
+            {
+                "messages": [HumanMessage(content=user_input)],
+                "query_type": "",
+                "smart_search_query": "",
+                "research_data": "",
+                "final_answer": "",
+                "clarification_needed": False,
+                "clarification_count": 0,
+                "context_quality": 0.0,
+            },
+            config={"configurable": {"thread_id": "cli-session"}},
+        )
 
         # Print the doctor's response
         answer = result.get("final_answer", "I apologize, I could not generate a response.")

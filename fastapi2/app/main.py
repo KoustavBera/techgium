@@ -67,6 +67,7 @@ class DoctorChatRequest(BaseModel):
     """Request for medical doctor chat interaction."""
     query: str
     patient_id: Optional[str] = "GUEST"
+    language: Optional[str] = "en-IN"  # Language code for Sarvam TTS/Translation
 
 # ---- Hardware Manager Singleton ----
 _hw_manager = HardwareManager()
@@ -154,6 +155,9 @@ _consensus = AgentConsensus()
 # ---- Multi-LLM Interpreter (Gemini + GPT-OSS + II-Medical) ----
 from app.core.llm.multi_llm_interpreter import MultiLLMInterpreter
 _multi_llm_interpreter = MultiLLMInterpreter()
+
+# ---- Sarvam AI Integration ----
+from app.services.sarvam import sarvam_service
 
 # ---- Unified Services ----
 _screening_service = ScreeningService(risk_engine=_risk_engine, interpreter=_multi_llm_interpreter)
@@ -604,66 +608,125 @@ async def doctor_chat(request: DoctorChatRequest):
 
     async def stream_generator():
         queue = asyncio.Queue()
-        tokens_emitted = False  # Track if answer_node streamed any tokens
-        
-        # Callback to put status events into the queue
+        tokens_emitted = False
+        accumulated_tokens = []  # Accumulate tokens server-side for post-processing
+
+        # ── Callbacks (run in the agent threadpool, signal via queue) ───────────
         def on_status(status_dict: dict):
-            # We use loop.call_soon_threadsafe because the agent runs in a threadpool
-            loop.call_soon_threadsafe(queue.put_nowait, {
-                "type": "status",
-                **status_dict
-            })
-        
-        # Callback to put tokens into the queue
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": "status", **status_dict})
+
         def on_token(token: str):
             nonlocal tokens_emitted
             tokens_emitted = True
-            # We use loop.call_soon_threadsafe because the agent runs in a threadpool
-            loop.call_soon_threadsafe(queue.put_nowait, {
-                "type": "token",
-                "token": token
-            })
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": "token", "token": token})
 
-        # Function to run the agent in a thread
-        def run_agent():
+        def run_agent(input_query: str):
             nonlocal tokens_emitted
             from agent.nodes import set_status_callback
             set_status_callback(on_status)
             set_token_callback(on_token)
             try:
                 result = app.state.medical_agent.invoke(
-                    {"messages": [HumanMessage(content=request.query)]},
+                    {"messages": [HumanMessage(content=input_query)]},
                     config={"configurable": {"thread_id": request.patient_id or "GUEST"}}
                 )
-                # If clarification path was taken (answer_node skipped),
-                # final_answer exists but was never streamed via on_token.
-                # Emit it now so the frontend receives the response.
                 final = result.get("final_answer", "")
                 if final and not tokens_emitted:
                     on_token(final)
+                loop.call_soon_threadsafe(queue.put_nowait, {
+                    "type": "_internal_done",
+                    "final_english": final
+                })
             except Exception as e:
                 logger.error(f"Agent error: {e}")
-                on_token(f"I'm sorry, I encountered an error processing your request. Please try again. 💙")
+                on_token("I'm sorry, I encountered an error. Please try again. 💙")
+                loop.call_soon_threadsafe(queue.put_nowait, {"type": "_internal_done", "final_english": ""})
             finally:
-                set_status_callback(None)  # Cleanup callback
-                set_token_callback(None)  # Cleanup callback
-                # Signal completion
-                loop.call_soon_threadsafe(queue.put_nowait, None)
+                set_status_callback(None)
+                set_token_callback(None)
 
         loop = asyncio.get_event_loop()
-        # Start agent in threadpool
-        agent_task = asyncio.create_task(run_in_threadpool(run_agent))
 
+        # ── Session language: what the user chose in the overlay ─────────────
+        # This is the language we ALWAYS respond in (outbound consistency).
+        session_lang = request.language or "en-IN"
+
+        # ── STEP 1: Smart Inbound Language Detection ─────────────────────────
+        # Detect what language the user actually typed THIS message.
+        # This is separate from session_lang — a Bengali user might type in English sometimes!
+        actual_query = request.query
+        if session_lang != "en-IN":
+            # Only worth detecting if session is non-English (saves API call for English sessions)
+            yield f"data: {json.dumps({'type': 'status', 'stage': 'thinking', 'message': '🔍 Detecting language...'})}\n\n"
+            detected_lang = await sarvam_service.detect_language(request.query)
+            logger.info(f"User typed in: {detected_lang} | Session lang: {session_lang}")
+
+            if detected_lang != "en-IN":
+                # User typed in a non-English language → translate their message to English for LLM
+                yield f"data: {json.dumps({'type': 'status', 'stage': 'thinking', 'message': '🌐 Translating your message...'})}\n\n"
+                actual_query = await sarvam_service.translate_text(
+                    text=request.query,
+                    source_lang=detected_lang,
+                    target_lang="en-IN"
+                )
+                logger.info(f"Translated inbound: '{request.query[:50]}...' → '{actual_query[:50]}...'")
+            else:
+                # User typed in English mid-session (code-switching) — no translation needed
+                logger.info("User typed in English (code-switch detected) — no inbound translation needed")
+
+        # ── STEP 2: Run LLM Agent in English ─────────────────────────────────
+        agent_task = asyncio.create_task(run_in_threadpool(run_agent, actual_query))
+
+        final_english_text = ""
         while True:
             event = await queue.get()
-            if event is None: # None is our end-of-stream signal
+            if event is None:
                 break
-            # Yield as Server-Sent Event (SSE)
+            if event.get("type") == "_internal_done":
+                final_english_text = event.get("final_english", "")
+                # Fallback: use accumulated streamed tokens if final_answer was empty
+                if not final_english_text and accumulated_tokens:
+                    final_english_text = "".join(accumulated_tokens)
+                break
+            if event.get("type") == "token":
+                accumulated_tokens.append(event.get("token", ""))
             yield f"data: {json.dumps(event)}\n\n"
-        
+
         await agent_task
 
+        # ── STEP 3: Consistent Outbound — always respond in session language ─
+        if not final_english_text:
+            return  # Nothing to translate
+
+        if session_lang != "en-IN":
+            # Always translate response to the user's chosen session language
+            yield f"data: {json.dumps({'type': 'status', 'stage': 'thinking', 'message': f'💬 Translating response to your language...'})}\n\n"
+
+            translated_text = await sarvam_service.translate_text(
+                text=final_english_text,
+                source_lang="en-IN",
+                target_lang=session_lang
+            )
+
+            # Generate TTS in session language with matching Indian voice
+            yield f"data: {json.dumps({'type': 'status', 'stage': 'thinking', 'message': '🎙️ Generating voice response...'})}\n\n"
+            audio_base64 = await sarvam_service.generate_tts(
+                text=translated_text,
+                target_lang=session_lang
+            )
+
+            yield f"data: {json.dumps({'type': 'final_translated', 'text': translated_text, 'audio_base64': audio_base64})}\n\n"
+
+        else:
+            # English session — generate English TTS and send
+            audio_base64 = await sarvam_service.generate_tts(
+                text=final_english_text,
+                target_lang="en-IN"
+            )
+            yield f"data: {json.dumps({'type': 'final_translated', 'text': final_english_text, 'audio_base64': audio_base64})}\n\n"
+
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
 
 
 # ---- Sensor Status & Live Camera Feed Endpoints ----

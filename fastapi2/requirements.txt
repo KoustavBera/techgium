@@ -121,3 +121,7 @@ xmltodict>=0.13.0
 arxiv>=2.1.0
 qrcode>=8.0
 pillow>=11.1.0
+
+# Multilingual Indian Language Support
+langdetect>=1.0.9  # Offline fallback for language detection (Sarvam /text-lid is primary)
+diskcache  # Fast disk-based persistent cache for Sarvam TTS and Translation

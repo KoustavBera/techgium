@@ -75,32 +75,29 @@ def _get_latest_query(state: AgentState) -> str:
 def router_node(state: AgentState) -> dict:
     """Classify the user query into MEDICAL, GREETING, or GENERAL.
 
-    Uses the LLM via LangChain interface.
-    Falls back to 'medical' if parsing fails (safe default).
+    Uses a fast semantic/regex router to avoid expensive LLM calls.
+    Falls back to 'medical' if unclassified (safe default).
     """
-    _emit_status("analyzing", "Analyzing your question")
+    _emit_status("analyzing", "Quickly analyzing your question")
     query = _get_latest_query(state)
-
-    prompt = ROUTER_PROMPT_TEMPLATE.format(query=query)
-
-    # Use messages for ChatHuggingFace
-    messages = [HumanMessage(content=prompt)]
-    response = _llm.invoke(messages)
-    raw = (response.content if hasattr(response, "content") else str(response)).strip().upper()
-
-    # Extract the category keyword
-    if "GREETING" in raw:
+    q_lower = query.lower().strip()
+    
+    # Fast Regex / Heuristics for common greetings
+    greeting_pattern = r'^(hi|hello|hey|greetings|good morning|good evening|good afternoon|namaste|sup)(?![a-z])'
+    if re.search(greeting_pattern, q_lower) and len(q_lower.split()) <= 4:
         category = "greeting"
-    elif "GENERAL" in raw:
+    # General queries heuristics (thanks etc.)
+    elif re.search(r'^(thanks|thank you|ok|okay|got it|makes sense|cool|awesome|bye|goodbye|cya)', q_lower) and len(q_lower.split()) <= 6:
+        category = "general"
+    # Emojis or very short non-medical
+    elif len(q_lower) < 3 and not q_lower.isalpha():
         category = "general"
     else:
         category = "medical"     # safe default
 
-    print(f"  🔀 Router Raw Output: {raw}")
-    print(f"  🔀 Router Classified: {category.upper()}")
+    print(f"  🔀 Router Classified (Fast): {category.upper()}")
     
     from agent.config import TAVILY_API_KEY
-    print(f"  🔑 Tavily Key Present: {bool(TAVILY_API_KEY)}")
     if not TAVILY_API_KEY:
         print("  ⚠️  WARNING: TAVILY_API_KEY is missing/empty!")
 
@@ -108,7 +105,35 @@ def router_node(state: AgentState) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Node 2: Researcher
+# Node 2a: Research Evaluator
+# ═══════════════════════════════════════════════════════════════════════
+
+def research_evaluator_node(state: AgentState) -> dict:
+    """Evaluate if research is needed and rewrite the query if so."""
+    _emit_status("analyzing", "Deciding if medical literature search is needed")
+    query = _get_latest_query(state)
+    q_lower = query.lower().strip()
+    
+    # Ask LLM if research is needed
+    prompt = f"Based on the patient's latest query, do you need to search external medical literature/PubMed to give an accurate, up-to-date answer? Reply ONLY with 'YES' or 'NO'.\n\nPatient Query: {query}"
+    response = _llm.invoke([HumanMessage(content=prompt)])
+    ans = (response.content if hasattr(response, "content") else str(response)).strip().upper()
+    
+    if "YES" in ans:
+        _emit_status("analyzing", "Generating optimized search query")
+        rewrite_prompt = f"Rewrite the patient's context and latest query into a concise search engine string (e.g., 'Metformin side effects clinical trials') to find information. Output ONLY the search string.\n\nQuery: {query}\n\nSearch String:"
+        rewrite_resp = _llm.invoke([HumanMessage(content=rewrite_prompt)])
+        search_query = (rewrite_resp.content if hasattr(rewrite_resp, "content") else str(rewrite_resp)).strip()
+        search_query = search_query.strip('"').strip("'")
+        print(f"  🧠 Tool Eval: YES -> Optimized Query: '{search_query}'")
+        return {"smart_search_query": search_query}
+    else:
+        print("  ⏩ Tool Eval: NO -> Skipping research")
+        return {"research_data": "NO_RESEARCH_NEEDED"}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Node 2b: Researcher
 # ═══════════════════════════════════════════════════════════════════════
 
 def research_node(state: AgentState) -> dict:
@@ -117,7 +142,9 @@ def research_node(state: AgentState) -> dict:
     Aggregates results into a single research_data string.
     """
     _emit_status("searching_web", "Searching the web")
-    query = _get_latest_query(state)
+    query = state.get("smart_search_query")
+    if not query:
+        query = _get_latest_query(state)
     print(f"  🔍 Researching: {query[:60]}...")
 
     results: dict[str, str] = {}
@@ -191,7 +218,7 @@ def answer_node(state: AgentState) -> dict:
 
     # Build the system message with research context
     system_text = SYSTEM_PROMPT
-    if research and research != "No research data found.":
+    if research and research not in ["No research data found.", "NO_RESEARCH_NEEDED"]:
         system_text += (
             "\n\nIMPORTANT: You have been given research evidence below. "
             "You MUST reference and cite this evidence in your response. "
