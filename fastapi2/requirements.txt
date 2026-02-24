@@ -1,77 +1,11 @@
-absl-py==2.4.0
-aiofiles==25.1.0
-aiohappyeyeballs==2.6.1
-aiohttp==3.13.3
-aiosignal==1.4.0
-annotated-doc==0.0.4
-annotated-types==0.7.0
-anyio==4.12.1
-arxiv==2.4.0
-attrs==25.4.0
-bcrypt==5.0.0
-brotli==1.2.0
-build==1.4.0
-certifi==2026.1.4
-cffi==2.0.0
-charset-normalizer==3.4.4
-click==8.3.1
-colorama==0.4.6
-contourpy==1.3.3
-coverage==7.13.2
-cryptography==46.0.4
-cssselect2==0.8.0
-cycler==0.12.1
-dataclasses-json==0.6.7
-diskcache==5.6.3
-distro==1.9.0
-ecdsa==0.19.1
-fastapi==0.128.0
-feedparser==6.0.12
-filelock==3.20.3
-filetype==1.2.0
-flatbuffers==25.12.19
-fonttools==4.61.1
-frozenlist==1.8.0
-fsspec==2026.1.0
-google-auth==2.48.0
-google-genai==1.61.0
-greenlet==3.3.1
-h11==0.16.0
-hf-xet==1.2.0
-httpcore==1.0.9
-httptools==0.7.1
-httpx==0.28.1
-httpx-sse==0.4.3
-huggingface_hub==0.36.2
-idna==3.11
-ImageIO==2.37.2
-iniconfig==2.3.0
-jax==0.7.1
-jaxlib==0.7.1
-Jinja2==3.1.6
-joblib==1.5.3
-jsonpatch==1.33
-jsonpointer==3.0.0
-kiwisolver==1.4.9
-langchain==1.2.8
-langchain-classic==1.0.1
-langchain-community==0.4.1
-langchain-core==1.2.13
-langchain-google-genai==4.2.0
-langchain-huggingface==1.2.0
-langchain-text-splitters==1.1.0
-langgraph==1.0.8
-langgraph-checkpoint==4.0.0
-langgraph-prebuilt==1.0.7
-langgraph-sdk==0.3.6
-langsmith==0.7.3
-lazy_loader==0.4
-llama_cpp_python==0.3.16
-markdown-it-py==4.0.0
-MarkupSafe==3.0.3
-marshmallow==3.26.2
-matplotlib==3.10.8
-mdurl==0.1.2
+--extra-index-url https://download.pytorch.org/whl/cu118
+# Core dependencies
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+
+# Computer vision
+opencv-python>=4.10.0
 mediapipe==0.10.18
 scikit-image>=0.24.0
 
@@ -92,8 +26,7 @@ requests>=2.32.0  # For HuggingFace API calls
 
 # Report generation
 reportlab>=4.2.0
-jinja2>=3.1.4
-weasyprint>=62.0
+
 
 # API & Auth
 pydantic>=2.10.0

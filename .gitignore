@@ -1,6 +1,7 @@
 # Virtual environments
 venv/
 venv2/
+venv3/
 fine_tune/venv2/
 
 # Python cache

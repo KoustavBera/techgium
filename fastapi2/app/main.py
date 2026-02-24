@@ -26,6 +26,9 @@ from langchain_core.messages import HumanMessage
 import qrcode
 import socket
 import io
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Medical Agent Imports
 try:
@@ -40,7 +43,6 @@ except ImportError:
 # Load environment variables
 load_dotenv()
 import uuid
-import logging
 
 from app.core.extraction.base import PhysiologicalSystem
 from app.core.inference.risk_engine import RiskEngine, RiskScore, RiskLevel, SystemRiskResult
@@ -49,8 +51,6 @@ from app.core.agents.medical_agents import AgentConsensus, ConsensusResult
 from app.core.reports import PatientReportGenerator, DoctorReportGenerator
 from app.core.hardware.manager import HardwareManager, HardwareConfig
 from app.services.screening import ScreeningService
-
-logger = logging.getLogger(__name__)
 
 from app.models.screening import (
     BiomarkerInput,
