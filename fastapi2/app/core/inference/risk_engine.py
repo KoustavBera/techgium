@@ -217,6 +217,10 @@ class RiskEngine:
                 "regional_flow_variability": 0.15,
                 "thermoregulation_proxy": 0.15,
             },
+            PhysiologicalSystem.VISUAL_DISEASE: {
+                # All visual AI biomarkers share the same weight.
+                # Unknown names will also fall back to 0.1, which is fine.
+            },
         }
     
     def compute_risk(self, biomarker_set: BiomarkerSet) -> SystemRiskResult:
@@ -595,12 +599,13 @@ class CompositeRiskCalculator:
             PhysiologicalSystem.EYES: 0.8,
             PhysiologicalSystem.NASAL: 0.8,
             PhysiologicalSystem.REPRODUCTIVE: 0.7,
+            PhysiologicalSystem.VISUAL_DISEASE: 0.5,  # Experimental — informational only
         }
         
         # Phase 2: Experimental systems with reduced impact
         self.experimental_systems = {
             PhysiologicalSystem.NASAL,
-
+            PhysiologicalSystem.VISUAL_DISEASE,  # API-based visual classification
         }
     
     def compute_composite_risk(

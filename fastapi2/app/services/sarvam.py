@@ -2,7 +2,7 @@ import os
 import httpx
 import logging
 import hashlib
-from typing import Optional
+from typing import Optional, List
 from diskcache import Cache
 
 logger = logging.getLogger(__name__)
@@ -56,14 +56,57 @@ SPEAKERS_BY_LANG = {
     "od-IN": "priya",    # Odia (fallback)
 }
 
+# Sarvam translate API max character limit per request
+# sarvam-translate:v1 supports up to 2000 chars; we stay well under to be safe
+_TRANSLATE_CHUNK_SIZE = 1800
+
+
+def _split_into_chunks(text: str, max_chars: int = _TRANSLATE_CHUNK_SIZE) -> List[str]:
+    """
+    Split text into chunks that respect the Sarvam API character limit.
+    Tries to split on paragraph/sentence boundaries to preserve meaning.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks: List[str] = []
+    # Try paragraph splits first
+    paragraphs = text.split("\n\n")
+    current_chunk = ""
+
+    for para in paragraphs:
+        # If a single paragraph exceeds max, split by sentences
+        if len(para) > max_chars:
+            sentences = para.replace(". ", ".\n").split("\n")
+            for sent in sentences:
+                if len(current_chunk) + len(sent) + 2 > max_chars:
+                    if current_chunk.strip():
+                        chunks.append(current_chunk.strip())
+                    current_chunk = sent
+                else:
+                    current_chunk = (current_chunk + " " + sent).strip() if current_chunk else sent
+        else:
+            if len(current_chunk) + len(para) + 2 > max_chars:
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+                current_chunk = para
+            else:
+                current_chunk = (current_chunk + "\n\n" + para).strip() if current_chunk else para
+
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+
+    return chunks if chunks else [text]
+
 
 class SarvamAIService:
     """
     Service wrapper for Sarvam AI APIs.
-    
+
     Implements the Smart Indian Language Pipeline:
     1. detect_language()  — Uses Sarvam /text-lid to detect what language user typed
     2. translate_text()   — Bidirectional translation (any Indian lang ↔ English)
+                            Automatically chunks long text to stay within API limits.
     3. generate_tts()     — bulbul:v3 TTS with language-specific Indian voice
     """
 
@@ -77,7 +120,7 @@ class SarvamAIService:
     async def detect_language(self, text: str) -> str:
         """
         Detects the language of the input text.
-        OPTIMIZED: Uses local `langdetect` first (Zero Cost). 
+        OPTIMIZED: Uses local `langdetect` first (Zero Cost).
         Falls back to Sarvam /text-lid only if confidence is low.
         """
         if not text or not text.strip():
@@ -89,8 +132,9 @@ class SarvamAIService:
             langs = detect_langs(text)
             if langs:
                 best_match = langs[0]
-                # High confidence threshold
-                if best_match.prob > 0.8:
+                # Lowered threshold slightly — short non-English texts often have
+                # lower confidence but are still correct. Use 0.6 instead of 0.8.
+                if best_match.prob > 0.6:
                     detected = LANG_CODE_MAP.get(best_match.lang, "en-IN")
                     logger.info(f"langdetect primary succeeded: {best_match.lang} (conf: {best_match.prob:.2f}) → {detected}")
                     return detected
@@ -122,9 +166,74 @@ class SarvamAIService:
 
         return "en-IN"  # Default fallback
 
+    async def _translate_single_chunk(
+        self,
+        client: httpx.AsyncClient,
+        text: str,
+        s_lang: str,
+        t_lang: str,
+        cache_key: str,
+    ) -> str:
+        """
+        Translate a single chunk of text (must be within API character limits).
+        Returns translated text or original on failure.
+        """
+        payload = {
+            "input": text,
+            "source_language_code": s_lang,
+            "target_language_code": t_lang,
+            "speaker_gender": "Female",
+            "mode": "formal",
+            "model": "sarvam-translate:v1",
+        }
+
+        try:
+            response = await client.post(
+                f"{self.base_url}/translate",
+                json=payload,
+                headers={
+                    "api-subscription-key": self.api_key,
+                    "Content-Type": "application/json",
+                },
+                timeout=20.0,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                translated = data.get("translated_text", "").strip()
+                if not translated:
+                    logger.warning(f"Sarvam returned empty translated_text for chunk, using original.")
+                    return text
+                # Guard: Sarvam sometimes returns the input unchanged (silent failure)
+                if translated == text.strip():
+                    logger.warning(
+                        f"Sarvam returned TEXT UNCHANGED (silent failure). "
+                        f"source={s_lang}, target={t_lang}, len={len(text)}. "
+                        f"NOT caching — will retry on next request."
+                    )
+                    return text
+                # Cache this chunk's translation
+                cache.set(cache_key, translated, expire=86400 * 30)
+                logger.info(f"Sarvam translated chunk: {len(text)} → {len(translated)} chars ({s_lang}→{t_lang})")
+                return translated
+            else:
+                # Log the full error response for debugging
+                error_body = response.text
+                logger.error(
+                    f"Sarvam Translate error {response.status_code}: {error_body} "
+                    f"| source={s_lang}, target={t_lang}, len={len(text)}"
+                )
+                return text  # Fallback: return original chunk untranslated
+        except Exception as e:
+            logger.error(f"Sarvam Translate request failed: {e}")
+            return text
+
     async def translate_text(self, text: str, source_lang: str, target_lang: str) -> str:
         """
         Translates text via Sarvam /translate with Diskcache to eliminate redundant API cost.
+
+        Automatically splits text longer than 1800 characters into chunks so that
+        each API call stays within the sarvam-translate:v1 limit (2000 chars).
+        Translated chunks are rejoined with double newlines.
         """
         if not self.api_key or not text.strip():
             return text
@@ -135,51 +244,44 @@ class SarvamAIService:
         s_lang = SUPPORTED_LANGUAGES.get(source_lang)
         t_lang = SUPPORTED_LANGUAGES.get(target_lang)
         if not s_lang or not t_lang:
+            logger.warning(f"Unsupported language pair: {source_lang} → {target_lang}")
             return text
 
-        # Check Cache first
-        text_hash = hashlib.md5(text.encode()).hexdigest()
-        cache_key = f"trans_{s_lang}_{t_lang}_{text_hash}"
-        cached_val = cache.get(cache_key)
-        if cached_val:
-            logger.info(f"Translation CACHE HIT: {s_lang} → {t_lang}")
-            return cached_val
+        # Split into chunks that fit within the API limit
+        chunks = _split_into_chunks(text, _TRANSLATE_CHUNK_SIZE)
+        logger.info(
+            f"Translating {s_lang} → {t_lang}: {len(text)} chars, "
+            f"{len(chunks)} chunk(s)"
+        )
 
-        payload = {
-            "input": text,
-            "source_language_code": s_lang,
-            "target_language_code": t_lang,
-            "speaker_gender": "Female",
-            "mode": "formal",
-            "model": "sarvam-translate:v1"
-        }
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.base_url}/translate",
-                    json=payload,
-                    headers={
-                        "api-subscription-key": self.api_key,
-                        "Content-Type": "application/json"
-                    },
-                    timeout=15.0
-                )
-                if response.status_code == 200:
-                    translated = response.json().get("translated_text", text)
-                    # Cache result for 30 days
-                    cache.set(cache_key, translated, expire=86400 * 30)
-                    return translated
+        translated_chunks: List[str] = []
+        async with httpx.AsyncClient() as client:
+            for i, chunk in enumerate(chunks):
+                # Check cache per-chunk
+                text_hash = hashlib.md5(chunk.encode()).hexdigest()
+                cache_key = f"trans_{s_lang}_{t_lang}_{text_hash}"
+                cached_val = cache.get(cache_key)
+                if cached_val:
+                    logger.info(f"Translation CACHE HIT: chunk {i+1}/{len(chunks)}, {s_lang} → {t_lang}")
+                    translated_chunks.append(cached_val)
                 else:
-                    logger.error(f"Sarvam Translate error: {response.text}")
-                    return text
-        except Exception as e:
-            logger.error(f"Sarvam Translate request failed: {e}")
-            return text
+                    translated = await self._translate_single_chunk(
+                        client, chunk, s_lang, t_lang, cache_key
+                    )
+                    translated_chunks.append(translated)
+
+        # Rejoin all translated chunks
+        result = "\n\n".join(translated_chunks)
+        logger.info(
+            f"Translation complete: {len(text)} chars → {len(result)} chars "
+            f"({s_lang} → {t_lang})"
+        )
+        return result
 
     async def generate_tts(self, text: str, target_lang: str) -> Optional[str]:
         """
         Generates TTS audio via Sarvam bulbul:v3 with Diskcache to prevent huge repeated TTS costs.
+        Only uses the first 500 characters of text to avoid TTS length limits.
         """
         if not self.api_key or not text.strip():
             return None
@@ -190,8 +292,11 @@ class SarvamAIService:
 
         speaker = SPEAKERS_BY_LANG.get(target_lang, "priya")
 
+        # Truncate to first 500 chars for TTS (voice is a summary, not full content)
+        tts_text = text[:500].strip()
+
         # Check Cache first
-        text_hash = hashlib.md5(text.encode()).hexdigest()
+        text_hash = hashlib.md5(tts_text.encode()).hexdigest()
         cache_key = f"tts_{t_lang}_{speaker}_{text_hash}"
         cached_audio = cache.get(cache_key)
         if cached_audio:
@@ -199,7 +304,7 @@ class SarvamAIService:
             return cached_audio
 
         payload = {
-            "text": text,
+            "text": tts_text,
             "target_language_code": t_lang,
             "speaker": speaker,
             "pace": 1.0,

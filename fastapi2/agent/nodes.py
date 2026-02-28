@@ -19,6 +19,8 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from agent.config import (
     ROUTER_PROMPT_TEMPLATE,
     SYSTEM_PROMPT,
+    PATIENT_AWARE_ADDON,
+    BIOMARKER_KEYWORDS,
     MAX_TOKENS,
     TEMPERATURE,
     TOP_P,
@@ -72,20 +74,52 @@ def _get_latest_query(state: AgentState) -> str:
 # Node 1: Router
 # ═══════════════════════════════════════════════════════════════════════
 
-def router_node(state: AgentState) -> dict:
-    """Classify the user query into MEDICAL, GREETING, or GENERAL.
+# ─ Helpers ──────────────────────────────────────────────────────────────
 
-    Uses a fast semantic/regex router to avoid expensive LLM calls.
-    Falls back to 'medical' if unclassified (safe default).
+_HIGH_RISK_MARKERS = {"high", "action required", "action_required", "⚠️"}
+
+
+def _patient_has_flags(patient_context: str) -> bool:
+    """Return True if the screening context contains high/action-required findings."""
+    ctx_lower = patient_context.lower()
+    return any(marker in ctx_lower for marker in _HIGH_RISK_MARKERS)
+
+
+def _query_touches_biomarkers(query: str) -> bool:
+    """Return True if the user's query overlaps with any measured biomarker keyword."""
+    q_lower = query.lower()
+    return any(kw in q_lower for kw in BIOMARKER_KEYWORDS)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Node 1: Router
+# ═══════════════════════════════════════════════════════════════════════
+
+def router_node(state: AgentState) -> dict:
+    """Classify the user query into MEDICAL, GREETING, GENERAL, or PATIENT_BRIEFING.
+
+    The PATIENT_BRIEFING fast-path activates when:
+    - The query is a simple greeting (≤4 words)
+    - The patient has a recent screening AND it contains high-risk flags
+
+    This bypasses clarification + research entirely — the answer node
+    then opens with a personalised health summary with zero extra LLM calls.
     """
     _emit_status("analyzing", "Quickly analyzing your question")
     query = _get_latest_query(state)
     q_lower = query.lower().strip()
-    
+    patient_ctx = state.get("patient_context", "")
+
     # Fast Regex / Heuristics for common greetings
     greeting_pattern = r'^(hi|hello|hey|greetings|good morning|good evening|good afternoon|namaste|sup)(?![a-z])'
-    if re.search(greeting_pattern, q_lower) and len(q_lower.split()) <= 4:
-        category = "greeting"
+    is_greeting = bool(re.search(greeting_pattern, q_lower)) and len(q_lower.split()) <= 4
+
+    if is_greeting:
+        if patient_ctx and _patient_has_flags(patient_ctx):
+            # ⚡ Fast-path: patient has abnormal findings → proactive briefing
+            category = "patient_briefing"
+        else:
+            category = "greeting"
     # General queries heuristics (thanks etc.)
     elif re.search(r'^(thanks|thank you|ok|okay|got it|makes sense|cool|awesome|bye|goodbye|cya)', q_lower) and len(q_lower.split()) <= 6:
         category = "general"
@@ -95,8 +129,8 @@ def router_node(state: AgentState) -> dict:
     else:
         category = "medical"     # safe default
 
-    print(f"  🔀 Router Classified (Fast): {category.upper()}")
-    
+    print(f"  🔀 Router Classified: {category.upper()}")
+
     from agent.config import TAVILY_API_KEY
     if not TAVILY_API_KEY:
         print("  ⚠️  WARNING: TAVILY_API_KEY is missing/empty!")
@@ -112,16 +146,34 @@ def research_evaluator_node(state: AgentState) -> dict:
     """Evaluate if research is needed and rewrite the query if so."""
     _emit_status("analyzing", "Deciding if medical literature search is needed")
     query = _get_latest_query(state)
-    q_lower = query.lower().strip()
-    
-    # Ask LLM if research is needed
-    prompt = f"Based on the patient's latest query, do you need to search external medical literature/PubMed to give an accurate, up-to-date answer? Reply ONLY with 'YES' or 'NO'.\n\nPatient Query: {query}"
+    patient_ctx = state.get("patient_context", "")
+
+    # Build context-aware prompt. If we already have the patient's screening data,
+    # the LLM should know so it doesn't unnecessarily search external literature
+    # for questions the patient data already answers (e.g., "what is my heart rate?").
+    ctx_hint = ""
+    if patient_ctx:
+        ctx_hint = (
+            f"\n\nNote: The patient's latest health screening data is already available:\n"
+            f"{patient_ctx}\n"
+            "If the query can be answered from this screening data alone, reply 'NO'."
+        )
+
+    prompt = (
+        f"Based on the patient's latest query, do you need to search external medical "
+        f"literature/PubMed to give an accurate, up-to-date answer? "
+        f"Reply ONLY with 'YES' or 'NO'.\n\nPatient Query: {query}{ctx_hint}"
+    )
     response = _llm.invoke([HumanMessage(content=prompt)])
     ans = (response.content if hasattr(response, "content") else str(response)).strip().upper()
-    
+
     if "YES" in ans:
         _emit_status("analyzing", "Generating optimized search query")
-        rewrite_prompt = f"Rewrite the patient's context and latest query into a concise search engine string (e.g., 'Metformin side effects clinical trials') to find information. Output ONLY the search string.\n\nQuery: {query}\n\nSearch String:"
+        rewrite_prompt = (
+            f"Rewrite the patient's context and latest query into a concise search engine "
+            f"string (e.g., 'Metformin side effects clinical trials') to find information. "
+            f"Output ONLY the search string.\n\nQuery: {query}\n\nSearch String:"
+        )
         rewrite_resp = _llm.invoke([HumanMessage(content=rewrite_prompt)])
         search_query = (rewrite_resp.content if hasattr(rewrite_resp, "content") else str(rewrite_resp)).strip()
         search_query = search_query.strip('"').strip("'")
@@ -206,19 +258,49 @@ def research_node(state: AgentState) -> dict:
 def answer_node(state: AgentState) -> dict:
     """Generate the final compassionate, evidence-based doctor response.
 
-    If research_data is available, it is injected into the prompt so the
-    model can cite sources.  Otherwise, the model answers from its own
-    fine-tuned medical knowledge.
-    
-    Uses the full conversation history from state["messages"] to maintain
-    conversational memory across turns.
+    Behaviour varies by query_type:
+    - ``patient_briefing``: Fast-path — no research, proactively summarises
+      findings from the screening report (highest patient-awareness mode).
+    - ``medical`` (with or without research): evidence-based answer.
+    - ``greeting`` / ``general``: concise, friendly reply.
+
+    The patient's screening report is always injected via PATIENT_AWARE_ADDON
+    when present so Chiranjeevi references real measured values.
     """
     _emit_status("thinking", "Chiranjeevi is thinking")
     research = state.get("research_data", "")
+    query_type = state.get("query_type", "medical")
+    patient_ctx = state.get("patient_context", "")
 
-    # Build the system message with research context
+    # ── 1. Build base system text ──────────────────────────────────────
     system_text = SYSTEM_PROMPT
-    if research and research not in ["No research data found.", "NO_RESEARCH_NEEDED"]:
+
+    # ── 2. Patient Monitor Mode: append addon + real report ────────────
+    if patient_ctx:
+        system_text += PATIENT_AWARE_ADDON
+        system_text += (
+            "\n--- Patient's Latest Health Screening Report ---\n"
+            "The following data was measured by the kiosk for THIS patient moments ago. "
+            "You MUST use this data when answering questions about the patient's health. "
+            "Do not speculate on values that are explicitly provided here.\n\n"
+            f"{patient_ctx}\n"
+            "--- End of Screening Report ---"
+        )
+
+    # ── 3. Fast-path: Patient Briefing ────────────────────────────────
+    # Router detected greeting + high-risk flags → build a proactive opener
+    # without starting a research chain. One LLM call, highly targeted.
+    if query_type == "patient_briefing":
+        system_text += (
+            "\n\n[TASK] The patient just said hello after completing their health scan. "
+            "Open with a warm, concise summary of their KEY findings from the report above. "
+            "Lead with the most critical item. Keep it under 150 words. "
+            "End with an open question: 'Would you like to discuss any of these findings in detail?'"
+        )
+        print("  ⚡ Fast-path: Patient Briefing (no research)")
+
+    # ── 4. Inject external research evidence if available ─────────────
+    elif research and research not in ["No research data found.", "NO_RESEARCH_NEEDED"]:
         system_text += (
             "\n\nIMPORTANT: You have been given research evidence below. "
             "You MUST reference and cite this evidence in your response. "
@@ -228,8 +310,7 @@ def answer_node(state: AgentState) -> dict:
             "--- End Research Evidence ---"
         )
 
-    # Use the FULL conversation history from state, prepending the system message
-    # This ensures the LLM sees all previous turns and can maintain context
+    # ── 5. Build full message list ─────────────────────────────────────
     messages = [SystemMessage(content=system_text)] + state["messages"]
 
     print("  🩺 Chiranjeevi is thinking...")
@@ -237,7 +318,6 @@ def answer_node(state: AgentState) -> dict:
 
     cb = _token_callback_var.get()
     if cb:
-        # Streaming mode via LangChain (returns BaseMessageChunk for ChatModels)
         tokens = []
         for chunk in _llm.stream(messages):
             content = chunk.content if hasattr(chunk, "content") else str(chunk)
@@ -245,10 +325,9 @@ def answer_node(state: AgentState) -> dict:
             cb(content)
         answer = "".join(tokens).strip()
     else:
-        # Block mode via LangChain
         response = _llm.invoke(messages)
         answer = (response.content if hasattr(response, "content") else str(response)).strip()
-    
+
     print("  ✅ Response generated")
 
     return {"final_answer": answer, "messages": [AIMessage(content=answer)]}

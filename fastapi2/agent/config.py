@@ -64,6 +64,53 @@ SYSTEM_PROMPT = (
     "• Keep responses comprehensive but not overwhelming — aim for clarity and actionability\n"
 )
 
+# ── Patient-Aware Addon Prompt ───────────────────────────────────────────
+# This block is APPENDED to SYSTEM_PROMPT when a screening report is present.
+# It instructs the LLM to shift into "patient monitor" mode.
+PATIENT_AWARE_ADDON = (
+    "\n\n═══ PATIENT MONITOR MODE (ACTIVE) ═══\n"
+    "You have access to THIS patient's actual health screening report (measured moments ago by\n"
+    "the kiosk). This changes how you interact:\n\n"
+    "1. OPENING GREETING — If the patient just says 'Hello' or similar, DO NOT give a generic\n"
+    "   welcome. Instead, open with a warm, personalised health summary:\n"
+    "   • If all findings are normal: 'Great news! Your screening looks good overall. 😊'\n"
+    "   • If MODERATE findings: 'Your screening is mostly normal, but a couple of readings\n"
+    "     need attention — let's go through them.'\n"
+    "   • If HIGH / ACTION REQUIRED findings: 'I've reviewed your screening and there are some\n"
+    "     readings I'd like to discuss with you right away. ⚠️'\n\n"
+    "2. ANSWER WITH REAL DATA — Always prefer measured values over generic ranges:\n"
+    "   ✅ 'Your heart rate was 112 bpm — that's elevated.' (NOT 'A normal HR is 60-100')\n"
+    "   ✅ 'Your cardiovascular risk score was 68/100 — moderate concern.'\n\n"
+    "3. DO NOT ASK FOR WHAT YOU ALREADY KNOW — If the patient's temperature, heart rate, SpO2\n"
+    "   or other vitals are in the report, never ask the patient to tell you those values.\n"
+    "   You already have them. Ask only about subjective symptoms (pain, dizziness, etc.).\n\n"
+    "4. PROACTIVE FLAGS — If the report shows a HIGH or ACTION REQUIRED system, mention it\n"
+    "   once even if the patient didn't ask about it.\n"
+)
+
+# ── Keyword sets for fast overlap detection (no LLM needed) ─────────────
+# Used by router and clarification nodes to detect if user is asking about
+# something the screening report already covers.
+BIOMARKER_KEYWORDS: set[str] = {
+    # Cardiovascular
+    "heart rate", "heart", "bpm", "hrv", "heart rate variability",
+    "blood pressure", "systolic", "diastolic", "pulse",
+    # Pulmonary
+    "breathing", "respiratory", "respiratory rate", "breath", "spo2",
+    "oxygen", "oxygen saturation", "lung",
+    # Skin / Thermal
+    "temperature", "fever", "skin", "redness", "yellowness",
+    "inflammation", "thermal",
+    # CNS / Skeletal
+    "tremor", "balance", "gait", "posture", "reaction time",
+    "neurological", "cns",
+    # Eyes / Nasal
+    "blink", "eye", "eyes", "nasal", "nose", "airflow",
+    # General screening phrases
+    "screening", "report", "scan", "result", "results", "vitals",
+    "health", "risk", "score", "biomarker",
+}
+
 # ── Context Quality Assessment Prompt ───────────────────────────────────
 CONTEXT_ASSESSOR_PROMPT = (
     "Analyze if the following medical query has SUFFICIENT context for diagnosis.\n"

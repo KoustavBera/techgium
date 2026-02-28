@@ -31,6 +31,11 @@ class AgentState(TypedDict):
         Number of clarification questions asked (max 2).
     context_quality : float
         Quality score of gathered context (0.0-1.0).
+    patient_context : str
+        Formatted Markdown summary of the patient's most recent health
+        screening results. Empty string if no screening has been run.
+        Injected by the API layer before graph invocation so the agent
+        can reference real patient data rather than generic knowledge.
     """
 
     messages: Annotated[List[BaseMessage], add_messages]
@@ -41,3 +46,4 @@ class AgentState(TypedDict):
     clarification_needed: bool
     clarification_count: int
     context_quality: float
+    patient_context: str

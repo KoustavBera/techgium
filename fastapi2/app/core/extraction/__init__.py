@@ -12,6 +12,7 @@ from .skeletal import SkeletalExtractor
 from .skin import SkinExtractor
 from .eyes import EyeExtractor
 from .nasal import NasalExtractor
+from .visual_classification import VisualDiseaseClassifier
 
 __all__ = [
     "BaseExtractor",
@@ -23,5 +24,5 @@ __all__ = [
     "SkinExtractor",
     "EyeExtractor",
     "NasalExtractor",
-   
+    "VisualDiseaseClassifier",
 ]

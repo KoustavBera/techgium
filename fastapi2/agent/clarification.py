@@ -10,7 +10,7 @@ Implements Trust Envelope™ for medical queries using:
 import re
 from langchain_core.messages import HumanMessage, AIMessage
 from agent.state import AgentState
-from agent.config import CONTEXT_ASSESSOR_PROMPT, CLARIFICATION_PROMPT
+from agent.config import CONTEXT_ASSESSOR_PROMPT, CLARIFICATION_PROMPT, BIOMARKER_KEYWORDS
 
 
 _llm = None
@@ -126,58 +126,91 @@ def clarification_node(state: AgentState) -> dict:
     """
     Assess context quality and generate clarification questions if needed.
     
-    This implements the Trust Envelope™ boundary check.
-    Skips clarification if the conversation already has AI responses
-    (user is answering follow-up questions, not starting fresh).
+    Implements the Trust Envelope™ boundary check with patient-aware shortcuts:
+
+    Fast-skip conditions (no LLM call needed):
+    1. Conversation already has AI responses (user is answering follow-up).
+    2. Query overlaps with biomarker keywords AND patient_context is present
+       (the report already contains the data the user is asking about).
+    3. clarification_count >= 1 (don't ask twice).
+
+    Targeted clarification (when LOW quality + HIGH risk flags in report):
+    - Instead of generic 'tell me more', asks about the specific flagged finding.
     """
     from agent.nodes import _emit_status
-    
+
     _emit_status("analyzing", "Assessing your question context")
     query = _get_latest_query(state)
+    patient_ctx = state.get("patient_context", "")
     clarification_count = state.get("clarification_count", 0)
-    
-    # ─── Skip clarification if user is already in a conversation ───
-    # If we've already exchanged messages (AI responses exist),
-    # the user is likely answering our follow-up questions.
-    # Proceed directly to research + answer.
+
+    # ─── Skip 1: Already in a conversation ────────────────────────────
     if _has_prior_ai_responses(state):
         _emit_status("thinking", "Understanding your follow-up, proceeding to analysis")
-        return {
-            "clarification_needed": False,
-            "context_quality": 1.0
-        }
-    
-    # Don't ask more than 1 round of clarification questions
+        return {"clarification_needed": False, "context_quality": 1.0}
+
+    # ─── Skip 2: Max clarification rounds reached ──────────────────────
     if clarification_count >= 1:
         _emit_status("thinking", "Sufficient context gathered, preparing response")
-        return {
-            "clarification_needed": False,
-            "context_quality": 1.0  # Proceed with available context
-        }
-    
-    # Assess context quality
+        return {"clarification_needed": False, "context_quality": 1.0}
+
+    # ─── Skip 3: Query overlaps with screened biomarkers ──────────────
+    # e.g. user asks "what's my heart rate?" — we already have it in the report.
+    # Processing this through clarification would waste an LLM call.
+    if patient_ctx:
+        q_lower = query.lower()
+        if any(kw in q_lower for kw in BIOMARKER_KEYWORDS):
+            _emit_status("thinking", "Found relevant data in your screening report")
+            print("  ⚡ Clarification skipped: query matches screened biomarkers")
+            return {"clarification_needed": False, "context_quality": 1.0}
+
+    # ─── Assess context quality ────────────────────────────────────────
     quality = assess_context_quality(query)
-    
-    # If quality is sufficient, proceed to answer
+
     if quality >= 0.5:
         _emit_status("thinking", "Good context, researching your question")
-        return {
-            "clarification_needed": False,
-            "context_quality": quality
-        }
-    
-    # Generate clarification questions
+        return {"clarification_needed": False, "context_quality": quality}
+
+    # ─── Targeted clarification if high-risk flags in report ───────────
+    # Instead of generic 'tell me more', ask about the specific finding.
     _emit_status("thinking", "Preparing follow-up questions")
-    missing_info = identify_missing_context(query, quality)
-    
-    prompt = CLARIFICATION_PROMPT.format(
-        query=query,
-        missing_info=missing_info
+
+    high_risk_in_report = patient_ctx and any(
+        marker in patient_ctx.lower() for marker in {"high", "action required", "⚠️"}
     )
-    
+
+    if high_risk_in_report:
+        # Extract the first flagged system name from the report for a targeted question
+        flagged_system = "one of your readings"
+        for line in patient_ctx.splitlines():
+            if any(marker in line.lower() for marker in {"**high**", "**action required**", "⚠️"}):
+                # e.g. "#### Cardiovascular: **HIGH** ..."
+                match = re.search(r'####\s*(\w+)', line)
+                if match:
+                    flagged_system = match.group(1).lower()
+                    break
+
+        targeted_question = (
+            f"I can see from your screening that {flagged_system} needs attention. "
+            f"Are you experiencing any related symptoms — for example, chest discomfort, "
+            f"shortness of breath, dizziness, or fatigue? "
+            f"This will help me give you more specific guidance. 💙"
+        )
+        print(f"  🎯 Targeted clarification about: {flagged_system}")
+        return {
+            "clarification_needed": True,
+            "clarification_count": clarification_count + 1,
+            "context_quality": quality,
+            "final_answer": targeted_question,
+            "messages": [AIMessage(content=targeted_question)],
+        }
+
+    # ─── Generic clarification (no screening data context) ────────────
+    missing_info = identify_missing_context(query, quality)
+    prompt = CLARIFICATION_PROMPT.format(query=query, missing_info=missing_info)
     response = _llm.invoke([HumanMessage(content=prompt)])
     clarification_text = response.content if hasattr(response, "content") else str(response)
-    
+
     _emit_status("streaming", "Responding")
     clarification_clean = clarification_text.strip()
     return {

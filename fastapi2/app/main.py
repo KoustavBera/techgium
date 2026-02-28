@@ -240,6 +240,73 @@ def _get_local_ip():
         return "127.0.0.1"
 
 
+def _format_screening_context(patient_id: str) -> str:
+    """
+    Build a concise Markdown summary of the patient's most recent screening.
+
+    Searches _screenings for the latest entry that matches `patient_id`.
+    Returns an empty string if no match is found, so the agent falls back
+    to general medical knowledge gracefully.
+    """
+    # Find all screenings for this patient (could be multiple sessions)
+    patient_screenings = {
+        sid: s for sid, s in _screenings.items()
+        if s.get("patient_id", "").lower() == patient_id.lower()
+    }
+
+    if not patient_screenings:
+        return ""  # No screening available yet
+
+    # Pick the most recent one by timestamp
+    latest_id = max(
+        patient_screenings.keys(),
+        key=lambda sid: patient_screenings[sid].get("timestamp", datetime.min)
+    )
+    screening = patient_screenings[latest_id]
+    composite = screening.get("composite_risk")
+    system_results = screening.get("system_results", {})
+    timestamp = screening.get("timestamp", datetime.now())
+
+    lines = [
+        f"## Health Screening — {timestamp.strftime('%d %b %Y, %I:%M %p')}",
+        f"- **Patient ID**: {patient_id}",
+        f"- **Screening ID**: {latest_id}",
+    ]
+
+    if composite:
+        lines.append(
+            f"- **Overall Risk**: {composite.level.value.upper()} "
+            f"(score {composite.score:.1f}/100, confidence {composite.confidence:.0%})"
+        )
+
+    lines.append("")
+    lines.append("### System-Level Results")
+
+    for system, result in system_results.items():
+        sys_name = system.value.title() if hasattr(system, "value") else str(system)
+        risk = result.overall_risk
+        lines.append(
+            f"#### {sys_name}: **{risk.level.value.upper()}** "
+            f"(score {risk.score:.1f}/100, confidence {risk.confidence:.0%})"
+        )
+        # Include key biomarkers (up to 8 per system to keep context compact)
+        for bm_name, bm_data in list(result.biomarker_summary.items())[:8]:
+            friendly = bm_name.replace("_", " ").title()
+            val = round(bm_data.get("value", bm_data.get("estimated", "N/A")), 2) \
+                if isinstance(bm_data.get("value", bm_data.get("estimated")), (int, float)) \
+                else bm_data.get("value", bm_data.get("estimated", "N/A"))
+            unit = bm_data.get("unit", "")
+            status_flag = bm_data.get("status", "")
+            lines.append(f"  - {friendly}: **{val} {unit}** ({status_flag})")
+
+        alerts = result.alerts
+        if alerts:
+            for alert in alerts[:3]:  # cap at 3 alerts per system
+                lines.append(f"  ⚠️ {alert}")
+
+    return "\n".join(lines)
+
+
 # ---- API Endpoints ----
 
 @app.get("/", response_model=HealthResponse, tags=["Health"])
@@ -626,8 +693,24 @@ async def doctor_chat(request: DoctorChatRequest):
             set_status_callback(on_status)
             set_token_callback(on_token)
             try:
+                # Build patient screening context (RAG) for this patient
+                patient_ctx = _format_screening_context(request.patient_id or "GUEST")
+                if patient_ctx:
+                    logger.info(
+                        f"Injecting screening context for patient '{request.patient_id}' "
+                        f"({len(patient_ctx)} chars)"
+                    )
+                else:
+                    logger.info(
+                        f"No prior screening found for patient '{request.patient_id}' — "
+                        "agent will use general knowledge only."
+                    )
+
                 result = app.state.medical_agent.invoke(
-                    {"messages": [HumanMessage(content=input_query)]},
+                    {
+                        "messages": [HumanMessage(content=input_query)],
+                        "patient_context": patient_ctx,
+                    },
                     config={"configurable": {"thread_id": request.patient_id or "GUEST"}}
                 )
                 final = result.get("final_answer", "")
@@ -671,8 +754,30 @@ async def doctor_chat(request: DoctorChatRequest):
                 )
                 logger.info(f"Translated inbound: '{request.query[:50]}...' → '{actual_query[:50]}...'")
             else:
-                # User typed in English mid-session (code-switching) — no translation needed
-                logger.info("User typed in English (code-switch detected) — no inbound translation needed")
+                # langdetect returned English, but the user is in a non-English session.
+                # For short text (<60 chars) langdetect frequently misclassifies Indian scripts.
+                # In that case, trust the user's chosen session language as the source.
+                query_len = len(request.query.strip())
+                if query_len < 60:
+                    logger.info(
+                        f"Short text ({query_len} chars) misclassified as English in a "
+                        f"{session_lang} session. Retrying with session_lang as source."
+                    )
+                    yield f"data: {json.dumps({'type': 'status', 'stage': 'thinking', 'message': '\u1f310 Translating your message...'})}\n\n"
+                    translated_attempt = await sarvam_service.translate_text(
+                        text=request.query,
+                        source_lang=session_lang,
+                        target_lang="en-IN"
+                    )
+                    if translated_attempt != request.query:
+                        actual_query = translated_attempt
+                        logger.info(f"Session-lang fallback: '{request.query[:50]}' \u2192 '{actual_query[:50]}'")
+                    else:
+                        # Translation returned the same string — really is English input
+                        logger.info("Session-lang fallback returned same text — treating as English (code-switch).")
+                else:
+                    # Longer text genuinely in English mid-session — code-switch, no translation
+                    logger.info("User typed in English (code-switch detected) — no inbound translation needed")
 
         # ── STEP 2: Run LLM Agent in English ─────────────────────────────────
         agent_task = asyncio.create_task(run_in_threadpool(run_agent, actual_query))

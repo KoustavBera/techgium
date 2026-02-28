@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import io
+import json
 import os
 
 from app.core.inference.risk_engine import RiskLevel, SystemRiskResult, RiskScore
@@ -55,43 +56,56 @@ except ImportError as e:
     logger.warning(f"reportlab not installed - PDF generation unavailable. Error: {e}")
 
 
-# Risk level colors
-# Risk level colors (Pastel Backgrounds)
-RISK_COLORS = {
-    RiskLevel.LOW: HexColor("#D1FAE5") if REPORTLAB_AVAILABLE else "#D1FAE5",       # Mint Green (Light)
-    RiskLevel.MODERATE: HexColor("#FEF3C7") if REPORTLAB_AVAILABLE else "#FEF3C7",  # Pale Amber
-    RiskLevel.HIGH: HexColor("#FEE2E2") if REPORTLAB_AVAILABLE else "#FEE2E2",      # Pale Rose
-    RiskLevel.ACTION_REQUIRED: HexColor("#FFEDD5") if REPORTLAB_AVAILABLE else "#FFEDD5", # Alert Amber (Pastel)
-}
+# ---------------------------------------------------------------------------
+# Colour Palettes
+# ---------------------------------------------------------------------------
+if REPORTLAB_AVAILABLE:
+    # Pastel backgrounds for risk-level cards
+    RISK_COLORS = {
+        RiskLevel.LOW:             HexColor("#D1FAE5"),  # Mint Green
+        RiskLevel.MODERATE:        HexColor("#FEF3C7"),  # Pale Amber
+        RiskLevel.HIGH:            HexColor("#FEE2E2"),  # Pale Rose
+        RiskLevel.ACTION_REQUIRED: HexColor("#FFEDD5"),  # Alert Amber
+        RiskLevel.UNKNOWN:         HexColor("#F3F4F6"),  # Light Gray
+    }
 
-# Chart specific solid colors for the Pie slices (Visual Pop)
-CHART_COLORS = {
-    RiskLevel.LOW: HexColor("#10B981"),       # Emerald 500
-    RiskLevel.MODERATE: HexColor("#F59E0B"),  # Amber 500
-    RiskLevel.HIGH: HexColor("#EF4444"),      # Red 500
-    RiskLevel.ACTION_REQUIRED: HexColor("#D97706"),  # Amber 600
-}
+    # Solid colours for pie-chart slices
+    CHART_COLORS = {
+        RiskLevel.LOW:             HexColor("#10B981"),  # Emerald 500
+        RiskLevel.MODERATE:        HexColor("#F59E0B"),  # Amber 500
+        RiskLevel.HIGH:            HexColor("#EF4444"),  # Red 500
+        RiskLevel.ACTION_REQUIRED: HexColor("#D97706"),  # Amber 600
+        RiskLevel.UNKNOWN:         HexColor("#9CA3AF"),  # Gray 400
+    }
 
-# Risk text colors (Darker for contrast)
-RISK_TEXT_COLORS = {
-    RiskLevel.LOW: HexColor("#065F46") if REPORTLAB_AVAILABLE else "#065F46",       # Dark Emerald
-    RiskLevel.MODERATE: HexColor("#92400E") if REPORTLAB_AVAILABLE else "#92400E",  # Dark Amber
-    RiskLevel.HIGH: HexColor("#B91C1C") if REPORTLAB_AVAILABLE else "#B91C1C",      # Dark Red
-    RiskLevel.ACTION_REQUIRED: HexColor("#92400E") if REPORTLAB_AVAILABLE else "#92400E", # Dark Amber
-}
+    # Darker text colours for contrast on pastel backgrounds
+    RISK_TEXT_COLORS = {
+        RiskLevel.LOW:             HexColor("#065F46"),  # Dark Emerald
+        RiskLevel.MODERATE:        HexColor("#92400E"),  # Dark Amber
+        RiskLevel.HIGH:            HexColor("#B91C1C"),  # Dark Red
+        RiskLevel.ACTION_REQUIRED: HexColor("#92400E"),  # Dark Amber
+        RiskLevel.UNKNOWN:         HexColor("#374151"),  # Dark Gray
+    }
 
-STATUS_COLORS = {
-    "normal": HexColor("#ECFDF5") if REPORTLAB_AVAILABLE else "#ECFDF5",      # Mint (Good)
-    "low": HexColor("#FFECD2") if REPORTLAB_AVAILABLE else "#FFECD2",         # Pastel Orange-Yellow (Abnormal)
-    "high": HexColor("#FFECD2") if REPORTLAB_AVAILABLE else "#FFECD2",        # Pastel Orange-Yellow (Abnormal)
-    "not_assessed": HexColor("#F9FAFB") if REPORTLAB_AVAILABLE else "#F9FAFB" # Light Gray
-}
+    # Status cell background colours
+    STATUS_COLORS = {
+        "normal":       HexColor("#ECFDF5"),  # Mint
+        "low":          HexColor("#FFECD2"),  # Pastel Orange
+        "high":         HexColor("#FFECD2"),  # Pastel Orange
+        "not_assessed": HexColor("#F9FAFB"),  # Light Gray
+    }
+else:
+    RISK_COLORS        = {RiskLevel.LOW: "#D1FAE5", RiskLevel.MODERATE: "#FEF3C7", RiskLevel.HIGH: "#FEE2E2", RiskLevel.ACTION_REQUIRED: "#FFEDD5", RiskLevel.UNKNOWN: "#F3F4F6"}
+    CHART_COLORS       = {RiskLevel.LOW: "#10B981", RiskLevel.MODERATE: "#F59E0B", RiskLevel.HIGH: "#EF4444", RiskLevel.ACTION_REQUIRED: "#D97706", RiskLevel.UNKNOWN: "#9CA3AF"}
+    RISK_TEXT_COLORS   = {RiskLevel.LOW: "#065F46", RiskLevel.MODERATE: "#92400E", RiskLevel.HIGH: "#B91C1C", RiskLevel.ACTION_REQUIRED: "#92400E", RiskLevel.UNKNOWN: "#374151"}
+    STATUS_COLORS      = {"normal": "#ECFDF5", "low": "#FFECD2", "high": "#FFECD2", "not_assessed": "#F9FAFB"}
 
 RISK_LABELS = {
-    RiskLevel.LOW: "Low Risk • Healthy",
-    RiskLevel.MODERATE: "Moderate Risk • Monitor",
-    RiskLevel.HIGH: "High Risk • Consult Doctor",
+    RiskLevel.LOW:             "Low Risk • Healthy",
+    RiskLevel.MODERATE:        "Moderate Risk • Monitor",
+    RiskLevel.HIGH:            "High Risk • Consult Doctor",
     RiskLevel.ACTION_REQUIRED: "Action Required • Consult Provider",
+    RiskLevel.UNKNOWN:         "Not Assessed • Device Required",
 }
 
 # Simplified biomarker names
@@ -147,6 +161,9 @@ class PatientReport:
     
     # System summaries
     system_summaries: Dict[PhysiologicalSystem, Dict[str, Any]] = field(default_factory=dict)
+    
+    # Clinical Decision Layer findings (specialist referrals)
+    clinical_findings: List[Any] = field(default_factory=list)
     
     # LLM interpretation
     interpretation_summary: str = ""
@@ -237,12 +254,7 @@ if REPORTLAB_AVAILABLE:
                 if count > 0:
                     data.append(count)
                     labels.append(f"{RISK_LABELS[lvl].split('•')[0].strip()} ({count})")
-                    # Use CHART_COLORS if available, else fallback
-                    if 'CHART_COLORS' in globals():
-                        colors.append(CHART_COLORS.get(lvl, darkgrey))
-                    else:
-                         # Fallback if CHART_COLORS not yet defined
-                        colors.append(RISK_TEXT_COLORS.get(lvl, darkgrey))
+                    colors.append(CHART_COLORS.get(lvl, darkgrey))
             
             # If no data (empty report?), fallback
             if not data:
@@ -314,15 +326,32 @@ if REPORTLAB_AVAILABLE:
                 fill_color = HexColor("#10B981") if self.confidence >= 0.8 else HexColor("#F59E0B")
                 self.canv.setFillColor(fill_color)
                 self.canv.roundRect(0, 0, self.width * self.confidence, self.height, self.height/2, fill=1, stroke=0)
+
+    class SectionDivider(Flowable):
+        """Full-width 0.5 pt horizontal rule — used between major PDF sections."""
+        def __init__(self, width: float = 6.5 * inch, color: str = "#E5E7EB"):
+            Flowable.__init__(self)
+            self.width = width
+            self._color = HexColor(color)
+
+        def draw(self):
+            self.canv.setStrokeColor(self._color)
+            self.canv.setLineWidth(0.5)
+            self.canv.line(0, 0, self.width, 0)
+
 else:
-    # Dummy class when reportlab not available
+    # Dummy stubs when reportlab not available
     class RiskIndicator:
-        def __init__(self, *args, **kwargs):
-            pass
+        def __init__(self, *args, **kwargs): pass
 
     class HealthStatsChart:
-        def __init__(self, *args, **kwargs):
-            pass
+        def __init__(self, *args, **kwargs): pass
+
+    class ConfidenceMeter:
+        def __init__(self, *args, **kwargs): pass
+
+    class SectionDivider:
+        def __init__(self, *args, **kwargs): pass
 
 
 class EnhancedPatientReportGenerator:
@@ -437,7 +466,8 @@ class EnhancedPatientReportGenerator:
         trust_envelope: Optional[TrustEnvelope] = None,
         patient_id: str = "ANONYMOUS",
         trusted_results: Optional[Dict[PhysiologicalSystem, Any]] = None,
-        rejected_systems: Optional[List[str]] = None
+        rejected_systems: Optional[List[str]] = None,
+        clinical_findings: Optional[List[Any]] = None,
     ) -> PatientReport:
         """
         Generate an enhanced patient PDF report.
@@ -517,6 +547,10 @@ class EnhancedPatientReportGenerator:
                 f"{', '.join(rejected_systems)}."
             )
         
+        # Attach Clinical Decision Layer findings
+        if clinical_findings:
+            report.clinical_findings = clinical_findings
+        
         # Generate PDF
         if REPORTLAB_AVAILABLE:
             # PRE-COMPUTE: Generate ALL biomarker explanations in ONE API call
@@ -530,6 +564,52 @@ class EnhancedPatientReportGenerator:
             report.pdf_path = msg
         
         return report
+
+    def generate_bytes(
+        self,
+        system_results: Dict[PhysiologicalSystem, SystemRiskResult],
+        composite_risk: RiskScore,
+        interpretation: Optional[InterpretationResult] = None,
+        trust_envelope: Optional[TrustEnvelope] = None,
+        patient_id: str = "ANONYMOUS",
+        trusted_results: Optional[Dict[PhysiologicalSystem, Any]] = None,
+        rejected_systems: Optional[List[str]] = None,
+        clinical_findings: Optional[List[Any]] = None,
+    ) -> bytes:
+        """
+        Generate an enhanced patient PDF and return it as raw bytes.
+
+        Identical to ``generate()`` but returns the PDF bytes directly instead
+        of writing to a permanent path — useful for HTTP download responses.
+
+        Returns:
+            bytes: Raw PDF content starting with b'%PDF'
+        """
+        if not REPORTLAB_AVAILABLE:
+            raise RuntimeError("reportlab is not installed; PDF generation unavailable.")
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            original_output_dir = self.output_dir
+            self.output_dir = tmp_dir
+            try:
+                report = self.generate(
+                    system_results=system_results,
+                    composite_risk=composite_risk,
+                    interpretation=interpretation,
+                    trust_envelope=trust_envelope,
+                    patient_id=patient_id,
+                    trusted_results=trusted_results,
+                    rejected_systems=rejected_systems,
+                    clinical_findings=clinical_findings,
+                )
+                if report.pdf_path and os.path.isfile(report.pdf_path):
+                    with open(report.pdf_path, "rb") as f:
+                        return f.read()
+                raise RuntimeError("PDF was not generated correctly.")
+            finally:
+                self.output_dir = original_output_dir
 
     def _draw_trust_envelope(self, story: List[Any], trust_envelope: Optional[TrustEnvelope]):
         """Draw a beautiful trust envelope section in the PDF."""
@@ -694,15 +774,6 @@ class EnhancedPatientReportGenerator:
             "airflow_thermal_symmetry_index": {
                 "normal": "<b>Meaning:</b> Airflow appears balanced between nostrils.<br/><b>Details:</b> Both sides contribute to breathing equally.<br/><b>Guidance:</b> Healthy nasal function.",
                 "high": "<b>Meaning:</b> Significant asymmetry in airflow detected.<br/><b>Potential Causes:</b> Deviated septum, unilateral congestion, or nasal cycle peak.<br/><b>Guidance:</b> Common and often benign, but consult an ENT if breathing is difficult."
-            },
-            "respiratory_regularity_index": {
-                "normal": "<b>Meaning:</b> Your autonomic nervous system appears stable.<br/><b>Details:</b> Measured by breath-to-breath variability (CV 0.02-0.25).<br/><b>Guidance:</b> Good sign of stress resilience.",
-                "low": "<b>Meaning:</b> Your breathing is extremely metronomic.<br/><b>Potential Causes:</b> Forced breathing control or rigidity.<br/><b>Guidance:</b> Relax and breathe naturally.",
-                "high": "<b>Meaning:</b> High breathing variability detected.<br/><b>Potential Causes:</b> Stress, anxiety, or irregular breathing patterns.<br/><b>Guidance:</b> Try 5 minutes of guided rhythmic breathing."
-            },
-            "nasal_surface_temp_elevation": {
-                "normal": "<b>Meaning:</b> No significant thermal inflammation detected.<br/><b>Details:</b> Temperature difference between nostril and cheek is normal (-0.2 to 1.0°C).<br/><b>Guidance:</b> Maintain nasal hygiene.",
-                "high": "<b>Meaning:</b> Elevated local temperature detected.<br/><b>Potential Causes:</b> Local inflammation, sinusitis, or congestion.<br/><b>Guidance:</b> If accompanied by pain or congestion, consider a check-up."
             },
 
             "gait_variability": {
@@ -882,7 +953,6 @@ Keep explanations encouraging but realistic. Avoid medical jargon."""
             )
             
             if response and response.text and not response.is_mock:
-                import json
                 try:
                     # Parse JSON response
                     ai_explanations = json.loads(response.text.strip())
@@ -970,7 +1040,6 @@ BIOMARKERS:
             )
             
             # Parse JSON response
-            import json
             text = response.text.strip()
             
             # Try direct parse
@@ -1001,6 +1070,432 @@ BIOMARKERS:
             logger.warning(f"Global AI explanation failed: {e}")
             return {}
     
+    def _draw_clinical_findings_section(
+        self, story: List[Any], clinical_findings: List[Any]
+    ) -> None:
+        """
+        Render the "Specialist Referral Recommendations" section in the PDF.
+
+        Each ClinicalFinding becomes a coloured card with:
+          - Urgency badge  (🔴 Urgent / 🟡 Routine / 🟢 Monitor)
+          - Finding title and patient-friendly description
+          - Referral table listing each specialist.
+
+        The section is silently skipped when no findings exist
+        (healthy patients get no extra clutter in their report).
+        """
+        if not REPORTLAB_AVAILABLE or not clinical_findings:
+            return
+
+        URGENCY_BADGE = {
+            "urgent":        ("🔴 URGENT",   HexColor("#FEE2E2"), HexColor("#B91C1C")),  # pale red bg, dark red text
+            "routine":       ("🟡 ROUTINE",  HexColor("#FEF9C3"), HexColor("#92400E")),  # pale yellow bg, dark amber text
+            "monitor":       ("🟢 MONITOR",  HexColor("#ECFDF5"), HexColor("#065F46")),  # pale green bg, dark emerald text
+            "informational": ("ℹ️ INFO",      HexColor("#EFF6FF"), HexColor("#1D4ED8")),  # pale blue bg, dark blue text
+        }
+
+        story.append(Paragraph(
+            "🏥 Specialist Referral Recommendations",
+            self._styles['SectionHeader']
+        ))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(
+            "The following patterns were detected during your screening. "
+            "These are <b>not diagnoses</b> — they indicate that a specialist review "
+            "may be beneficial. Please share this report with your doctor.",
+            self._styles['Caveat']
+        ))
+        story.append(Spacer(1, 12))
+
+        for finding in clinical_findings:
+            urgency_val  = finding.urgency.value if hasattr(finding, 'urgency') else "informational"
+            badge_text, card_bg, badge_color = URGENCY_BADGE.get(
+                urgency_val, URGENCY_BADGE["informational"]
+            )
+
+            card_elements = []
+
+            # ── Header row: badge + title ──────────────────────────────────
+            title_text  = finding.title if hasattr(finding, 'title') else "Finding"
+            system_text = (finding.system if hasattr(finding, 'system') else "").replace("_", " ").title()
+
+            header_data = [[
+                Paragraph(f"<b>{badge_text}</b>", ParagraphStyle(
+                    'Badge',
+                    parent=self._styles['BodyText'],
+                    textColor=badge_color, fontSize=8, leading=10
+                )),
+                Paragraph(
+                    f"<b>{title_text}</b><br/><font size='8' color='#6B7280'>{system_text}</font>",
+                    self._styles['BodyText']
+                )
+            ]]
+            header_tbl = Table(header_data, colWidths=[1.0 * inch, 5.5 * inch])
+            header_tbl.setStyle(TableStyle([
+                ('BACKGROUND',    (0, 0), (0, 0), card_bg),
+                ('BACKGROUND',    (1, 0), (1, 0), HexColor("#F9FAFB")),
+                ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING',    (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
+                ('LINEBELOW',     (0, 0), (-1, -1), 0.5, HexColor("#E5E7EB")),
+            ]))
+            card_elements.append(header_tbl)
+
+            # ── Description ────────────────────────────────────────────────
+            description = finding.description if hasattr(finding, 'description') else ""
+            if description:
+                desc_data = [[Paragraph(description, ParagraphStyle(
+                    'FindingDesc',
+                    parent=self._styles['BodyText'],
+                    fontSize=9, leading=13, leftIndent=0
+                ))]]
+                desc_tbl = Table(desc_data, colWidths=[6.5 * inch])
+                desc_tbl.setStyle(TableStyle([
+                    ('BACKGROUND',    (0, 0), (-1, -1), HexColor("#FAFAFA")),
+                    ('TOPPADDING',    (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('LEFTPADDING',   (0, 0), (-1, -1), 10),
+                    ('RIGHTPADDING',  (0, 0), (-1, -1), 10),
+                ]))
+                card_elements.append(desc_tbl)
+
+            # ── Referral table ─────────────────────────────────────────────
+            referrals = finding.referrals if hasattr(finding, 'referrals') else []
+            if referrals:
+                ref_header = [["Specialist", "Reason", "Urgency"]]
+                ref_rows = []
+                ref_row_colors = []
+                for ref in referrals:
+                    ref_urgency = ref.urgency.value if hasattr(ref, 'urgency') else "routine"
+                    ref_badge, ref_bg, _ = URGENCY_BADGE.get(ref_urgency, URGENCY_BADGE["informational"])
+                    ref_rows.append([
+                        Paragraph(f"<b>{ref.specialist}</b>", ParagraphStyle(
+                            'RefSpec', parent=self._styles['BodyText'], fontSize=8, leading=11
+                        )),
+                        Paragraph(ref.reason, ParagraphStyle(
+                            'RefReason', parent=self._styles['BodyText'], fontSize=8, leading=11
+                        )),
+                        ref_badge,
+                    ])
+                    ref_row_colors.append(ref_bg)
+
+                ref_data = ref_header + ref_rows
+                ref_tbl = Table(ref_data, colWidths=[1.8 * inch, 3.8 * inch, 0.9 * inch])
+                ref_style = TableStyle([
+                    ('BACKGROUND',    (0, 0), (-1, 0), HexColor("#F3F4F6")),
+                    ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE',      (0, 0), (-1, 0), 8),
+                    ('TOPPADDING',    (0, 0), (-1, 0), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+                    ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+                    ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
+                    ('FONTNAME',      (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE',      (0, 1), (-1, -1), 8),
+                    ('TOPPADDING',    (0, 1), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+                    ('LINEBELOW',     (0, 0), (-1, -1), 0.5, HexColor("#E5E7EB")),
+                    ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+                ])
+                for i, color in enumerate(ref_row_colors, start=1):
+                    ref_style.add('BACKGROUND', (2, i), (2, i), color)
+                ref_tbl.setStyle(ref_style)
+
+                ref_wrapper_data = [[ref_tbl]]
+                ref_wrapper = Table(ref_wrapper_data, colWidths=[6.5 * inch])
+                ref_wrapper.setStyle(TableStyle([
+                    ('LEFTPADDING',   (0, 0), (-1, -1), 10),
+                    ('RIGHTPADDING',  (0, 0), (-1, -1), 10),
+                    ('TOPPADDING',    (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                    ('BACKGROUND',    (0, 0), (-1, -1), HexColor("#FAFAFA")),
+                ]))
+                card_elements.append(ref_wrapper)
+
+            # ── Wrap card in KeepTogether ───────────────────────────────────
+            story.append(KeepTogether(card_elements))
+            story.append(Spacer(1, 12))
+
+        story.append(Spacer(1, 10))
+
+    def _draw_disease_probability_section(
+        self, story: List[Any], system_summaries: Dict
+    ) -> None:
+        """
+        Draw the 'Visual Disease Probability' section in the patient PDF.
+
+        Collects all biomarkers whose names start with known visual AI
+        prefixes (skin_lesion_, eye_disease_, conjunctivitis_) from *all*
+        systems and renders them as a clean probability table with clear
+        experimental disclaimers.
+
+        The section is silently skipped when no such biomarkers exist.
+        """
+        if not REPORTLAB_AVAILABLE:
+            return
+
+        PREFIXES = {
+            "skin_lesion_":      "Skin Lesion Detection",
+            "eye_disease_":      "Eye Disease Detection",
+            "conjunctivitis_":   "Conjunctivitis Detection",
+        }
+
+        # --- Read directly from the VISUAL_DISEASE system entry -----------
+        visual_summary = system_summaries.get(PhysiologicalSystem.VISUAL_DISEASE, {})
+        visual_biomarkers = visual_summary.get("biomarkers", {})
+
+        if not visual_biomarkers:
+            logger.info("_draw_disease_probability_section: no VISUAL_DISEASE biomarkers, skipping.")
+            return
+
+        grouped: Dict[str, list] = {title: [] for title in PREFIXES.values()}
+
+        # Import the display name mapping for HAM10000 / eye model abbreviations
+        try:
+            from app.core.extraction.visual_classification import CLASS_DISPLAY_NAMES
+        except ImportError:
+            CLASS_DISPLAY_NAMES = {}
+
+        for bm_name, bm_data in visual_biomarkers.items():
+            for prefix, title in PREFIXES.items():
+                if bm_name.startswith(prefix):
+                    raw_class = bm_name[len(prefix):]
+                    label = CLASS_DISPLAY_NAMES.get(raw_class, raw_class.replace("_", " ").title())
+                    grouped[title].append({
+                        "label": label,
+                        "value": float(bm_data.get("value", 0.0)),
+                        "status": bm_data.get("status", "normal"),
+                    })
+
+        # Skip if nothing matched any prefix
+        if not any(grouped.values()):
+            return
+
+        story.append(Paragraph(
+            "\U0001f52c Visual Disease Probability (Experimental)",
+            self._styles['SectionHeader']
+        ))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(
+            "These results are generated by visual AI models analysing your "
+            "webcam image. They are <b>not a clinical diagnosis</b> and should "
+            "be reviewed by a qualified healthcare professional.",
+            self._styles['Caveat']
+        ))
+        story.append(Spacer(1, 12))
+
+        for group_title, items in grouped.items():
+            if not items:
+                continue
+
+            story.append(Paragraph(
+                f"<b>{group_title}</b>",
+                self._styles['SubHeader']
+            ))
+            story.append(Spacer(1, 6))
+
+            # Sort descending by confidence
+            items_sorted = sorted(items, key=lambda x: x["value"], reverse=True)
+
+            table_data = [["Condition", "Confidence", "Assessment"]]
+            row_colors = []
+
+            for item in items_sorted:
+                pct = item["value"]
+                label = item["label"]
+                pct_str = f"{pct * 100:.1f}%"
+
+                if pct > 0.6:
+                    assessment = "High — Consult Doctor"
+                    row_colors.append(HexColor("#FEE2E2"))   # pale red
+                elif pct > 0.4:
+                    assessment = "Moderate — Monitor"
+                    row_colors.append(HexColor("#FEF9C3"))   # pale yellow
+                else:
+                    assessment = "Low — Likely Normal"
+                    row_colors.append(HexColor("#ECFDF5"))   # pale green
+
+                table_data.append([label, pct_str, assessment])
+
+            tbl = Table(table_data, colWidths=[2.8 * inch, 1.1 * inch, 2.6 * inch])
+            style = TableStyle([
+                ('TEXTCOLOR',    (0, 0), (-1, 0), HexColor("#374151")),
+                ('FONTNAME',     (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE',     (0, 0), (-1, 0), 9),
+                ('BOTTOMPADDING',(0, 0), (-1, 0), 10),
+                ('TOPPADDING',   (0, 0), (-1, 0), 10),
+                ('GRID',         (0, 0), (-1, -1), 0, white),
+                ('LINEBELOW',    (0, 0), (-1, 0), 1, HexColor("#E5E7EB")),
+                ('FONTNAME',     (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE',     (0, 1), (-1, -1), 9),
+                ('TOPPADDING',   (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING',(0, 1), (-1, -1), 8),
+                ('LINEBELOW',    (0, 1), (-1, -1), 0.5, HexColor("#F3F4F6")),
+            ])
+            # Apply per-row background to the Assessment column
+            for i, color in enumerate(row_colors, start=1):
+                style.add('BACKGROUND', (2, i), (2, i), color)
+
+            tbl.setStyle(style)
+            story.append(tbl)
+            story.append(Spacer(1, 14))
+
+        story.append(Spacer(1, 10))
+
+    # ------------------------------------------------------------------
+    # Layout helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _status_meta(status_text: str):
+        """
+        Single source of truth for status → (label, bg_color).
+        Returns a (label, HexColor) tuple for a given raw status string.
+        Used by both table-style generation and colour mapping.
+        """
+        if "Below" in status_text or status_text == "low":
+            return ("Below Normal", STATUS_COLORS["low"])
+        elif "Above" in status_text or status_text == "high":
+            return ("Above Normal", STATUS_COLORS["high"])
+        elif status_text in ("Normal", "normal"):
+            return ("Normal", STATUS_COLORS["normal"])
+        else:
+            return (status_text, STATUS_COLORS["not_assessed"])
+
+    def _build_biomarker_table_style(self, table_data: list) -> list:
+        """
+        Build the TableStyle command list for a biomarker measurement table.
+
+        Extracted from _generate_pdf so it can be reused and unit-tested.
+        Includes:
+          - Bold header with bottom rule
+          - Right-aligned numeric columns (Value, Normal Range)
+          - Per-row: status-cell colour + subtle full-row tint for abnormal rows
+        """
+        style = [
+            # ── Header ──────────────────────────────────────────────────
+            ('TEXTCOLOR',     (0, 0), (-1, 0),  HexColor("#374151")),
+            ('FONTNAME',      (0, 0), (-1, 0),  'Helvetica-Bold'),   # was 'FontName' (bug B2)
+            ('FONTSIZE',      (0, 0), (-1, 0),  10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0),  12),
+            ('TOPPADDING',    (0, 0), (-1, 0),  12),
+            ('LINEBELOW',     (0, 0), (-1, 0),  1, HexColor("#E5E7EB")),
+
+            # ── Remove vertical grid lines ──────────────────────────────
+            ('GRID',          (0, 0), (-1, -1), 0, white),
+
+            # ── Content rows ────────────────────────────────────────────
+            ('FONTNAME',      (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE',      (0, 1), (-1, -1), 10),
+            ('TOPPADDING',    (0, 1), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+            ('LINEBELOW',     (0, 1), (-1, -1), 0.5, HexColor("#F3F4F6")),
+
+            # ── Right-align numeric columns (Value=1, Normal Range=2) ───
+            ('ALIGN',         (1, 1), (2, -1),  'RIGHT'),
+        ]
+
+        # Per-row colour: status cell + subtle full-row tint for abnormal
+        ROW_TINT = HexColor("#FFFBEB")  # very light amber tint for abnormal rows
+        for i, row in enumerate(table_data[1:], start=1):
+            status_text = row[3] if len(row) > 3 else ""
+            _, bg_color = self._status_meta(status_text)
+            # Status pill colour on the Status column only
+            style.append(('BACKGROUND', (3, i), (3, i), bg_color))
+            # Subtle full-row tint for any abnormal reading
+            if "Below" in status_text or "Above" in status_text:
+                style.append(('BACKGROUND', (0, i), (2, i), ROW_TINT))
+
+        return style
+
+    def _draw_analysis_section(self, story: List[Any], report: "PatientReport") -> None:
+        """
+        Render the 📋 Screening Analysis executive summary table.
+
+        Shows each body system's risk level, score, and key alert in a
+        compact two-column layout so the reader gets an overview before
+        the per-system drill-down.
+        Skipped silently when there are no system summaries.
+        """
+        if not REPORTLAB_AVAILABLE or not report.system_summaries:
+            return
+
+        story.append(Paragraph("📋 Screening Analysis", self._styles["SectionHeader"]))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(
+            "Summary of all assessed body systems. Systems are colour-coded by risk level.",
+            self._styles["Caveat"]
+        ))
+        story.append(Spacer(1, 10))
+
+        # Build table rows
+        header_row = ["Body System", "Risk Level", "Score", "Key Finding"]
+        rows = [header_row]
+        row_bg_colors = []
+
+        RISK_EMOJI = {
+            RiskLevel.LOW:             "🟢",
+            RiskLevel.MODERATE:        "🟡",
+            RiskLevel.HIGH:            "🔴",
+            RiskLevel.ACTION_REQUIRED: "🔴",
+        }
+
+        for system, summary in report.system_summaries.items():
+            if system == PhysiologicalSystem.VISUAL_DISEASE:
+                continue  # handled in dedicated section
+            sys_name   = system.value.replace("_", " ").title()
+            risk_level = summary.get("risk_level", RiskLevel.LOW)
+            risk_score = summary.get("risk_score", 0.0)
+            alerts     = summary.get("alerts", [])
+            
+            if alerts:
+                key_alert = alerts[0]
+            elif risk_level == RiskLevel.UNKNOWN:
+                key_alert = "Not assessed"
+            elif risk_level == RiskLevel.LOW:
+                key_alert = "All metrics normal"
+            else:
+                key_alert = "No anomalies detected"
+
+            emoji = RISK_EMOJI.get(risk_level, "⚪")
+            label = RISK_LABELS.get(risk_level, "Unknown").split("•")[0].strip()
+
+            rows.append([
+                Paragraph(f"<b>{sys_name}</b>", self._styles["BodyText"]),
+                Paragraph(f"{emoji} {label}", self._styles["BodyText"]),
+                Paragraph(f"{risk_score:.0f}", self._styles["BodyText"]),
+                Paragraph(key_alert, self._styles["BiomarkerExplanation"]),
+            ])
+            row_bg_colors.append(RISK_COLORS.get(risk_level, HexColor("#F9FAFB")))
+
+        analysis_table = Table(rows, colWidths=[1.6*inch, 1.8*inch, 0.7*inch, 2.4*inch])
+        tbl_style = TableStyle([
+            # Header
+            ('BACKGROUND',    (0, 0), (-1, 0), HexColor("#F3F4F6")),
+            ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE',      (0, 0), (-1, 0), 9),
+            ('TOPPADDING',    (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('LINEBELOW',     (0, 0), (-1, 0), 1, HexColor("#E5E7EB")),
+            # Rows
+            ('FONTNAME',      (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE',      (0, 1), (-1, -1), 9),
+            ('TOPPADDING',    (0, 1), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 7),
+            ('LINEBELOW',     (0, 1), (-1, -1), 0.5, HexColor("#F3F4F6")),
+            ('GRID',          (0, 0), (-1, -1), 0, white),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN',         (2, 1), (2, -1),  'RIGHT'),
+        ])
+        # Apply per-row background from risk level
+        for i, color in enumerate(row_bg_colors, start=1):
+            tbl_style.add('BACKGROUND', (0, i), (-1, i), color)
+
+        analysis_table.setStyle(tbl_style)
+        story.append(analysis_table)
+        story.append(Spacer(1, 20))
+
     def _generate_pdf(
         self,
         report: PatientReport,
@@ -1073,6 +1568,10 @@ BIOMARKERS:
         story.append(Spacer(1, 15))
         
         for system, summary in report.system_summaries.items():
+            # VISUAL_DISEASE has its own dedicated section below — skip here
+            if system == PhysiologicalSystem.VISUAL_DISEASE:
+                continue
+
             system_name = system.value.replace("_", " ").title()
             
             # Phase 2: Add Experimental tag for specific systems
@@ -1144,54 +1643,13 @@ BIOMARKERS:
                     table_data.append([friendly_name, value_str, normal_range, status_icon])
                 
                 # Create table with adjusted column widths for better fit
-                biomarker_table = Table(table_data, colWidths=[2.2*inch, 1.3*inch, 1.2*inch, 1.8*inch])
-                
-                # Minimalist Table Style
-                table_style = [
-                    # Header: Simple, clean text
-                    ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#374151")),
-                    ('FontName', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 10),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('TOPPADDING', (0, 0), (-1, 0), 12),
-                    
-                    # Remove all vertical grids
-                    ('GRID', (0, 0), (-1, -1), 0, white), 
-                    
-                    # Bottom line for header
-                    ('LINEBELOW', (0, 0), (-1, 0), 1, HexColor("#E5E7EB")),
-                    
-                    # Content formatting
-                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                    ('FONTSIZE', (0, 1), (-1, -1), 10),
-                    ('TOPPADDING', (0, 1), (-1, -1), 10),
-                    ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
-                    
-                    # Horizontal dividers for rows
-                    ('LINEBELOW', (0, 1), (-1, -1), 0.5, HexColor("#F3F4F6")),
-                ]
-                
-                # Add status pill colors for the status column
-                for i, row in enumerate(table_data[1:], start=1):
-                    status_text = row[3]
-                    # Determine background color based on status
-                    # Check order matters: check "Above/Below" before "Normal" to avoid false matches
-                    
-                    if "Below" in status_text:
-                        bg_color = STATUS_COLORS["low"]  # Pastel orange
-                    elif "Above" in status_text:
-                        bg_color = STATUS_COLORS["high"]  # Pastel orange
-                    elif "✓" in status_text or status_text == "✓ Normal":
-                        bg_color = STATUS_COLORS["normal"]  # Mint green (only for truly normal)
-                    else:
-                        bg_color = STATUS_COLORS["not_assessed"]  # Light gray
-                        
-                    # Apply background to the Status column (index 3)
-                    table_style.append(('BACKGROUND', (3, i), (3, i), bg_color))
-                    # Add rounded corner feel by not drawing borders? ReportLab tables are rectangular.
-                    # We can't easily do rounded cells in simple Table, but the pastel block looks good.
-                
-                biomarker_table.setStyle(TableStyle(table_style))
+                biomarker_table = Table(
+                    table_data,
+                    colWidths=[2.2*inch, 1.3*inch, 1.2*inch, 1.8*inch]
+                )
+                biomarker_table.setStyle(TableStyle(
+                    self._build_biomarker_table_style(table_data)
+                ))
                 header_group.append(biomarker_table)
                 header_group.append(Spacer(1, 16))
                 
@@ -1236,25 +1694,45 @@ BIOMARKERS:
                         self._styles['BiomarkerExplanation']
                     ))
             
-            story.append(Spacer(1, 25))
-        
+        story.append(Spacer(1, 25))
+
+        # ===== ANALYSIS SECTION (executive summary table) =====
+        self._draw_analysis_section(story, report)
+        story.append(SectionDivider())
+        story.append(Spacer(1, 20))
+
+        # ===== VISUAL DISEASE PROBABILITY =====
+        self._draw_disease_probability_section(story, report.system_summaries)
+
+        # ===== SPECIALIST REFERRAL RECOMMENDATIONS (Clinical Decision Layer) =====
+        if report.clinical_findings:
+            story.append(SectionDivider())
+            story.append(Spacer(1, 10))
+            self._draw_clinical_findings_section(story, report.clinical_findings)
+
         # ===== RECOMMENDATIONS =====
+        story.append(SectionDivider())
+        story.append(Spacer(1, 10))
         story.append(Paragraph("💡 What You Should Do Next", self._styles['SectionHeader']))
         story.append(Spacer(1, 10))
-        
+
         for i, rec in enumerate(report.recommendations[:6], 1):
             story.append(Paragraph(f"{i}. {rec}", self._styles['BodyText']))
         story.append(Spacer(1, 25))
-        
+
         # ===== IMPORTANT NOTES =====
+        story.append(SectionDivider())
+        story.append(Spacer(1, 10))
         story.append(Paragraph("⚕️ Important Information", self._styles['SectionHeader']))
         story.append(Spacer(1, 10))
-        
+
         for caveat in report.caveats:
             story.append(Paragraph(f"• {caveat}", self._styles['BodyText']))
-        
+
         # Footer disclaimer
         story.append(Spacer(1, 30))
+        story.append(SectionDivider())
+        story.append(Spacer(1, 10))
         story.append(Paragraph(
             "<b>DISCLAIMER:</b> This health screening report is for informational purposes only and does not "
             "constitute medical advice, diagnosis, or treatment. Always consult with a qualified "
@@ -1262,12 +1740,13 @@ BIOMARKERS:
             "Do not disregard professional medical advice or delay seeking it based on this report.",
             self._styles['Caveat']
         ))
-        
+
         # Build PDF
         doc.build(story)
         logger.info(f"Enhanced patient report generated: {filepath}")
-        
+
         return filepath
+
 
 
 # For backward compatibility, create alias

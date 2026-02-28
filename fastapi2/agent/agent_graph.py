@@ -32,7 +32,13 @@ from langchain_core.messages import HumanMessage
 # ═══════════════════════════════════════════════════════════════════════
 
 def route_query(state: AgentState) -> str:
-    """Conditional edge: decide whether to research or answer directly."""
+    """Conditional edge: route by query_type.
+
+    - ``medical``          → clarification_node (full pipeline)
+    - ``patient_briefing`` → answer_node directly (fast-path, no research)
+    - ``greeting``         → answer_node directly
+    - ``general``          → answer_node directly
+    """
     qt = state.get("query_type", "medical")
     if qt == "medical":
         return "clarification_node"
@@ -58,12 +64,14 @@ def build_graph() -> StateGraph:
     Graph topology::
 
         START → router_node
-                  ├──(medical)──→ clarification_node
-                  │                 ├──(needs_clarification)──→ END (ask questions)
-                  │                 └──(sufficient)───────────→ research_evaluator_node
-                  │                                                 ├──(NO)──→ answer_node → END
-                  │                                                 └──(YES)─→ research_node → answer_node → END
-                  └──(other)────→ answer_node → END
+                  ├──(medical)──────────→ clarification_node
+                  │                           ├──(needs_clarification)──→ END
+                  │                           └──(sufficient)──────────→ research_evaluator_node
+                  │                                                           ├──(NO)──→ answer_node → END
+                  │                                                           └──(YES)─→ research_node → answer_node → END
+                  ├──(patient_briefing)─→ answer_node → END  ← ⚡ fast-path (no search)
+                  ├──(greeting)─────────→ answer_node → END
+                  └──(general)──────────→ answer_node → END
     """
     from agent.nodes import research_evaluator_node
     
@@ -202,6 +210,7 @@ def main():
                 "clarification_needed": False,
                 "clarification_count": 0,
                 "context_quality": 0.0,
+                "patient_context": "",  # No screening data in CLI mode
             },
             config={"configurable": {"thread_id": "cli-session"}},
         )

@@ -26,6 +26,7 @@ class PhysiologicalSystem(str, Enum):
     EYES = "eyes"
     NASAL = "nasal"
     REPRODUCTIVE = "reproductive"
+    VISUAL_DISEASE = "visual_disease"  # API-based visual disease classification (measles, eye, etc.)
 
     @classmethod
     def from_string(cls, name: str) -> "PhysiologicalSystem":
@@ -62,6 +63,8 @@ class PhysiologicalSystem(str, Enum):
             "nasal": cls.NASAL,
             "nose": cls.NASAL,
             "reproductive": cls.REPRODUCTIVE,
+            "visual_disease": cls.VISUAL_DISEASE,
+            "visual": cls.VISUAL_DISEASE,
         }
         
         if name_lower in mapping:

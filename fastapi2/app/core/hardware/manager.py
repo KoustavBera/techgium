@@ -15,6 +15,7 @@ import time
 import threading
 import queue
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple, Generator
@@ -39,6 +40,7 @@ from app.core.extraction.pulmonary import PulmonaryExtractor
 
 from app.core.extraction.eyes import EyeExtractor
 from app.core.extraction.nasal import NasalExtractor
+from app.core.extraction.visual_classification import VisualDiseaseClassifier
 from app.core.extraction.base import BiomarkerSet
 
 logger = logging.getLogger(__name__)
@@ -180,7 +182,11 @@ class HardwareManager:
         self._rolling_buffer: deque = deque(maxlen=900)
         self._rolling_lock = threading.Lock()
         self._rolling_capture_active = False
-        
+
+        # Alignment event: set by _capture_loop when positioning is correct,
+        # waited on by _wait_for_alignment instead of a 0.2s busy-poll.
+        self._alignment_event = threading.Event()
+
         # Extractors (same set as DataFusion)
         self._extractors_initialized = False
         self.cv_extractor = None
@@ -338,8 +344,9 @@ class HardwareManager:
             frame_height=720
         )
         self.nasal_extractor = NasalExtractor()
+        self.visual_extractor = VisualDiseaseClassifier()
         self._extractors_initialized = True
-        logger.info("✅ All 8 extractors initialized")
+        logger.info("✅ All 9 extractors initialized")
     
     # ------------------------------------------------------------------
     # CONTINUOUS CAPTURE (Video Stream)
@@ -414,13 +421,24 @@ class HardwareManager:
                         warning_type = None
                         self._current_distance_warning = None
 
+                    pose_detected = results.get("pose") is not None and results["pose"].pose_landmarks is not None
                     self._update_scan_status(
                         user_warnings={
                             "distance_warning": warning_type,
                             "face_detected": face_detected,
-                            "pose_detected": results.get("pose") is not None and results["pose"].pose_landmarks is not None,
+                            "pose_detected": pose_detected,
                         }
                     )
+
+                    # Signal alignment event if conditions are met, so _wait_for_alignment
+                    # can wake up immediately instead of polling every 0.2s.
+                    _phase = self._scan_status.get("phase", "IDLE")
+                    if _phase == "FACE_ANALYSIS" or _phase == "FACE_AND_VITALS":
+                        if face_detected or warning_type is None:
+                            self._alignment_event.set()
+                    elif _phase == "BODY_ANALYSIS":
+                        if warning_type is None and pose_detected:
+                            self._alignment_event.set()
                 
                 # Encode to JPEG
                 ret, jpeg = cv2.imencode('.jpg', frame, encode_params)
@@ -541,49 +559,61 @@ class HardwareManager:
 
     def _wait_for_alignment(self, target_phase: str, timeout: int = None):
         """
-        Busy-wait until user is correctly positioned for the phase.
-        If timeout is provided and reached, proceeds anyway with a warning.
+        Event-driven alignment wait: wakes up immediately when the capture loop
+        signals that positioning conditions are met, instead of polling every 0.2s.
+        Falls back to a timeout to avoid blocking the scan indefinitely.
         """
         logger.info(f"⏳ Waiting for alignment in {target_phase} (timeout={timeout}s)...")
-        
-        # Initial wait for first frame processing
-        time.sleep(1.0)
-        
-        start_time = time.time()
         
         # Default timeout for FACE_ANALYSIS if none provided (15s to avoid blocking forever)
         if timeout is None and target_phase == "FACE_ANALYSIS":
             timeout = 15
         
+        # Clear any stale signal from a previous phase, then give the capture loop
+        # 1 frame (≈33ms) to process and potentially set it.
+        self._alignment_event.clear()
+        time.sleep(0.1)
+
+        start_time = time.time()
+
         while self._scan_active:
-            # Timeout Check
-            if timeout and (time.time() - start_time > timeout):
+            # Timeout check
+            elapsed = time.time() - start_time
+            if timeout and elapsed > timeout:
                 logger.warning(f"Alignment timeout for {target_phase}. Proceeding anyway.")
                 self._update_scan_status(message="Proceeding with scan...")
-                time.sleep(1.0) # Show message briefly
+                time.sleep(0.5)  # Show message briefly
                 break
 
+            remaining = (timeout - elapsed) if timeout else 5.0
+            # Block efficiently until the capture loop signals alignment (or 0.5s max)
+            signalled = self._alignment_event.wait(timeout=min(0.5, remaining))
+
+            if signalled:
+                # Re-validate the actual conditions (event may be stale from a prior phase)
+                warning = self._current_distance_warning
+                with self._scan_lock:
+                    user_warnings = self._scan_status.get("user_warnings", {})
+
+                alignment_met = False
+                if target_phase == "FACE_ANALYSIS":
+                    if user_warnings.get("face_detected") or warning is None:
+                        alignment_met = True
+                elif target_phase == "BODY_ANALYSIS":
+                    if warning is None and user_warnings.get("pose_detected"):
+                        alignment_met = True
+
+                if alignment_met:
+                    logger.info(f"✅ Alignment achieved for {target_phase}")
+                    break
+                # Not yet aligned — clear the event and keep waiting
+                self._alignment_event.clear()
+
+            # Guide user through status message (runs at most every 0.5s now)
             warning = self._current_distance_warning
-            
-            # Achieving alignment: No distance warning AND correct detection present
             with self._scan_lock:
                 user_warnings = self._scan_status.get("user_warnings", {})
-            
-            alignment_met = False
-            if target_phase == "FACE_ANALYSIS":
-                # Allow proceeding if face is detected OR if distance warning is None
-                # (face_detected may be unreliable due to inference throttling)
-                if user_warnings.get("face_detected") or warning is None:
-                    alignment_met = True
-            elif target_phase == "BODY_ANALYSIS":
-                if warning is None and user_warnings.get("pose_detected"):
-                    alignment_met = True
-            
-            if alignment_met:
-                logger.info(f"✅ Alignment achieved for {target_phase}")
-                break
-            
-            # Guide user through status message
+
             msg = "Positioning correct. Stay still."
             if warning == "too_close":
                 msg = "Please move back slightly for a better view."
@@ -593,9 +623,7 @@ class HardwareManager:
                 msg = "Please step back so your full body is visible."
             elif target_phase == "FACE_ANALYSIS" and not user_warnings.get("face_detected"):
                 msg = "Please look directly at the camera."
-
             self._update_scan_status(message=msg)
-            time.sleep(0.2)
 
     def _countdown(self, seconds: int, message_prefix: str, phase: str = None):
         """Helper to update status with a visible countdown timer."""
@@ -914,14 +942,16 @@ class HardwareManager:
                 
                 logger.info(f"Captured {len(raw_captures)} body frames from hardware driver")
                 
-                # Post-process frames
+                # Post-process frames — subsample every 2nd frame for pose.
+                # Posture is quasi-static during the body scan, so 15 FPS is
+                # identical in accuracy to 30 FPS and halves CPU time here.
                 pose_sequence = []
-                for item in raw_captures:
+                for item in raw_captures[::2]:
                     pose = self.camera.extract_pose_from_frame(item['frame'])
                     if pose is not None:
                         pose_sequence.append(pose)
 
-                logger.info(f"Extracted {len(pose_sequence)} pose frames")
+                logger.info(f"Extracted {len(pose_sequence)} pose frames (subsampled from {len(raw_captures)} at 2x)")
             
             self._update_scan_status(progress=70)
             
@@ -968,14 +998,6 @@ class HardwareManager:
                 logger.info(f"  - {sys_data['system']}: {len(sys_data['biomarkers'])} biomarkers")
             
             # ============================================================
-            # Submit to internal API (reuse all risk engine + LLM logic)
-            # ============================================================
-            self._update_scan_status(
-                message="Computing risk assessment...",
-                progress=85,
-            )
-            
-            # ============================================================
             # Submit to ScreeningService (DIRECT CALL - no network overhead)
             # ============================================================
             self._update_scan_status(
@@ -1015,7 +1037,10 @@ class HardwareManager:
                         "trusted_results": result["trusted_results"],
                         "composite_risk": result["composite_risk"],
                         "rejected_systems": result["rejected_systems"],
-                        "timestamp": result["timestamp"]
+                        "timestamp": result["timestamp"],
+                        # Clinical Decision Layer output (Phase 1: CNS)
+                        "clinical_findings": request_payload.get("clinical_findings", []),
+                        "clinical_summary": request_payload.get("clinical_summary", {}),
                     }
                     
                     # Generate reports DIRECTLY using generators (instead of HTTP calls)
@@ -1030,7 +1055,8 @@ class HardwareManager:
                             composite_risk=result["composite_risk"],
                             patient_id=result["patient_id"],
                             trusted_results=result["trusted_results"],
-                            rejected_systems=result["rejected_systems"]
+                            rejected_systems=result["rejected_systems"],
+                            clinical_findings=request_payload.get("clinical_findings", []),
                         )
                         patient_report_id = p_report.report_id
                         _reports[patient_report_id] = p_report.pdf_path
@@ -1403,37 +1429,88 @@ class HardwareManager:
         if session_baseline: # NEW
             raw_data_context["session_baseline"] = session_baseline
         
-        # Run all 8 extractors (same order as bridge.py DataFusion)
+        # Run all 8 extractors concurrently.
+        # Each extractor ONLY READS from raw_data_context (dict) so this is thread-safe.
+        # Visual API (Gemini) is I/O-bound; running it in parallel with the CPU-bound
+        # signal extractors eliminates the ~5-10s blocking wait it caused previously.
         extractor_map = [
-            ("Pulmonary", self.pulmonary_extractor),
+            ("Pulmonary",      self.pulmonary_extractor),
             ("Cardiovascular", self.cv_extractor),
-            ("Skin", self.skin_extractor),
-            ("CNS", self.cns_extractor),
-            ("Skeletal", self.skeletal_extractor),
-
-            ("Eyes", self.eye_extractor),
-            ("Nasal", self.nasal_extractor),
+            ("Skin",           self.skin_extractor),
+            ("CNS",            self.cns_extractor),
+            ("Skeletal",       self.skeletal_extractor),
+            ("Eyes",           self.eye_extractor),
+            ("Nasal",          self.nasal_extractor),
+            ("Visual API",     self.visual_extractor),
         ]
-        
-        current_progress = 80
-        step_increment = 5 / len(extractor_map)  # Spread 5% progress across extractors
 
-        for i, (name, extractor) in enumerate(extractor_map):
-            try:
-                # Update status for frontend feedback
-                self._update_scan_status(
-                    message=f"Analyzing {name} system...",
-                    progress=int(current_progress + (i * step_increment))
-                )
-                
-                result = extractor.extract(raw_data_context)
-                if result.biomarkers:
-                    systems.append(self._transform_biomarker_set(result))
-            except Exception as e:
-                logger.error(f"{name} extraction failed: {e}")
+        self._update_scan_status(
+            message="Running biomarker extraction (parallel)...",
+            progress=80,
+        )
+
+        # Use 4 workers: enough to overlap the I/O-bound Visual API call with CPU
+        # extractors without over-subscribing the CPU on embedded hardware.
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="extractor") as pool:
+            future_to_name = {
+                pool.submit(extractor.extract, raw_data_context): (name, extractor)
+                for name, extractor in extractor_map
+                if extractor is not None
+            }
+
+            completed = 0
+            biomarker_sets_by_system = {}   # PhysiologicalSystem → BiomarkerSet
+            for future in as_completed(future_to_name):
+                name, _extractor = future_to_name[future]
+                completed += 1
+                progress_val = 80 + int(5 * completed / len(future_to_name))
+                try:
+                    result = future.result()
+                    if result.biomarkers:
+                        systems.append(self._transform_biomarker_set(result))
+                        biomarker_sets_by_system[result.system] = result
+                    self._update_scan_status(
+                        message=f"✓ {name} analysis complete ({completed}/{len(future_to_name)})",
+                        progress=progress_val,
+                    )
+                    logger.info(f"  ✅ {name}: {len(result.biomarkers)} biomarkers")
+                except Exception as e:
+                    logger.error(f"{name} extraction failed: {e}")
+                    self._update_scan_status(
+                        message=f"⚠ {name} analysis failed — continuing",
+                        progress=progress_val,
+                    )
         
+        # ── Clinical Decision Layer (Phase 1: CNS) ──────────────────────────────
+        # Run pattern-matching rules on the raw BiomarkerSets to produce
+        # actionable specialist referrals. Completely decoupled from risk scoring.
+        clinical_findings = []
+        try:
+            from app.core.clinical import ClinicalDecisionEngine
+            cde = ClinicalDecisionEngine()
+            clinical_findings = cde.analyze(biomarker_sets_by_system)
+            if clinical_findings:
+                logger.info(
+                    f"ClinicalDecisionEngine: {len(clinical_findings)} finding(s) — "
+                    + ", ".join(f.finding_id for f in clinical_findings)
+                )
+            else:
+                logger.info("ClinicalDecisionEngine: no findings (healthy pattern)")
+        except Exception as exc:
+            logger.error(f"ClinicalDecisionEngine failed (non-fatal): {exc}", exc_info=True)
+
         return {
             "patient_id": patient_id,
             "include_validation": True,
-            "systems": systems
+            "systems": systems,
+            "clinical_findings": clinical_findings,       # List[ClinicalFinding]
+            "clinical_summary": {
+                "total": len(clinical_findings),
+                "urgent": sum(1 for f in clinical_findings if f.urgency.value == "urgent"),
+                "referrals": list({
+                    r.specialist
+                    for f in clinical_findings
+                    for r in f.referrals
+                }),
+            },
         }
