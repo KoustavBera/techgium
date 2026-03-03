@@ -27,6 +27,8 @@ def run_test():
         'last_update': time.time()
     }
     
+    history_data = []
+    
     try:
         while True:
             line = ser.readline().decode('utf-8', errors='ignore').strip()
@@ -59,7 +61,14 @@ def run_test():
             
             # Print summary every 2 seconds
             if time.time() - latest['last_update'] >= 2:
-                print(f"\r[{time.strftime('%H:%M:%S')}] HR: {latest['heart_rate'] or 'N/A':>3} bpm | RR: {latest['respiratory_rate'] or 'N/A':>2} bpm | Light: {latest['illuminance'] or 'N/A':>5.1f} lx", end='', flush=True)
+                current_entry = {
+                    "timestamp": time.strftime('%H:%M:%S'),
+                    "heart_rate": latest['heart_rate'],
+                    "respiratory_rate": latest['respiratory_rate'],
+                    "illuminance": latest['illuminance']
+                }
+                history_data.append(current_entry)
+                print(json.dumps(history_data))
                 latest['last_update'] = time.time()
 
     except KeyboardInterrupt:

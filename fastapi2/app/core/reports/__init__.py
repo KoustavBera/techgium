@@ -7,7 +7,7 @@ Two types:
 - Doctor Report: Detailed biomarkers, trust envelope, technical
 """
 # Import standard (ReportLab-based) generators
-from .patient_report import EnhancedPatientReportGenerator as PatientReportGenerator
+from .patient_report_optimised import EnhancedPatientReportGenerator as PatientReportGenerator
 from .patient_report import PatientReport
 from .doctor_report import DoctorReportGenerator
 from .doctor_report import DoctorReport
