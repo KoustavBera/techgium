@@ -14,6 +14,8 @@ services:
       - ./fastapi2:/app
       - ./frontend:/frontend:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - app-net
 
   node-backend:
     build:
@@ -29,6 +31,8 @@ services:
       - ./backend:/usr/src/app
       - node_backend_node_modules:/usr/src/app/node_modules
     command: npm run dev
+    networks:
+      - app-net
 
   frontendv2:
     build:
@@ -44,8 +48,17 @@ services:
       - frontendv2_node_modules:/usr/src/app/node_modules
       - frontendv2_next_cache:/usr/src/app/.next
     command: npm run dev -- -H 0.0.0.0 -p 3000
+    networks:
+      - app-net
 
 volumes:
   node_backend_node_modules:
   frontendv2_node_modules:
   frontendv2_next_cache:
+
+
+networks:
+  app-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"

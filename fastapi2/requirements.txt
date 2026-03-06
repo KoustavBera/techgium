@@ -59,3 +59,4 @@ pillow>=11.1.0
 langdetect>=1.0.9  # Offline fallback for language detection (Sarvam /text-lid is primary)
 diskcache  # Fast disk-based persistent cache for Sarvam TTS and Translation
 inference-sdk
+langchain-huggingface
