@@ -9,20 +9,30 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ARG TORCH_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 ENV PIP_EXTRA_INDEX_URL=${TORCH_EXTRA_INDEX_URL}
 
+# Write pip.conf to /etc so it's picked up globally
+RUN echo '[global]' > /etc/pip.conf \
+  && echo 'trusted-host =' >> /etc/pip.conf \
+  && echo '    pypi.org' >> /etc/pip.conf \
+  && echo '    pypi.python.org' >> /etc/pip.conf \
+  && echo '    files.pythonhosted.org' >> /etc/pip.conf \
+  && echo '    download.pytorch.org' >> /etc/pip.conf \
+  && echo 'retries = 10' >> /etc/pip.conf \
+  && echo 'timeout = 120' >> /etc/pip.conf
+
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    pkg-config \
-    libgl1 \
-    libglib2.0-0 \
-    libgomp1 \
-    libcairo2 \
-    libpango-1.0-0 \
-    libpangoft2-1.0-0 \
-    libgdk-pixbuf2.0-0 \
-    shared-mime-info \
-    fonts-dejavu-core \
+  build-essential \
+  cmake \
+  pkg-config \
+  libgl1 \
+  libglib2.0-0 \
+  libgomp1 \
+  libcairo2 \
+  libpango-1.0-0 \
+  libpangoft2-1.0-0 \
+  libgdk-pixbuf2.0-0 \
+  shared-mime-info \
+  fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
@@ -35,4 +45,3 @@ COPY . /app
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
