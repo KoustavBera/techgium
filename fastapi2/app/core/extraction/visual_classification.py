@@ -1,10 +1,11 @@
 """
 Visual Disease Classifier — Roboflow API (Phase 1 POC)
 
-Runs 3 models IN PARALLEL using ThreadPoolExecutor to minimise latency:
-  - Skin Lesions   : my-ham10000/2   → full face crop
-  - Eye Disease    : eye-disease-jio2h/5   → tight eye crop
+Runs 4 models IN PARALLEL using ThreadPoolExecutor to minimise latency:
+  - Skin Lesions   : my-ham10000/2        → full face crop
+  - Eye Disease    : eye-disease-jio2h/5  → tight eye crop
   - Conjunctivitis : eye-detection-ci8qu/2 → tight eye crop (reused)
+  - Measles        : measles-f0wxa/2      → full face crop
 
 Crops are computed ONCE from MediaPipe FaceMesh landmarks where possible,
 falling back to the full frame gracefully.
@@ -89,6 +90,11 @@ class VisualDiseaseClassifier(BaseExtractor):
             "model_id": "eye-detection-ci8qu/2",
             "crop": "eye",             # reuses the same eye crop
             "min_confidence": 0.7,     # Raised — this model produces many false positives
+        },
+        "measles": {
+            "model_id": "measles-f0wxa/2",
+            "crop": "face",            # full face crop — looks for rash patterns
+            "min_confidence": 0.45,
         },
     }
 
@@ -212,8 +218,8 @@ class VisualDiseaseClassifier(BaseExtractor):
                 logger.error(f"VisualClassifier [{prefix}] API error: {e}")
                 return prefix, []
 
-        # 3 threads, one per model — collapses ~3s sequential → ~1s
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        # 4 threads, one per model — collapses ~4s sequential → ~1s
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {
                 executor.submit(_call, prefix, cfg): prefix
                 for prefix, cfg in self.MODELS.items()
