@@ -848,6 +848,7 @@
 
             // Prepare for streaming
             let accumulatedResponse = '';
+            let translationApplied = false;
             currentMessageDiv = null;
 
             try {
@@ -907,18 +908,25 @@
                                         currentMessageDiv = addMessage('', 'assistant');
                                     }
 
-                                    // Accumulate and display token
+                                    // Accumulate English tokens
                                     accumulatedResponse += data.token;
-                                    updateMessageContent(currentMessageDiv, accumulatedResponse, false);
+
+                                    // For non-English sessions, don't stream English to avoid
+                                    // confusing the user — just show a translating placeholder.
+                                    if (currentLanguage === 'en-IN') {
+                                        updateMessageContent(currentMessageDiv, accumulatedResponse, false);
+                                    } else {
+                                        updateMessageContent(currentMessageDiv, '⏳ Translating to your language...', false);
+                                    }
 
                                 } else if (data.type === 'final_translated') {
                                     // Received the final payload from Sarvam Translate & TTS
-                                    if (currentMessageDiv) {
-                                        // First ensure the english stream is rendered as markdown
-                                        updateMessageContent(currentMessageDiv, accumulatedResponse, true);
-                                        // Then append translation and play audio
-                                        applyFinalTranslation(currentMessageDiv, data.text, data.audio_base64);
+                                    translationApplied = true;
+                                    if (!currentMessageDiv) {
+                                        hideTypingIndicator();
+                                        currentMessageDiv = addMessage('', 'assistant');
                                     }
+                                    applyFinalTranslation(currentMessageDiv, data.text, data.audio_base64);
                                 }
                             } catch (e) {
                                 // Ignore parse errors for incomplete chunks
@@ -927,8 +935,8 @@
                     }
                 }
 
-                // Complete - render markdown
-                if (currentMessageDiv && accumulatedResponse) {
+                // Complete - render markdown (skip if translation already replaced content)
+                if (currentMessageDiv && accumulatedResponse && !translationApplied) {
                     updateMessageContent(currentMessageDiv, accumulatedResponse, true);
                 }
 

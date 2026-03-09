@@ -26,6 +26,7 @@ from app.core.extraction.base import PhysiologicalSystem
 from .base import ClinicalFinding, UrgencyLevel
 from .rules_cns import evaluate_cns
 from .rules_cardiovascular import evaluate_cardiovascular
+from .rules_nasal import evaluate_nasal
 
 if TYPE_CHECKING:
     from app.core.extraction.base import BiomarkerSet
@@ -35,8 +36,9 @@ logger = logging.getLogger(__name__)
 # ── Registry: system → rule evaluator ────────────────────────────────────────
 # Phase 1 ships only CNS.  Future systems are added here.
 _SYSTEM_EVALUATORS = {
-    PhysiologicalSystem.CNS: evaluate_cns,
+    PhysiologicalSystem.CNS:           evaluate_cns,
     PhysiologicalSystem.CARDIOVASCULAR: evaluate_cardiovascular,
+    PhysiologicalSystem.NASAL:         evaluate_nasal,
     # PhysiologicalSystem.SKELETAL:       evaluate_skeletal,         # Phase 3
     # PhysiologicalSystem.EYES:           evaluate_eyes,             # Phase 3
     # PhysiologicalSystem.SKIN:           evaluate_skin,             # Phase 3
