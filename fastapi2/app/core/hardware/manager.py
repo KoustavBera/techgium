@@ -273,14 +273,17 @@ class HardwareManager:
         # 4. Initialize extractors
         self._init_extractors()
         
-        # 5. Start continuous capture thread
+        # 5. Start continuous capture thread (Always start, even if no camera)
+        self._running = True
+        self._stream_thread = threading.Thread(
+            target=self._capture_loop, daemon=True, name="hw-stream"
+        )
+        self._stream_thread.start()
+        
         if self.camera:
-            self._running = True
-            self._stream_thread = threading.Thread(
-                target=self._capture_loop, daemon=True, name="hw-stream"
-            )
-            self._stream_thread.start()
             logger.info("✅ Continuous capture thread started")
+        else:
+            logger.warning("⚠️ No camera found — starting in SIMULATION MODE")
         
         logger.info("HardwareManager startup complete")
     
@@ -356,8 +359,24 @@ class HardwareManager:
         """Background thread: continuously reads frames, draws overlays, and encodes to JPEG."""
         encode_params = [cv2.IMWRITE_JPEG_QUALITY, self.config.jpeg_quality]
         
-        while self._running and self.camera:
-            frame = self.camera.read_frame()
+        # Create a dummy frame for simulation once
+        dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(dummy_frame, "SIMULATION MODE", (50, 240), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(dummy_frame, "NO CAMERA DETECTED", (50, 280), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        while self._running:
+            if self.camera:
+                frame = self.camera.read_frame()
+            else:
+                # Simulation: generate a slightly changing frame to prove liveness
+                frame = dummy_frame.copy()
+                # Add a moving element (e.g., a timestamp or counter)
+                cv2.putText(frame, f"Frame: {self._frame_counter}", (50, 320),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                time.sleep(1/30) # Simulate 30 FPS
+
             if frame is not None:
                 self._frame_counter += 1
                 
@@ -372,56 +391,66 @@ class HardwareManager:
                     active_models = ["pose"]
                 elif current_phase == "IDLE" or current_phase == "INITIALIZING":
                      # In IDLE, we only need face_det for distance warning
-                     # But we can skip it most of the time to save power
                      active_models = ["face_det"]
                 else:
                     active_models = [] # PROCESSING or ERROR -> No AI needed
                 
-                # Frame Skipping for Inference (Throttle during active scans)
-                current_phase = self._scan_status.get("phase", "IDLE")
-                is_scanning = current_phase in ["FACE_ANALYSIS", "BODY_ANALYSIS"]
-                
-                # Use a slightly higher interval during active scans to reduce CPU load
-                # but keep it low enough for reliable face detection (~7.5 FPS at 30 FPS camera)
-                dynamic_interval = 4 if is_scanning else self._inference_interval
-                should_run_inference = (self._frame_counter % dynamic_interval == 0)
-                
-                if should_run_inference and active_models:
-                    # Run selective inference
-                    self._last_inference_results = self.camera.detect_all(frame, active_models)
-                
+                # Inference Logic
+                if self.camera:
+                    # Real inference
+                    # Frame Skipping for Inference (Throttle during active scans)
+                    is_scanning = current_phase in ["FACE_ANALYSIS", "BODY_ANALYSIS"]
+                    dynamic_interval = 4 if is_scanning else self._inference_interval
+                    should_run_inference = (self._frame_counter % dynamic_interval == 0)
+                    
+                    if should_run_inference and active_models:
+                        self._last_inference_results = self.camera.detect_all(frame, active_models)
+                else:
+                    # Simulation inference
+                    # Mock successful detection for flow testing
+                    self._last_inference_results = {
+                        "face_det": [(100, 100, 200, 200)], # Dummy face box
+                        "face_mesh": "simulated_mesh", # Just non-None to trigger checks
+                        "pose": "simulated_pose"      # Just non-None to trigger checks
+                    }
+
                 # Apply server-side overlays using LAST KNOWN results (for smoothness)
                 if self._enable_overlays:
                     results = self._last_inference_results
                     
-                    # 1. Overlay based on Phase
-                    if current_phase == "FACE_ANALYSIS":
-                        frame = self.camera.draw_face_mesh_on_frame(frame, results)
-                    elif current_phase == "BODY_ANALYSIS":
-                        frame = self.camera.draw_pose_skeleton_on_frame(frame, results)
-                    
-                    # 2. Calculate and draw distance warnings (Throttle distance check too? No, fast feedback is good)
-                    # We reuse the same analysis results. If we skipped inference, we use old results.
-                    
-                    warning_type = self._current_distance_warning
-                    face_detected = False
-
-                    # Limit distance warning check to IDLE/FACE phases
-                    if current_phase in ["IDLE", "INITIALIZING", "FACE_ANALYSIS"]:
-                        warning_type, face_width = self.camera.calculate_face_distance(frame, results)
-                        if warning_type:
-                            # Distance warning is now handled by status message only
-                            pass
+                    if self.camera:
+                        # 1. Overlay based on Phase
+                        if current_phase == "FACE_ANALYSIS":
+                            frame = self.camera.draw_face_mesh_on_frame(frame, results)
+                        elif current_phase == "BODY_ANALYSIS":
+                            frame = self.camera.draw_pose_skeleton_on_frame(frame, results)
                         
-                        # Update status for frontend polling
-                        self._current_distance_warning = warning_type
-                        face_detected = face_width is not None
-                    elif current_phase == "BODY_ANALYSIS":
-                        # Clear distance warning so it doesn't interfere
-                        warning_type = None
+                        # 2. Calculate and draw distance warnings
+                        warning_type = self._current_distance_warning
+                        face_detected = False
+    
+                        # Limit distance warning check to IDLE/FACE phases
+                        if current_phase in ["IDLE", "INITIALIZING", "FACE_ANALYSIS"]:
+                            warning_type, face_width = self.camera.calculate_face_distance(frame, results)
+                            self._current_distance_warning = warning_type
+                            face_detected = face_width is not None
+                        elif current_phase == "BODY_ANALYSIS":
+                            warning_type = None
+                            self._current_distance_warning = None
+    
+                        pose_detected = results.get("pose") is not None
+                    else:
+                        # Simulation Overlays
+                        warning_type = None # Perfect distance
+                        face_detected = True
+                        pose_detected = True
                         self._current_distance_warning = None
+                        
+                        if current_phase == "FACE_ANALYSIS":
+                            cv2.putText(frame, "Simulating Face Analysis...", (50, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                        elif current_phase == "BODY_ANALYSIS":
+                            cv2.putText(frame, "Simulating Body Analysis...", (50, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-                    pose_detected = results.get("pose") is not None and results["pose"].pose_landmarks is not None
                     self._update_scan_status(
                         user_warnings={
                             "distance_warning": warning_type,
@@ -429,12 +458,12 @@ class HardwareManager:
                             "pose_detected": pose_detected,
                         }
                     )
-
+                    
                     # Signal alignment event if conditions are met, so _wait_for_alignment
                     # can wake up immediately instead of polling every 0.2s.
                     _phase = self._scan_status.get("phase", "IDLE")
                     if _phase == "FACE_ANALYSIS" or _phase == "FACE_AND_VITALS":
-                        if face_detected or warning_type is None:
+                        if face_detected and warning_type is None:
                             self._alignment_event.set()
                     elif _phase == "BODY_ANALYSIS":
                         if warning_type is None and pose_detected:
