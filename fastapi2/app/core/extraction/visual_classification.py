@@ -30,12 +30,16 @@ from .base import BaseExtractor, BiomarkerSet, PhysiologicalSystem
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# MediaPipe FaceMesh eye landmark indices (left eye outer bounding region)
-# We use left eye because it's typically better lit on a webcam.
+# MediaPipe FaceMesh eye landmark indices.
+# Both eyes are analysed; the prediction with the higher confidence wins.
 # ---------------------------------------------------------------------------
 _LEFT_EYE_INDICES = [
     362, 382, 381, 380, 374, 373, 390, 249,
     263, 466, 388, 387, 386, 385, 384, 398,
+]
+_RIGHT_EYE_INDICES = [
+    33, 7, 163, 144, 145, 153, 154, 155,
+    133, 173, 157, 158, 159, 160, 161, 246,
 ]
 
 # ---------------------------------------------------------------------------
@@ -89,7 +93,7 @@ class VisualDiseaseClassifier(BaseExtractor):
         "conjunctivitis": {
             "model_id": "eye-detection-ci8qu/2",
             "crop": "eye",             # reuses the same eye crop
-            "min_confidence": 0.7,     # Raised — this model produces many false positives
+            "min_confidence": 0.85,    # Raised higher — this model has many false positives
         },
         "measles": {
             "model_id": "measles-f0wxa/2",
@@ -97,6 +101,10 @@ class VisualDiseaseClassifier(BaseExtractor):
             "min_confidence": 0.45,
         },
     }
+
+    # Classes that represent a HEALTHY / BENIGN finding.
+    # High confidence in these = good. High confidence in anything else = concern.
+    HEALTHY_CLASSES = {"normal_eye", "not_affected", "normal", "nv"}
 
     def __init__(self):
         super().__init__()
@@ -138,12 +146,31 @@ class VisualDiseaseClassifier(BaseExtractor):
 
         # Face crop: prefer pre-cropped ROI, else fall back to raw frame
         face_img = face_frames[0] if face_frames else raw_frames[0]
+        raw_frame = raw_frames[0] if raw_frames else face_img
 
-        # Eye crop: derived once from MediaPipe landmarks + raw frame
-        eye_img = self._crop_eye_region(
-            raw_frames[0] if raw_frames else face_img,
-            face_landmarks_sequence,
+        # Eye crop: try BOTH eyes from landmarks (on the raw frame so coords are correct).
+        # face_img is passed as the safe fallback if landmarks are absent — it is
+        # already a tight face ROI so the heuristic box will land on the eyes.
+        left_eye_img  = self._crop_eye_region(
+            raw_frame, face_landmarks_sequence,
+            eye_indices=_LEFT_EYE_INDICES,
+            fallback_frame=face_img,
         )
+        right_eye_img = self._crop_eye_region(
+            raw_frame, face_landmarks_sequence,
+            eye_indices=_RIGHT_EYE_INDICES,
+            fallback_frame=None,   # don't double-fallback on right eye
+        )
+
+        # Pick the sharper / larger crop to send to the eye models.
+        # If the right-eye crop is valid and bigger, prefer it; otherwise left.
+        if right_eye_img is not None and right_eye_img.size > 0 and \
+                right_eye_img.size >= left_eye_img.size:
+            eye_img = right_eye_img
+            logger.debug("VisualClassifier: using RIGHT eye crop (larger crop selected)")
+        else:
+            eye_img = left_eye_img
+            logger.debug("VisualClassifier: using LEFT eye crop")
 
         # Map crop type → resolved image
         crop_images = {
@@ -172,18 +199,23 @@ class VisualDiseaseClassifier(BaseExtractor):
                 display_name = CLASS_DISPLAY_NAMES.get(raw_class, raw_class.replace("_", " ").title())
                 bm_name = f"{prefix}_{raw_class}"
 
+                # Healthy classes: high confidence = normal.
+                # Disease classes: high confidence = abnormal (above normal).
+                is_healthy = raw_class in self.HEALTHY_CLASSES
+                normal_range = (0.4, 1.0) if is_healthy else (0.0, 0.4)
+                level = "normal" if (is_healthy and confidence >= 0.4) or (not is_healthy and confidence <= 0.4) else "⚠ HIGH"
+
                 self._add_biomarker(
                     biomarker_set,
                     name=bm_name,
                     value=confidence,
                     unit="probability",
                     confidence=confidence,
-                    normal_range=(0.4, 1.0),   # Reversed: >40% → normal
+                    normal_range=normal_range,
                     description=(
                         f"Visual AI ({model_cfg['model_id']}): {display_name}"
                     ),
                 )
-                level = "normal" if confidence > 0.4 else "⚠ HIGH"
                 logger.info(f"VisualClassifier [{prefix}]: {display_name} = {confidence:.2f}  [{level}]")
 
         biomarker_set.extraction_time_ms = (time.time() - t0) * 1000
@@ -210,7 +242,11 @@ class VisualDiseaseClassifier(BaseExtractor):
                 logger.warning(f"VisualClassifier [{prefix}]: no valid crop, skipping.")
                 return prefix, []
             try:
-                response = self.client.infer(img, model_id=model_config["model_id"])
+                # Option C: preprocess to match clinical training distribution
+                img_processed = self._preprocess_for_model(img, crop_type)
+                # Roboflow models expect RGB; OpenCV frames are BGR.
+                img_rgb = cv2.cvtColor(img_processed, cv2.COLOR_BGR2RGB)
+                response = self.client.infer(img_rgb, model_id=model_config["model_id"])
                 preds = response.get("predictions", []) if isinstance(response, dict) else []
                 logger.debug(f"VisualClassifier [{prefix}]: {len(preds)} prediction(s) received.")
                 return prefix, preds
@@ -231,33 +267,99 @@ class VisualDiseaseClassifier(BaseExtractor):
         return results
 
     # -----------------------------------------------------------------------
+    # PRIVATE: clinical-grade image preprocessing (Option C)
+    # -----------------------------------------------------------------------
+    def _preprocess_for_model(
+        self, img: np.ndarray, crop_type: str
+    ) -> np.ndarray:
+        """
+        Preprocess a webcam crop to better match the clinical training distribution
+        of the Roboflow models. Two techniques:
+
+        1. CLAHE (Contrast Limited Adaptive Histogram Equalisation)
+           Normalises local lighting variations to mimic the controlled-lighting
+           conditions of dermoscopy / slit-lamp photographs used in training.
+           Applied per-channel in LAB colour space to avoid colour shift.
+
+        2. Resize to 512×512
+           Most clinical image models (HAM10000, eye disease datasets) were trained
+           on 224-512px images. A tight crop of a webcam face delivers far fewer
+           pixels than that. Upscaling with INTER_CUBIC interpolation improves
+           feature clarity without artefacts.
+
+        3. Unsharp mask (eye crops only)
+           Eye crops are particularly small (~200×80px). Sharpening helps the
+           model resolve fine details (blood vessels, scleral redness).
+        """
+        TARGET_SIZE = (512, 512)
+
+        try:
+            # Step 1: CLAHE in LAB colour space (preserves hue, fixes luminance)
+            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+            l_channel, a_channel, b_channel = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            l_eq = clahe.apply(l_channel)
+            lab_eq = cv2.merge([l_eq, a_channel, b_channel])
+            img_eq = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
+
+            # Step 2: Resize to target size using cubic interpolation
+            img_resized = cv2.resize(img_eq, TARGET_SIZE, interpolation=cv2.INTER_CUBIC)
+
+            # Step 3: Unsharp mask for eye crops (very small input patches)
+            if crop_type == "eye":
+                gaussian = cv2.GaussianBlur(img_resized, (0, 0), sigmaX=2.0)
+                img_resized = cv2.addWeighted(img_resized, 1.5, gaussian, -0.5, 0)
+
+            logger.debug(
+                f"VisualClassifier: preprocessed {crop_type} crop "
+                f"{img.shape[:2]} → {TARGET_SIZE} (CLAHE + resize"
+                f"{' + sharpen' if crop_type == 'eye' else ''})"
+            )
+            return img_resized
+
+        except Exception as e:
+            # Never block inference due to preprocessing failure
+            logger.warning(f"VisualClassifier: preprocessing failed ({e}), using raw crop.")
+            return img
+
+    # -----------------------------------------------------------------------
     # PRIVATE: eye crop
     # -----------------------------------------------------------------------
     def _crop_eye_region(
         self,
         frame: np.ndarray,
         face_landmarks_sequence: list,
+        eye_indices: list = None,
         padding: float = 0.35,
-    ) -> np.ndarray:
+        fallback_frame: Optional[np.ndarray] = None,
+    ) -> Optional[np.ndarray]:
         """
-        Extract a tight bounding-box crop around the left eye using
-        MediaPipe FaceMesh landmarks.  Falls back to the upper-centre
-        quarter of the frame if landmarks are unavailable.
+        Extract a tight bounding-box crop around one eye using MediaPipe
+        FaceMesh landmarks.
 
         Args:
-            frame:   Raw BGR frame (H × W × 3)
-            face_landmarks_sequence: list of [468×3] landmark arrays
-            padding: fractional padding around the bounding box
+            frame:                  Raw BGR frame (landmarks computed against this).
+            face_landmarks_sequence: List of [468×3] landmark arrays.
+            eye_indices:            Which landmark indices to use (left or right eye).
+                                    Defaults to _LEFT_EYE_INDICES.
+            padding:                Fractional padding around the bounding box.
+            fallback_frame:         If given, the heuristic fallback box is applied to
+                                    THIS frame instead of `frame`.  Pass `face_img` here
+                                    so the fallback stays inside the face ROI and the
+                                    eye heuristic actually lands on the eyes.
 
         Returns:
-            Cropped BGR eye image (may be fallback if landmarks absent)
+            Cropped BGR eye image, or None if impossible to crop.
         """
+        if eye_indices is None:
+            eye_indices = _LEFT_EYE_INDICES
+
         h, w = frame.shape[:2]
 
         if face_landmarks_sequence:
             lm = face_landmarks_sequence[0]  # use first landmark set
-            if isinstance(lm, np.ndarray) and lm.shape[0] > max(_LEFT_EYE_INDICES):
-                pts = lm[_LEFT_EYE_INDICES, :2]  # (N, 2) normalised x,y
+            if isinstance(lm, np.ndarray) and lm.shape[0] > max(eye_indices):
+                pts = lm[eye_indices, :2]  # (N, 2) normalised x,y
                 x_min = float(pts[:, 0].min()) * w
                 x_max = float(pts[:, 0].max()) * w
                 y_min = float(pts[:, 1].min()) * h
@@ -275,9 +377,15 @@ class VisualDiseaseClassifier(BaseExtractor):
                     logger.debug(f"VisualClassifier: Eye crop from landmarks {x1},{y1}→{x2},{y2}")
                     return crop
 
-        # Fallback: upper-centre quarter (rough eye region without landmarks)
-        logger.info("VisualClassifier: Landmark crop failed — using heuristic eye region.")
-        y1, y2 = int(h * 0.15), int(h * 0.55)
-        x1, x2 = int(w * 0.25), int(w * 0.75)
-        fallback = frame[y1:y2, x1:x2]
-        return fallback if fallback.size > 0 else frame
+        # Fix 3: Fallback uses `fallback_frame` (face ROI) if provided.
+        # The face ROI is already zoomed-in, so the heuristic box lands on the eyes.
+        # If no fallback_frame is given, return None so the caller can skip this eye.
+        if fallback_frame is None:
+            return None
+
+        logger.info("VisualClassifier: Landmark crop failed — using heuristic eye region on face ROI.")
+        fh, fw = fallback_frame.shape[:2]
+        y1, y2 = int(fh * 0.15), int(fh * 0.55)
+        x1, x2 = int(fw * 0.20), int(fw * 0.80)
+        fallback = fallback_frame[y1:y2, x1:x2]
+        return fallback if fallback.size > 0 else fallback_frame

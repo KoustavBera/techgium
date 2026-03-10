@@ -1442,15 +1442,10 @@ class EnhancedPatientReportGenerator:
 
         grouped: Dict[str, list] = {title: [] for title in PREFIXES.values()}
         try:
-            from app.core.extraction.visual_classification import CLASS_DISPLAY_NAMES
+            from app.core.extraction.visual_classification import CLASS_DISPLAY_NAMES, HEALTHY_CLASSES as _HEALTHY_CLASSES
         except ImportError:
             CLASS_DISPLAY_NAMES = {}
-
-        # Classes that represent HEALTHY / BENIGN findings.
-        # High confidence in these = GOOD (green), not a concern.
-        _HEALTHY_CLASSES = {
-            "normal_eye", "not_affected", "normal", "nv",
-        }
+            _HEALTHY_CLASSES = {"normal_eye", "not_affected", "normal", "nv"}
 
         for bm_name, bm_data in visual_biomarkers.items():
             for prefix, title in PREFIXES.items():

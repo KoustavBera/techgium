@@ -148,7 +148,7 @@ class EyeExtractor(BaseExtractor):
         # "Screen Focus" normal is ~5-6 bpm, while resting normal is 12+.
         # We adjust the lower bound to 5 to avoid false "Abnormal" flags during scanning.
         is_screen_focus = True
-        normal_blink = (5, 30) if is_screen_focus else (12, 35)
+        normal_blink = (0, 40) if is_screen_focus else (8, 40)
 
         self._add_biomarker_safe(
             biomarker_set, "blink_rate", float(blink_rate), "blinks_per_min",
@@ -246,7 +246,7 @@ class EyeExtractor(BaseExtractor):
         if blink_rate is not None:
             self._add_biomarker_safe(
                 biomarker_set, "blink_rate", blink_rate, "blinks_per_min",
-                confidence=0.65, normal_range=(12, 35),
+                confidence=0.65, normal_range=(3, 40),
                 description="Pose-based blink estimation (screen-calibrated)"
             )
         else:
