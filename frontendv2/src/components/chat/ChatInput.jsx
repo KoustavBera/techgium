@@ -10,6 +10,17 @@ import StopRoundedIcon from '@mui/icons-material/StopRounded'
 
 const btnSpring = { type: 'spring', stiffness: 380, damping: 22 }
 
+// Stable animation config — defined outside component to prevent re-registration on re-render
+const glowAnimate = {
+    boxShadow: [
+        '0 0 0px 0px rgba(11,87,208,0)',
+        '0 0 28px 6px rgba(131,168,255,0.7)',
+        '0 0 0px 0px rgba(11,87,208,0)',
+    ],
+}
+const glowTransition = { duration: 3, ease: 'easeInOut', repeat: Infinity, repeatType: 'loop' }
+
+
 export default function ChatInput({
     onSend,
     isProcessing,
@@ -58,14 +69,8 @@ export default function ChatInput({
         }}>
             <motion.div
                 initial={{ boxShadow: '0 0 0px 0px rgba(11,87,208,0)' }}
-                animate={{
-                    boxShadow: [
-                        '0 0 0px 0px rgba(11,87,208,0)',
-                        '0 0 32px 8px rgba(131, 168, 255, 0.8)',
-                        '0 0 0px 0px rgba(179, 237, 248, 0)',
-                    ],
-                }}
-                transition={{ duration: 2, ease: 'easeInOut', delay: 0.3 }}
+                animate={glowAnimate}
+                transition={glowTransition}
                 style={{
                     display: 'flex',
                     alignItems: 'flex-end',

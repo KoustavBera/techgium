@@ -3,7 +3,7 @@
  * Renders a single chat message — user or assistant.
  * Assistant messages stream tokens then render final markdown.
  */
-import { useEffect, useRef } from 'react'
+import { useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { marked } from 'marked'
 import CitationPill from './CitationPill'
@@ -18,16 +18,11 @@ export default function MessageBubble({ message, onCitationClick }) {
     const isUser = role === 'user'
     const contentRef = useRef(null)
 
-    // Auto-scroll to keep cursor visible while streaming
-    useEffect(() => {
-        if (isStreaming) {
-            contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-        }
-    }, [content, isStreaming])
-
-    const htmlContent = renderMarkdown && content
-        ? marked.parse(content)
-        : null
+    // Memoize markdown parse — only re-runs when content actually changes, not on every render
+    const htmlContent = useMemo(
+        () => renderMarkdown && content ? marked.parse(content) : null,
+        [renderMarkdown, content]
+    )
 
     return (
         <motion.div

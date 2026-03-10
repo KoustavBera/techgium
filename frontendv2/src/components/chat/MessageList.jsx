@@ -2,16 +2,17 @@
  * MessageList.jsx
  * Scrollable message container — auto-scrolls to bottom on new messages.
  */
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import MessageBubble from './MessageBubble'
 
 export default function MessageList({ messages, onCitationClick }) {
     const bottomRef = useRef(null)
 
-    // Auto-scroll to newest message
-    useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages.length])
+    // Scroll to bottom on every message update (new message OR streaming token).
+    // useLayoutEffect + 'instant' prevents competing smooth-scroll animations.
+    useLayoutEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' })
+    }, [messages])
 
     if (messages.length === 0) {
         return (

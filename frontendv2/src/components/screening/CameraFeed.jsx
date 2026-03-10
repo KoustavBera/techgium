@@ -109,8 +109,8 @@ export default function CameraFeed({
                         style={{
                             position: 'absolute', zIndex: 20, textAlign: 'center',
                             color: 'var(--md-surface-container-low)', pointerEvents: 'none',
-                            background: 'rgba(30,30,30,0.6)', padding: 32,
-                            borderRadius: 28, backdropFilter: 'blur(8px)',
+                            background: 'rgba(20,20,20,0.88)', padding: 32,
+                            borderRadius: 28,
                         }}
                     >
                         <PhotoCameraRoundedIcon style={{ fontSize: 48, marginBottom: 16, opacity: 0.8 }} />

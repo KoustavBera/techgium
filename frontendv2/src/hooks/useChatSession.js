@@ -32,6 +32,7 @@ export function useChatSession() {
     const [typingState, setTypingState] = useState(null)  // null = hidden
     const [connectionStatus, setConnectionStatus] = useState('checking')
     const audioRef = useRef(new Audio())
+    const rafPending = useRef(false)  // Throttle: max 1 state update per animation frame
 
     // ── Check backend health ──────────────────────────────────────
     const checkConnection = useCallback(async () => {
@@ -111,12 +112,20 @@ export function useChatSession() {
                             // ── Streaming token ──
                         } else if (data.type === 'token') {
                             accumulatedEnglish += data.token
-                            updateMessage(assistantId, {
-                                content: language === 'en-IN'
-                                    ? accumulatedEnglish
-                                    : '⏳ Translating to your language…',
-                                isStreaming: true,
-                            })
+                            // Throttle re-renders: only flush once per animation frame
+                            if (!rafPending.current) {
+                                rafPending.current = true
+                                const lang = language
+                                requestAnimationFrame(() => {
+                                    updateMessage(assistantId, {
+                                        content: lang === 'en-IN'
+                                            ? accumulatedEnglish
+                                            : '⏳ Translating to your language…',
+                                        isStreaming: true,
+                                    })
+                                    rafPending.current = false
+                                })
+                            }
 
                             // ── Final translated payload ──
                         } else if (data.type === 'final_translated') {

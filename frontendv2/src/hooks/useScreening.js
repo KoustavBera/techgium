@@ -10,13 +10,19 @@ const POLL_INTERVAL_MS = 500
 export function useScreening() {
     // Overall state: idle | initializing | running | complete | error
     const [scanState, setScanState] = useState('idle')
-    // Granular phase: IDLE, INITIALIZING, FACE_AND_VITALS, BODY_ANALYSIS, PROCESSING, COMPLETE, ERROR
-    const [phase, setPhase] = useState('IDLE')
-    const [message, setMessage] = useState('SYSTEM READY')
-    const [progress, setProgress] = useState(0)
+    // Combined poll payload — single setState per tick avoids cascading renders
+    const [scanStatus, setScanStatus] = useState({
+        phase: 'IDLE',
+        message: 'SYSTEM READY',
+        progress: 0,
+        userWarnings: null,
+    })
 
-    // Warnings / Trust Data
-    const [userWarnings, setUserWarnings] = useState(null)
+    // Convenience aliases (keep API surface the same for consumers)
+    const phase = scanStatus.phase
+    const message = scanStatus.message
+    const progress = scanStatus.progress
+    const userWarnings = scanStatus.userWarnings
     const [trustMetadata, setTrustMetadata] = useState(null)
 
     // Results
@@ -47,8 +53,7 @@ export function useScreening() {
     // 2. Start Scan
     const startScan = useCallback(async (config) => {
         setScanState('initializing')
-        setPhase('INITIALIZING')
-        setMessage('Preparing sensors...')
+        setScanStatus(prev => ({ ...prev, phase: 'INITIALIZING', message: 'Preparing sensors...', userWarnings: null }))
         setErrorMsg(null)
         setTrustMetadata(null)
         setReportId(null)
@@ -93,9 +98,8 @@ export function useScreening() {
 
         } catch (e) {
             setScanState('error')
-            setPhase('ERROR')
+            setScanStatus(prev => ({ ...prev, phase: 'ERROR', message: e.message }))
             setErrorMsg(e.message)
-            setMessage(e.message)
             startContinuousPolling() // Resume idle polling
         }
     }, [])
@@ -110,9 +114,9 @@ export function useScreening() {
                 // Only update idle warnings if we aren't actively running a scan
                 if (status.state === 'idle' || status.state === 'complete') {
                     if (status.user_warnings) {
-                        setUserWarnings(status.user_warnings)
+                        setScanStatus(prev => ({ ...prev, userWarnings: status.user_warnings }))
                     } else {
-                        setUserWarnings(null)
+                        setScanStatus(prev => ({ ...prev, userWarnings: null }))
                     }
                 }
             } catch {
@@ -126,13 +130,12 @@ export function useScreening() {
         try {
             const status = await API.getScanStatus()
 
-            setPhase(status.phase)
-            setMessage(status.message)
-            setProgress(status.progress)
-
-            if (status.user_warnings) {
-                setUserWarnings(status.user_warnings)
-            }
+            setScanStatus({
+                phase: status.phase,
+                message: status.message,
+                progress: status.progress ?? 0,
+                userWarnings: status.user_warnings ?? null,
+            })
 
             // Terminal States
             if (status.state === 'complete') {
@@ -152,6 +155,7 @@ export function useScreening() {
 
                 setScanState('error')
                 setErrorMsg(status.message)
+                setScanStatus(prev => ({ ...prev, phase: 'ERROR', message: status.message }))
 
                 startContinuousPolling()
             }
@@ -163,13 +167,7 @@ export function useScreening() {
     // 5. Reset
     const resetScreening = useCallback(() => {
         setScanState('idle')
-        setPhase('IDLE')
-        setMessage('SYSTEM READY')
-        setProgress(0)
-        setReportId(null)
-        setTrustMetadata(null)
-        setErrorMsg(null)
-        setUserWarnings(null)
+        setScanStatus({ phase: 'IDLE', message: 'SYSTEM READY', progress: 0, userWarnings: null })
     }, [])
 
     // Lifecycle

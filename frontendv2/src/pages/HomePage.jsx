@@ -356,22 +356,6 @@ export default function HomePage() {
             paddingBottom: '8px',
         }} className="scrollbar-none">
 
-            {/* ── Light vignette overlay — bg color bleeds in from all corners ── */}
-            <div aria-hidden="true" style={{
-                position: 'fixed',
-                top: 0,
-                right: 0,
-                bottom: 0,
-                left: 'var(--sidebar-width)',
-                pointerEvents: 'none',
-                zIndex: 9999,
-                background: [
-                    'radial-gradient(ellipse 55% 38% at 0% 0%,   rgba(253,251,255,0.82) 0%, transparent 100%)',
-                    'radial-gradient(ellipse 55% 38% at 100% 0%,  rgba(253,251,255,0.82) 0%, transparent 100%)',
-                    'radial-gradient(ellipse 55% 38% at 0% 100%, rgba(253,251,255,0.82) 0%, transparent 100%)',
-                    'radial-gradient(ellipse 55% 38% at 100% 100%,rgba(253,251,255,0.82) 0%, transparent 100%)',
-                ].join(','),
-            }} />
 
             {/* ══ HERO ═══════════════════════════════════════════════════ */}
             <motion.div
@@ -385,7 +369,7 @@ export default function HomePage() {
                     WebkitBackdropFilter: 'blur(24px)',
                     borderRadius: '32px',
                     padding: 'clamp(28px,4vw,48px) clamp(24px,4vw,52px)',
-                    overflow: 'hidden',
+                    overflow: 'visible',
                     flexShrink: 0,
                     border: '1px solid rgba(196,199,197,0.30)',
                     boxShadow: '0 4px 32px rgba(0,0,0,0.04)',
@@ -429,7 +413,7 @@ export default function HomePage() {
                             boxShadow: '0 0 8px rgba(11,87,208,0.6)',
                             animation: 'pulse-ring 1.4s cubic-bezier(0.4,0,0.6,1) infinite',
                         }} />
-                        AI-Powered Health Platform
+                        Contactless Health Screening
                     </motion.div>
 
                     {/* Headline */}
@@ -457,16 +441,16 @@ export default function HomePage() {
                                 aria-hidden="true"
                                 style={{
                                     position: 'absolute',
-                                    right: '-22px',
-                                    bottom: '-18px',
-                                    width: '110px',
-                                    height: '110px',
+                                    right: '-52px',
+                                    bottom: '-148px',
+                                    width: '530px',
+                                    height: '330px',
                                     objectFit: 'contain',
-                                    opacity: 0.18,
-                                    filter: 'blur(1px) saturate(0.6)',
-                                    transform: 'rotate(18deg)',
+                                    opacity: 0.35,
+                                    filter: 'hue-rotate(180deg) opacity(0.8) blur(0.5px)',
+                                    transform: 'rotate(24deg) scale(1.1)',
                                     pointerEvents: 'none',
-                                    zIndex: 0,
+                                    zIndex: -1,
                                 }}
                             />
                             <span style={{

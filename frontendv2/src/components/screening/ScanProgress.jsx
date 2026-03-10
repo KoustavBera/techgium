@@ -59,14 +59,13 @@ export default function ScanProgress({ phase, message, scanState, progress }) {
 
                     return (
                         <motion.div
-                            layout
                             key={step.id}
                             style={{
                                 display: 'flex', alignItems: 'center', gap: '16px',
                                 padding: '12px 16px', borderRadius: '16px',
                                 background: bg, color: color,
                                 fontSize: '14px', fontWeight: 500,
-                                transition: 'all 0.3s ease'
+                                transition: 'background 0.3s ease, color 0.3s ease'
                             }}
                         >
                             <div style={{
@@ -100,7 +99,6 @@ export default function ScanProgress({ phase, message, scanState, progress }) {
 
             {/* Progress Message Banner */}
             <motion.div
-                layout
                 style={{
                     marginTop: '8px', padding: '16px', borderRadius: '16px',
                     background: isError ? 'var(--md-error-container)' : isComplete ? 'var(--md-success-container)' : 'var(--md-primary-container)',

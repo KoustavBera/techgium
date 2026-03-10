@@ -3,15 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Sidebar from './Sidebar'
 
 const pageVariants = {
-    initial: { opacity: 0, y: 14 },
+    initial: { opacity: 0, y: 12 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: -8 },
 }
 
 const pageTransition = {
     type: 'spring',
-    stiffness: 260,
-    damping: 28,
+    stiffness: 300,
+    damping: 30,
+    mass: 0.7,
 }
 
 export default function AppShell() {
@@ -28,15 +29,13 @@ export default function AppShell() {
             <div className="ambient-blob ambient-blob-1" aria-hidden="true" style={{ zIndex: -1 }} />
             <div className="ambient-blob ambient-blob-2" aria-hidden="true" style={{ zIndex: -1 }} />
             <div className="ambient-blob ambient-blob-3" aria-hidden="true" style={{ zIndex: -1 }} />
-            <div className="ambient-blob ambient-blob-4" aria-hidden="true" style={{ zIndex: -1 }} />
-            <div className="ambient-blob ambient-blob-5" aria-hidden="true" style={{ zIndex: -1 }} />
 
             {/* ── Top-right corner glow ── */}
             <div className="corner-glow-tr" aria-hidden="true" />
 
             <Sidebar />
 
-            {/* ── Scroll Blur Overlays ── */}
+            {/* ── Scroll Fade Overlays ── */}
             <div
                 aria-hidden="true"
                 style={{
@@ -44,14 +43,10 @@ export default function AppShell() {
                     top: 0,
                     left: 'var(--sidebar-width)',
                     right: 0,
-                    height: '60px',
+                    height: '48px',
                     pointerEvents: 'none',
                     zIndex: 10,
-                    background: 'linear-gradient(to bottom, rgba(253,251,255,0.95) 0%, rgba(253,251,255,0) 100%)',
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
-                    maskImage: 'linear-gradient(to bottom, black 0%, transparent 100%)',
-                    WebkitMaskImage: 'linear-gradient(to bottom, black 0%, transparent 100%)',
+                    background: 'linear-gradient(to bottom, rgba(253,251,255,0.97) 0%, rgba(253,251,255,0) 100%)',
                 }}
             />
             <div
@@ -61,16 +56,31 @@ export default function AppShell() {
                     bottom: 0,
                     left: 'var(--sidebar-width)',
                     right: 0,
-                    height: '60px',
+                    height: '48px',
                     pointerEvents: 'none',
                     zIndex: 10,
-                    background: 'linear-gradient(to top, rgba(253,251,255,0.95) 0%, rgba(253,251,255,0) 100%)',
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
-                    maskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
-                    WebkitMaskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
+                    background: 'linear-gradient(to top, rgba(253,251,255,0.97) 0%, rgba(253,251,255,0) 100%)',
                 }}
             />
+
+            {/* ── Home-only vignette overlay (must live outside motion.main to avoid filter stacking context) ── */}
+            {location.pathname === '/' && (
+                <div aria-hidden="true" style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    left: 0,
+                    pointerEvents: 'none',
+                    zIndex: 9,
+                    background: [
+                        'radial-gradient(ellipse 55% 38% at 0% 0%,   rgba(253,251,255,0.82) 0%, transparent 100%)',
+                        'radial-gradient(ellipse 55% 38% at 100% 0%,  rgba(253,251,255,0.82) 0%, transparent 100%)',
+                        'radial-gradient(ellipse 55% 38% at 0% 100%, rgba(253,251,255,0.82) 0%, transparent 100%)',
+                        'radial-gradient(ellipse 55% 38% at 100% 100%,rgba(253,251,255,0.82) 0%, transparent 100%)',
+                    ].join(','),
+                }} />
+            )}
 
             {/* ── Main content area ── */}
             <AnimatePresence mode="wait">

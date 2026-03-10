@@ -88,7 +88,6 @@
   }
 
   html {
-    scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -701,61 +700,37 @@
 /* Global layout-level blobs (in AppShell) */
 .ambient-blob-1 {
   /* Warm peach — top centre */
-  width: 560px;
-  height: 560px;
+  width: 520px;
+  height: 520px;
   top: -140px;
   left: 20%;
-  background: radial-gradient(circle, rgba(255, 203, 164, 0.55) 0%, transparent 68%);
-  filter: blur(90px);
+  background: radial-gradient(circle, rgba(255, 203, 164, 0.50) 0%, transparent 68%);
+  filter: blur(60px);
   animation: blob-float-a 14s ease-in-out infinite;
 }
 
 .ambient-blob-2 {
   /* Primary blue — top right */
-  width: 480px;
-  height: 480px;
+  width: 440px;
+  height: 440px;
   top: -80px;
   right: -100px;
-  background: radial-gradient(circle, rgba(11, 87, 208, 0.28) 0%, transparent 68%);
-  filter: blur(100px);
+  background: radial-gradient(circle, rgba(11, 87, 208, 0.22) 0%, transparent 68%);
+  filter: blur(70px);
   animation: blob-float-b 18s ease-in-out infinite;
   animation-delay: -4s;
 }
 
 .ambient-blob-3 {
   /* Tertiary purple / lavender — left side */
-  width: 520px;
-  height: 520px;
+  width: 480px;
+  height: 480px;
   top: 15%;
   left: -130px;
-  background: radial-gradient(circle, rgba(103, 80, 164, 0.25) 0%, transparent 65%);
-  filter: blur(110px);
+  background: radial-gradient(circle, rgba(103, 80, 164, 0.20) 0%, transparent 65%);
+  filter: blur(75px);
   animation: blob-float-c 20s ease-in-out infinite;
   animation-delay: -7s;
-}
-
-.ambient-blob-4 {
-  /* Ice blue / pale lavender — bottom right */
-  width: 600px;
-  height: 600px;
-  bottom: -160px;
-  right: -80px;
-  background: radial-gradient(circle, rgba(212, 225, 249, 0.50) 0%, transparent 65%);
-  filter: blur(120px);
-  animation: blob-float-d 22s ease-in-out infinite;
-  animation-delay: -11s;
-}
-
-.ambient-blob-5 {
-  /* Teal/cyan accent — bottom left */
-  width: 400px;
-  height: 400px;
-  bottom: -60px;
-  left: 10%;
-  background: radial-gradient(circle, rgba(0, 90, 153, 0.20) 0%, transparent 65%);
-  filter: blur(100px);
-  animation: blob-float-a 16s ease-in-out infinite;
-  animation-delay: -2s;
 }
 
 /* ── Corner Glow — top-right ── */

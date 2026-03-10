@@ -1,8 +1,17 @@
 /**
  * TypingIndicator.jsx
  * Animated 3-dot "thinking" indicator with dynamic agent state text.
+ * Dots use CSS keyframe animation (cheaper than Framer Motion JS loop).
  */
 import { motion, AnimatePresence } from 'framer-motion'
+
+const dotStyle = (delayClass) => ({
+    display: 'block',
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    background: 'var(--md-primary)',
+})
 
 export default function TypingIndicator({ visible, label }) {
     return (
@@ -22,7 +31,7 @@ export default function TypingIndicator({ visible, label }) {
                         maxWidth: '320px',
                     }}
                 >
-                    {/* Dots container */}
+                    {/* Dots container — uses CSS @keyframes for off-thread animation */}
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -32,25 +41,9 @@ export default function TypingIndicator({ visible, label }) {
                         borderRadius: '8px 20px 20px 20px',
                         boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
                     }}>
-                        {[0, 1, 2].map(i => (
-                            <motion.span
-                                key={i}
-                                animate={{ y: [0, -6, 0] }}
-                                transition={{
-                                    duration: 0.8,
-                                    repeat: Infinity,
-                                    delay: i * 0.15,
-                                    ease: 'easeInOut',
-                                }}
-                                style={{
-                                    display: 'block',
-                                    width: '7px',
-                                    height: '7px',
-                                    borderRadius: '50%',
-                                    background: 'var(--md-primary)',
-                                }}
-                            />
-                        ))}
+                        <span className="animate-typing-dot" style={dotStyle()} />
+                        <span className="animate-typing-dot" style={dotStyle()} />
+                        <span className="animate-typing-dot" style={dotStyle()} />
                     </div>
                     {/* Label */}
                     {label && (
