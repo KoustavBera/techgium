@@ -1,6 +1,11 @@
 /**
  * CameraFeed.jsx
- * Displays the live MJPEG stream from the backend and overlays dynamic distance/quality warnings.
+ * Displays the live MJPEG stream from the backend.
+ * 
+ * Features:
+ * - Distance / face / lighting warnings (from backend user_warnings)
+ * - Static head-position guide overlay shown pre-scan (IDLE / INITIALIZING)
+ * - Hides guide once the scan goes live to avoid visual noise
  */
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -8,6 +13,112 @@ import WarningRoundedIcon from '@mui/icons-material/WarningRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import LightbulbRoundedIcon from '@mui/icons-material/LightbulbRounded'
 import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded'
+
+// ── Helper: static SVG head-guide overlay ────────────────────────────────────
+
+function HeadGuide() {
+    return (
+        <motion.div
+            key="head-guide"
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                zIndex: 25,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+            }}
+        >
+            {/* Realistic-scale head + shoulder guide — 65% of container width */}
+            <svg
+                viewBox="0 0 300 420"
+                style={{ width: '65%', maxWidth: 420 }}
+                xmlns="http://www.w3.org/2000/svg"
+            >
+                <defs>
+                    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="5" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                </defs>
+
+                {/* Shoulder silhouette */}
+                <path
+                    d="M 0 420 Q 0 375 70 360 Q 150 340 230 360 Q 300 375 300 420 Z"
+                    fill="rgba(255,255,255,0.05)"
+                    stroke="rgba(255,255,255,0.22)"
+                    strokeWidth="2"
+                    strokeDasharray="8 5"
+                />
+
+                {/* Neck */}
+                <rect
+                    x="127" y="337" width="46" height="38"
+                    rx="8"
+                    fill="rgba(255,255,255,0.05)"
+                    stroke="rgba(255,255,255,0.18)"
+                    strokeWidth="1.5"
+                />
+
+                {/* Head oval — main guide ring */}
+                <ellipse
+                    cx="150" cy="210" rx="118" ry="138"
+                    fill="rgba(255,255,255,0.03)"
+                    stroke="rgba(99,210,255,0.85)"
+                    strokeWidth="2.5"
+                    strokeDasharray="14 7"
+                    filter="url(#glow)"
+                >
+                    <animate
+                        attributeName="stroke-dashoffset"
+                        from="0" to="-42"
+                        dur="2.4s"
+                        repeatCount="indefinite"
+                    />
+                </ellipse>
+
+                {/* Corner bracket ticks */}
+                {/* top-left */}
+                <path d="M 40 125 L 40 107 L 58 107" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                {/* top-right */}
+                <path d="M 260 125 L 260 107 L 242 107" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                {/* bottom-left */}
+                <path d="M 40 303 L 40 321 L 58 321" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                {/* bottom-right */}
+                <path d="M 260 303 L 260 321 L 242 321" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+            </svg>
+
+            {/* Label */}
+            <div style={{
+                marginTop: 10,
+                background: 'rgba(0,0,0,0.55)',
+                backdropFilter: 'blur(8px)',
+                color: 'rgba(99,210,255,0.95)',
+                fontSize: 12,
+                fontWeight: 500,
+                padding: '6px 18px',
+                borderRadius: 999,
+                border: '1px solid rgba(99,210,255,0.3)',
+                letterSpacing: '0.5px',
+                textTransform: 'uppercase',
+            }}>
+                Position your face here
+            </div>
+        </motion.div>
+    )
+}
+
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function CameraFeed({
     isActive,
@@ -25,18 +136,27 @@ export default function CameraFeed({
         }
     }, [isActive])
 
-    // Determine which warning to show (priority based)
+    // ── Warning priority logic ────────────────────────────────────────────────
+    // "NO FACE DETECTED" is only shown in IDLE / INITIALIZING (pre-scan).
+    // Once FACE_AND_VITALS starts, the backend is already collecting — the
+    // banner there is misleading because the debounce may briefly fire on
+    // the very first frame even while the face is clearly in view.
     let warningIcon = null
     let warningText = null
 
     if (userWarnings) {
-        if (userWarnings.distance_warning === 'too_close') {
+        if (userWarnings.distance_warning === 'no_face') {
+            // Camera is physically blocked or user walked away entirely
+            warningIcon = <PersonRoundedIcon />
+            warningText = 'NO FACE DETECTED — Position your face in front of the camera'
+        } else if (userWarnings.distance_warning === 'too_close') {
             warningIcon = <WarningRoundedIcon />
             warningText = 'TOO CLOSE — Please move back from the camera'
         } else if (userWarnings.distance_warning === 'too_far') {
             warningIcon = <WarningRoundedIcon />
             warningText = 'TOO FAR — Please move closer to the camera'
-        } else if (!userWarnings.face_detected && (scanState === 'idle' || phase === 'FACE_AND_VITALS')) {
+        } else if (!userWarnings.face_detected && (scanState === 'idle' || phase === 'INITIALIZING')) {
+            // Debounce fallback: face consistently absent for 3+ inference frames
             warningIcon = <PersonRoundedIcon />
             warningText = 'NO FACE DETECTED — Position yourself in frame'
         } else if (!userWarnings.pose_detected && phase === 'BODY_ANALYSIS') {
@@ -48,7 +168,13 @@ export default function CameraFeed({
         }
     }
 
+    // Show AI spinner overlay during PROCESSING phase
     const showLoaderOverlay = phase === 'PROCESSING'
+
+    // Show the head guide when camera is on and the user needs positioning assistance.
+    // Includes FACE_AND_VITALS so users can still adjust during the active face scan.
+    const guidePhases = ['IDLE', 'INITIALIZING', 'FACE_AND_VITALS']
+    const showHeadGuide = isActive && guidePhases.includes(phase)
 
     return (
         <div style={{
@@ -99,6 +225,11 @@ export default function CameraFeed({
                 }}
             />
 
+            {/* ── Static Head-Position Guide (pre-scan only) ── */}
+            <AnimatePresence>
+                {showHeadGuide && <HeadGuide />}
+            </AnimatePresence>
+
             {/* ── Placeholder (When Inactive) ── */}
             <AnimatePresence>
                 {!isActive && (
@@ -118,7 +249,7 @@ export default function CameraFeed({
                             Camera Ready
                         </h2>
                         <p style={{ marginTop: 8, opacity: 0.8, fontSize: 14 }}>
-                            Click 'Show Camera' or 'Start Scan' to begin.
+                            Click &apos;Show Camera&apos; or &apos;Start Scan&apos; to begin.
                         </p>
                     </motion.div>
                 )}

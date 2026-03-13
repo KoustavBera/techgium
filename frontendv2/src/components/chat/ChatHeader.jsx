@@ -5,13 +5,10 @@
 import { motion } from 'framer-motion'
 import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded'
 import TranslateRoundedIcon from '@mui/icons-material/TranslateRounded'
+import { LANGUAGES } from './LanguageOverlay'
 
-const LANG_NAMES = {
-    'en-IN': 'English',
-    'hi-IN': 'हिंदी',
-    'bn-IN': 'বাংলা',
-    'kn-IN': 'ಕನ್ನಡ',
-}
+// Build lookup from the single source-of-truth list in LanguageOverlay
+const LANG_META = Object.fromEntries(LANGUAGES.map(l => [l.code, l]))
 
 const STATUS_CONFIG = {
     connected: { bg: 'var(--md-success-container)', color: 'var(--md-on-success-container)', label: '● Connected' },
@@ -20,8 +17,11 @@ const STATUS_CONFIG = {
 }
 
 export default function ChatHeader({ connectionStatus, language, onChangeLang }) {
-    const status = STATUS_CONFIG[connectionStatus] || STATUS_CONFIG.checking
-    const langName = LANG_NAMES[language] || 'English'
+    const status   = STATUS_CONFIG[connectionStatus] || STATUS_CONFIG.checking
+    const langMeta = LANG_META[language] || LANG_META['en-IN']
+    const langName = langMeta?.native || 'English'
+    const langFlag = langMeta?.flag   || '🌐'
+    const langColor = langMeta?.color || 'var(--md-primary)'
 
     return (
         <div style={{
@@ -88,19 +88,23 @@ export default function ChatHeader({ connectionStatus, language, onChangeLang })
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.97 }}
                     onClick={onChangeLang}
+                    title="Change language"
+                    aria-label={`Current language: ${langMeta?.english}. Click to change.`}
                     style={{
                         display: 'flex', alignItems: 'center', gap: '6px',
-                        padding: '6px 14px',
+                        padding: '5px 12px 5px 10px',
                         borderRadius: '999px',
-                        background: 'var(--md-primary-container)',
-                        color: 'var(--md-on-primary-container)',
-                        border: 'none', cursor: 'pointer',
+                        background: `${langColor}15`,
+                        color: langColor,
+                        border: `1.5px solid ${langColor}35`,
+                        cursor: 'pointer',
                         fontSize: '12px', fontWeight: 600,
                         fontFamily: "'Google Sans', sans-serif",
                     }}
                 >
-                    <TranslateRoundedIcon style={{ fontSize: 14 }} />
-                    {langName}
+                    <span style={{ fontSize: 14, lineHeight: 1 }} aria-hidden>{langFlag}</span>
+                    <span>{langName}</span>
+                    <TranslateRoundedIcon style={{ fontSize: 12, opacity: 0.7 }} />
                 </motion.button>
             </div>
         </div>

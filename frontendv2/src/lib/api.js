@@ -48,11 +48,12 @@ export async function checkHealth() {
  * @param {object} body  JSON body
  * @returns {Promise<Response>}
  */
-export async function streamFetch(path, body) {
+export async function streamFetch(path, body, options = {}) {
     const response = await fetch(`${API_BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        ...options,
     });
     if (!response.ok) {
         throw new Error(`Stream request failed: HTTP ${response.status}`);

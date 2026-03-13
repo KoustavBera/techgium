@@ -1,0 +1,61 @@
+{
+  "sidebar": {
+    "home": "Home",
+    "screening": "Screening",
+    "chatbot": "Chiranjeev.ai"
+  },
+  "home": {
+    "tagline": "Contactless Health Screening",
+    "headline_pt1": "Health screening, ",
+    "headline_pt2": "reimagined",
+    "headline_pt3": " by AI.",
+    "subtitle": "C.H.I.R.A.N.J.E.E.V.I - Comprehensive Health Intelligence for Realtime Assessment and Non-invasive Joint Evaluation with Enhanced Vital Interpretation",
+    "explore_modules": "Explore modules",
+    "stats": {
+      "modalities": "Sensor Modalities",
+      "modalities_sub": "Camera · Thermal · mmWave",
+      "languages": "Languages Supported",
+      "languages_sub": "Including Kannada, Hindi & more",
+      "latency": "Analysis Latency",
+      "latency_sub": "Real-time multimodal inference",
+      "biomarkers": "Biomarkers Tracked",
+      "biomarkers_sub": "HR · Resp · Temp · HRV …"
+    },
+    "tags": {
+      "rgb_camera": "RGB Camera",
+      "mmwave_radar": "mmWave Radar",
+      "thermal_imaging": "Thermal Imaging",
+      "multilingual_ai": "Multilingual AI",
+      "privacy_first": "Privacy-First",
+      "real_time": "Real-time"
+    },
+    "modules": {
+      "health_screening": {
+        "title": "Health Screening",
+        "subtitle": "Non-invasive · Multimodal · Real-time",
+        "description": "Comprehensive vitals and body assessment without any contact. Powered by three sensor modalities working in parallel.",
+        "badge": "Live Demo",
+        "features": [
+          "Heart rate & Breathing via rPPG camera",
+          "Respiratory rate & HRV via mmWave radar",
+          "Surface temperature via thermal imaging",
+          "AI-generated clinical report in seconds"
+        ],
+        "cta": "Open module"
+      },
+      "chiranjeevai": {
+        "title": "CHIRANJEEVAI",
+        "subtitle": "Evidence-based · Multilingual · Empathetic",
+        "description": "Your AI medical companion — ask health questions, get report summaries, and receive evidence-backed clinical guidance in your language.",
+        "badge": "AI Assistant",
+        "features": [
+          "Interprets your screening report in plain language",
+          "Answers evidence-based health questions 24/7",
+          "Supports 7+ Indic languages via Sarvam AI",
+          "Cites sources with every clinical claim"
+        ],
+        "cta": "Open module"
+      }
+    }
+  }
+}

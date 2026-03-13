@@ -24,6 +24,9 @@ export default function MessageBubble({ message, onCitationClick }) {
         [renderMarkdown, content]
     )
 
+    // Don't render empty message bubbles (e.g., during translation wait) unless streaming english
+    if (!content && !isStreaming) return null
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.97 }}
@@ -73,7 +76,10 @@ export default function MessageBubble({ message, onCitationClick }) {
 
                     {/* Rendered content */}
                     {renderMarkdown && htmlContent ? (
-                        <div
+                        <motion.div
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, ease: 'easeOut' }}
                             className="prose-m3"
                             style={{ fontFamily: "'Google Sans', 'Roboto Flex', sans-serif" }}
                             dangerouslySetInnerHTML={{ __html: htmlContent }}

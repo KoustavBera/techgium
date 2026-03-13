@@ -4,7 +4,6 @@
  */
 import { motion } from 'framer-motion'
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
-import HourglassEmptyRoundedIcon from '@mui/icons-material/HourglassEmptyRounded'
 
 const STEPS = [
     { id: 'init', label: 'Initializing', backendPhase: 'INITIALIZING' },
@@ -57,17 +56,48 @@ export default function ScanProgress({ phase, message, scanState, progress }) {
                         color = 'var(--md-on-surface-variant)'
                     }
 
+                    // For the rainbow glow effect on the active step
+                    const activeStyle = isActive ? {
+                        background: 'var(--md-surface-container-highest)',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        color: 'var(--md-on-surface)',
+                        boxShadow: '0 0 16px rgba(50, 150, 255, 0.2), inset 0 0 8px rgba(255, 255, 255, 0.4)',
+                        border: '1px solid rgba(99, 210, 255, 0.3)'
+                    } : {
+                        background: bg, 
+                        color: color
+                    }
+
                     return (
                         <motion.div
                             key={step.id}
                             style={{
                                 display: 'flex', alignItems: 'center', gap: '16px',
                                 padding: '12px 16px', borderRadius: '16px',
-                                background: bg, color: color,
                                 fontSize: '14px', fontWeight: 500,
-                                transition: 'background 0.3s ease, color 0.3s ease'
+                                transition: 'background 0.3s ease, color 0.3s ease',
+                                ...activeStyle
                             }}
                         >
+                            {/* Inner shining radial gradient overlay */}
+                            {isActive && (
+                                <motion.div
+                                    animate={{ 
+                                        opacity: [0.3, 0.8, 0.3],
+                                        backgroundPosition: ['-100% 50%', '200% 50%']
+                                    }}
+                                    transition={{ duration: 3, ease: 'easeInOut', repeat: Infinity }}
+                                    style={{
+                                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                                        background: 'radial-gradient(circle at center, rgba(255,255,255,0.7) 0%, rgba(99,210,255,0.3) 30%, transparent 60%)',
+                                        backgroundSize: '300% 100%',
+                                        backgroundRepeat: 'no-repeat',
+                                        pointerEvents: 'none',
+                                        mixBlendMode: 'overlay'
+                                    }}
+                                />
+                            )}
                             <div style={{
                                 width: 28, height: 28, borderRadius: '50%',
                                 background: isDone ? 'var(--md-success-container)' : isActive ? 'var(--md-primary)' : 'var(--md-surface-container-highest)',
@@ -78,20 +108,6 @@ export default function ScanProgress({ phase, message, scanState, progress }) {
                                 {isDone ? <CheckRoundedIcon style={{ fontSize: 16 }} /> : (index + 1)}
                             </div>
                             {step.label}
-
-                            {isActive && (
-                                <motion.div
-                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                                    style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--md-primary)' }}
-                                >
-                                    <motion.div
-                                        animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                                        style={{ display: 'flex' }}
-                                    >
-                                        <HourglassEmptyRoundedIcon style={{ fontSize: 16 }} />
-                                    </motion.div>
-                                </motion.div>
-                            )}
                         </motion.div>
                     )
                 })}

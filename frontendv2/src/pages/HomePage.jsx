@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import flowerPng from '../assets/flower_png.png'
 import BiotechRoundedIcon from '@mui/icons-material/BiotechRounded'
 import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded'
@@ -16,39 +17,33 @@ import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 const spring = (s = 240, d = 26) => ({ type: 'spring', stiffness: s, damping: d })
 
 /* ── Stat items ─────────────────────────────────────────────── */
-const STATS = [
-    { value: '3+', label: 'Sensor Modalities', sub: 'Camera · Thermal · mmWave' },
-    { value: '7+', label: 'Languages Supported', sub: 'Including Kannada, Hindi & more' },
-    { value: '<2s', label: 'Analysis Latency', sub: 'Real-time multimodal inference' },
-    { value: '20+', label: 'Biomarkers Tracked', sub: 'HR · SpO₂ · Resp · Temp · HRV …' },
+const getStats = (t) => [
+    { value: '3+', label: t('home.stats.modalities'), sub: t('home.stats.modalities_sub') },
+    { value: '7+', label: t('home.stats.languages'), sub: t('home.stats.languages_sub') },
+    { value: '<2s', label: t('home.stats.latency'), sub: t('home.stats.latency_sub') },
+    { value: '20+', label: t('home.stats.biomarkers'), sub: t('home.stats.biomarkers_sub') },
 ]
 
 /* ── Feature tags ───────────────────────────────────────────── */
-const TAGS = [
-    { icon: CameraAltRoundedIcon, label: 'RGB Camera' },
-    { icon: WifiTetheringRoundedIcon, label: 'mmWave Radar' },
-    { icon: ThermostatRoundedIcon, label: 'Thermal Imaging' },
-    { icon: TranslateRoundedIcon, label: 'Multilingual AI' },
-    { icon: ShieldRoundedIcon, label: 'Privacy-First' },
-    { icon: SpeedRoundedIcon, label: 'Real-time' },
+const getTags = (t) => [
+    { icon: CameraAltRoundedIcon, label: t('home.tags.rgb_camera') },
+    { icon: WifiTetheringRoundedIcon, label: t('home.tags.mmwave_radar') },
+    { icon: ThermostatRoundedIcon, label: t('home.tags.thermal_imaging') },
+    { icon: TranslateRoundedIcon, label: t('home.tags.multilingual_ai') },
+    { icon: ShieldRoundedIcon, label: t('home.tags.privacy_first') },
+    { icon: SpeedRoundedIcon, label: t('home.tags.real_time') },
 ]
 
 /* ── Module definitions ─────────────────────────────────────── */
-const MODULES = [
+const getModules = (t) => [
     {
         Icon: BiotechRoundedIcon,
         iconBg: 'linear-gradient(135deg, #C2E7FF 0%, #D3E3FD 100%)',
         iconColor: 'var(--md-on-secondary-container)',
-        title: 'Health Screening',
-        subtitle: 'Non-invasive · Multimodal · Real-time',
-        description:
-            'Comprehensive vitals and body assessment without any contact. Powered by three sensor modalities working in parallel.',
-        features: [
-            'Heart rate & SpO₂ via rPPG camera',
-            'Respiratory rate & HRV via mmWave radar',
-            'Surface temperature via thermal imaging',
-            'AI-generated clinical report in seconds',
-        ],
+        title: t('home.modules.health_screening.title'),
+        subtitle: t('home.modules.health_screening.subtitle'),
+        description: t('home.modules.health_screening.description'),
+        features: t('home.modules.health_screening.features', { returnObjects: true }),
         to: '/screening',
         borderRadius: '32px 32px 16px 32px',
         delay: 0.18,
@@ -56,22 +51,17 @@ const MODULES = [
         glowColor: 'rgba(11, 87, 208, 0.15)',
         badgeColor: 'var(--md-secondary-container)',
         badgeText: 'var(--md-on-secondary-container)',
-        badge: 'Live Demo',
+        badge: t('home.modules.health_screening.badge'),
+        cta: t('home.modules.health_screening.cta'),
     },
     {
         Icon: SmartToyRoundedIcon,
         iconBg: 'linear-gradient(135deg, #EADDFF 0%, #D4BBFF 100%)',
         iconColor: 'var(--md-on-tertiary-container)',
-        title: 'CHIRANJEEVAI',
-        subtitle: 'Evidence-based · Multilingual · Empathetic',
-        description:
-            'Your AI medical companion — ask health questions, get report summaries, and receive evidence-backed clinical guidance in your language.',
-        features: [
-            'Interprets your screening report in plain language',
-            'Answers evidence-based health questions 24/7',
-            'Supports 7+ Indic languages via Sarvam AI',
-            'Cites sources with every clinical claim',
-        ],
+        title: t('home.modules.chiranjeevai.title'),
+        subtitle: t('home.modules.chiranjeevai.subtitle'),
+        description: t('home.modules.chiranjeevai.description'),
+        features: t('home.modules.chiranjeevai.features', { returnObjects: true }),
         to: '/chatbot',
         borderRadius: '32px 16px 32px 32px',
         delay: 0.28,
@@ -79,7 +69,8 @@ const MODULES = [
         glowColor: 'rgba(103, 80, 164, 0.15)',
         badgeColor: 'var(--md-tertiary-container)',
         badgeText: 'var(--md-on-tertiary-container)',
-        badge: 'AI Assistant',
+        badge: t('home.modules.chiranjeevai.badge'),
+        cta: t('home.modules.chiranjeevai.cta'),
     },
 ]
 
@@ -158,7 +149,7 @@ function FeatureTag({ Icon, label, index }) {
     )
 }
 
-function ModuleCard({ Icon, iconBg, iconColor, title, subtitle, description, features, to, borderRadius, delay, accentColor, glowColor, badgeColor, badgeText, badge }) {
+function ModuleCard({ Icon, iconBg, iconColor, title, subtitle, description, features, to, borderRadius, delay, accentColor, glowColor, badgeColor, badgeText, badge, cta }) {
     const [hovered, setHovered] = useState(false)
 
     return (
@@ -331,7 +322,7 @@ function ModuleCard({ Icon, iconBg, iconColor, title, subtitle, description, fea
                                     transition: 'background 0.25s ease, color 0.25s ease',
                                 }}
                             >
-                                Open module
+                                {cta}
                                 <ArrowForwardRoundedIcon style={{ fontSize: 15 }} />
                             </motion.div>
                         </AnimatePresence>
@@ -342,8 +333,13 @@ function ModuleCard({ Icon, iconBg, iconColor, title, subtitle, description, fea
     )
 }
 
-/* ── Page ───────────────────────────────────────────────────── */
 export default function HomePage() {
+    const { t } = useTranslation()
+
+    const stats = getStats(t)
+    const tags = getTags(t)
+    const modules = getModules(t)
+
     return (
         <div style={{
             display: 'flex',
@@ -413,7 +409,7 @@ export default function HomePage() {
                             boxShadow: '0 0 8px rgba(11,87,208,0.6)',
                             animation: 'pulse-ring 1.4s cubic-bezier(0.4,0,0.6,1) infinite',
                         }} />
-                        Contactless Health Screening
+                        {t('home.tagline')}
                     </motion.div>
 
                     {/* Headline */}
@@ -432,7 +428,7 @@ export default function HomePage() {
                             maxWidth: '700px',
                         }}
                     >
-                        Health screening,{' '}
+                        {t('home.headline_pt1')}
                         <span style={{ position: 'relative', display: 'inline-block' }}>
                             {/* Flower petal behind the word */}
                             <img
@@ -460,9 +456,9 @@ export default function HomePage() {
                                 WebkitBackgroundClip: 'text',
                                 WebkitTextFillColor: 'transparent',
                                 backgroundClip: 'text',
-                            }}>reimagined</span>
-                        </span>{' '}
-                        by AI.
+                            }}>{t('home.headline_pt2')}</span>
+                        </span>
+                        {t('home.headline_pt3')}
                     </motion.h1>
 
                     {/* Subtitle */}
@@ -480,8 +476,7 @@ export default function HomePage() {
                             marginBottom: '24px',
                         }}
                     >
-                        Chiranjeevi uses camera, thermal, and mmWave radar sensors to assess
-                        20+ biomarkers — instantly, non-invasively, and in your language.
+                        {t('home.subtitle')}
                     </motion.p>
 
                     {/* Feature tags */}
@@ -491,14 +486,14 @@ export default function HomePage() {
                         transition={{ delay: 0.5, duration: 0.3 }}
                         style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '28px' }}
                     >
-                        {TAGS.map((t, i) => (
+                        {tags.map((t, i) => (
                             <FeatureTag key={t.label} Icon={t.icon} label={t.label} index={i} />
                         ))}
                     </motion.div>
 
                     {/* Stats row */}
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                        {STATS.map((s, i) => (
+                        {stats.map((s, i) => (
                             <StatCard key={s.label} {...s} index={i} />
                         ))}
                     </div>
@@ -524,7 +519,7 @@ export default function HomePage() {
                     letterSpacing: '1px',
                     textTransform: 'uppercase',
                     color: 'var(--md-on-surface-variant)',
-                }}>Explore modules</div>
+                }}>{t('home.explore_modules')}</div>
                 <div style={{ flex: 1, height: '1px', background: 'var(--md-outline-variant)', opacity: 0.6 }} />
             </motion.div>
 
@@ -537,7 +532,7 @@ export default function HomePage() {
                     flexShrink: 0,
                 }}
             >
-                {MODULES.map((mod) => (
+                {modules.map((mod) => (
                     <ModuleCard key={mod.to} {...mod} />
                 ))}
             </div>

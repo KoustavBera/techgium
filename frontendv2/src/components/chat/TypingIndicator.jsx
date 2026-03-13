@@ -5,13 +5,6 @@
  */
 import { motion, AnimatePresence } from 'framer-motion'
 
-const dotStyle = (delayClass) => ({
-    display: 'block',
-    width: '7px',
-    height: '7px',
-    borderRadius: '50%',
-    background: 'var(--md-primary)',
-})
 
 export default function TypingIndicator({ visible, label }) {
     return (
@@ -31,20 +24,25 @@ export default function TypingIndicator({ visible, label }) {
                         maxWidth: '320px',
                     }}
                 >
-                    {/* Dots container — uses CSS @keyframes for off-thread animation */}
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        padding: '10px 14px',
-                        background: 'var(--md-surface-container)',
-                        borderRadius: '8px 20px 20px 20px',
-                        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-                    }}>
-                        <span className="animate-typing-dot" style={dotStyle()} />
-                        <span className="animate-typing-dot" style={dotStyle()} />
-                        <span className="animate-typing-dot" style={dotStyle()} />
-                    </div>
+                    {/* Thick Logo-style gradient circle */}
+                    <motion.div
+                        animate={{ 
+                            opacity: [0.7, 1, 0.7],
+                            scale: [0.95, 1.05, 0.95]
+                        }}
+                        transition={{ 
+                            duration: 1.5, 
+                            ease: 'easeInOut', 
+                            repeat: Infinity 
+                        }}
+                        style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(45deg, #FE3290 0%, #3E88FD 100%)',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+                        }}
+                    />
                     {/* Label */}
                     {label && (
                         <span style={{

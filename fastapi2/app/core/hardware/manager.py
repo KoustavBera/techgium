@@ -10,6 +10,7 @@ Replaces the old bridge.py subprocess model with in-process hardware control.
 """
 
 import asyncio
+import os
 import json
 import time
 import threading
@@ -59,11 +60,11 @@ class HardwareConfig:
     face_capture_seconds: int = 10
     body_capture_seconds: int = 10
     
-    # Serial ports
-    radar_port: str = "COM7"
-    radar_baud: int = 115200
-    esp32_port: str = "COM6"
-    esp32_baud: int = 115200
+    # Serial ports — override via env vars RADAR_PORT / THERMAL_PORT
+    radar_port: str = field(default_factory=lambda: os.getenv("RADAR_PORT", "COM7"))
+    radar_baud: int = field(default_factory=lambda: int(os.getenv("RADAR_BAUD", "115200")))
+    esp32_port: str = field(default_factory=lambda: os.getenv("THERMAL_PORT", "COM6"))
+    esp32_baud: int = field(default_factory=lambda: int(os.getenv("THERMAL_BAUD", "115200")))
     
     # MJPEG quality
     jpeg_quality: int = 80
@@ -136,6 +137,13 @@ class HardwareManager:
         self.radar: Optional[RadarReader] = None
         self.thermal: Optional[ESP32Reader] = None
         
+        # Result callbacks — injected via startup() to remove circular imports
+        # _on_scan_complete(screening_id, result, request_payload) -> None
+        self._on_scan_complete = None
+        # _on_reports_ready(patient_report_id, patient_pdf_path,
+        #                   doctor_report_id, doctor_pdf_path) -> None
+        self._on_reports_ready = None
+        
         # Video stream state
         self._latest_frame_jpeg: Optional[bytes] = None
         self._frame_lock = threading.Lock()
@@ -152,6 +160,7 @@ class HardwareManager:
         }
         self._frame_counter = 0
         self._inference_interval = 2  # Run inference every 2nd frame (15 FPS inference, 30 FPS video)
+        self._face_miss_streak = 0    # Debounce: consecutive frames with no face_det result (threshold=3)
         
         # Scan state
         self._scan_active = False
@@ -197,6 +206,7 @@ class HardwareManager:
 
         self.eye_extractor = None
         self.nasal_extractor = None
+        self.visual_extractor = None  # VisualDiseaseClassifier
         
         logger.info("HardwareManager singleton created")
     
@@ -204,12 +214,31 @@ class HardwareManager:
     # LIFECYCLE
     # ------------------------------------------------------------------
     
-    async def startup(self, config: Optional[HardwareConfig] = None, screening_service = None):
-        """Initialize all hardware. Call during FastAPI lifespan startup."""
+    async def startup(
+        self,
+        config: Optional[HardwareConfig] = None,
+        screening_service = None,
+        on_scan_complete = None,
+        on_reports_ready = None,
+    ):
+        """Initialize all hardware. Call during FastAPI lifespan startup.
+        
+        Args:
+            on_scan_complete: Callable(screening_id, result, request_payload)
+                Replaces the circular ``from app.main import _screenings`` import.
+            on_reports_ready: Callable(patient_report_id, patient_pdf,
+                                        doctor_report_id, doctor_pdf)
+                Replaces the circular ``from app.main import _reports`` import.
+        """
         if config:
             self.config = config
         
         self.screening_service = screening_service
+        # Store result callbacks (replacing circular imports from app.main)
+        if on_scan_complete is not None:
+            self._on_scan_complete = on_scan_complete
+        if on_reports_ready is not None:
+            self._on_reports_ready = on_reports_ready
         self.loop = asyncio.get_running_loop()
         
         logger.info("=" * 60)
@@ -363,140 +392,169 @@ class HardwareManager:
         dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
         cv2.putText(dummy_frame, "SIMULATION MODE", (50, 240), 
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.putText(dummy_frame, "NO CAMERA DETECTED", (50, 280), 
+        cv2.putText(dummy_frame, "NO CAMERA DETECTED", (50, 280),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         while self._running:
-            if self.camera:
-                frame = self.camera.read_frame()
-            else:
-                # Simulation: generate a slightly changing frame to prove liveness
-                frame = dummy_frame.copy()
-                # Add a moving element (e.g., a timestamp or counter)
-                cv2.putText(frame, f"Frame: {self._frame_counter}", (50, 320),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                time.sleep(1/30) # Simulate 30 FPS
-
-            if frame is not None:
-                self._frame_counter += 1
-                
-                # Determine active phase and required models
-                current_phase = self._scan_status.get("phase", "IDLE")
-                active_models = []
-                
-                # Phase-Gating Logic
-                if current_phase == "FACE_ANALYSIS":
-                    active_models = ["face_mesh"]
-                elif current_phase == "BODY_ANALYSIS":
-                    active_models = ["pose"]
-                elif current_phase == "IDLE" or current_phase == "INITIALIZING":
-                     # In IDLE, we only need face_det for distance warning
-                     active_models = ["face_det"]
-                else:
-                    active_models = [] # PROCESSING or ERROR -> No AI needed
-                
-                # Inference Logic
+            try:
                 if self.camera:
-                    # Real inference
-                    # Frame Skipping for Inference (Throttle during active scans)
-                    is_scanning = current_phase in ["FACE_ANALYSIS", "BODY_ANALYSIS"]
-                    dynamic_interval = 4 if is_scanning else self._inference_interval
-                    should_run_inference = (self._frame_counter % dynamic_interval == 0)
-                    
-                    if should_run_inference and active_models:
-                        self._last_inference_results = self.camera.detect_all(frame, active_models)
+                    frame = self.camera.read_frame()
                 else:
-                    # Simulation inference
-                    # Mock successful detection for flow testing
-                    self._last_inference_results = {
-                        "face_det": [(100, 100, 200, 200)], # Dummy face box
-                        "face_mesh": "simulated_mesh", # Just non-None to trigger checks
-                        "pose": "simulated_pose"      # Just non-None to trigger checks
-                    }
+                    # Simulation: generate a slightly changing frame to prove liveness
+                    frame = dummy_frame.copy()
+                    cv2.putText(frame, f"Frame: {self._frame_counter}", (50, 320),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    time.sleep(1/30)  # Simulate 30 FPS
 
-                # Apply server-side overlays using LAST KNOWN results (for smoothness)
-                if self._enable_overlays:
-                    results = self._last_inference_results
-                    
-                    if self.camera:
-                        # 1. Overlay based on Phase
-                        if current_phase == "FACE_ANALYSIS":
-                            frame = self.camera.draw_face_mesh_on_frame(frame, results)
-                        elif current_phase == "BODY_ANALYSIS":
-                            frame = self.camera.draw_pose_skeleton_on_frame(frame, results)
-                        
-                        # 2. Calculate and draw distance warnings
-                        warning_type = self._current_distance_warning
-                        face_detected = False
-    
-                        # Limit distance warning check to IDLE/FACE phases
-                        if current_phase in ["IDLE", "INITIALIZING", "FACE_ANALYSIS"]:
-                            warning_type, face_width = self.camera.calculate_face_distance(frame, results)
-                            self._current_distance_warning = warning_type
-                            face_detected = face_width is not None
-                        elif current_phase == "BODY_ANALYSIS":
-                            warning_type = None
-                            self._current_distance_warning = None
-    
-                        pose_detected = results.get("pose") is not None
+                if frame is not None:
+                    self._frame_counter += 1
+
+                    # Determine active phase and required models
+                    current_phase = self._scan_status.get("phase", "IDLE")
+                    active_models = []
+
+                    # Phase-Gating Logic
+                    if current_phase == "FACE_ANALYSIS":
+                        active_models = ["face_mesh"]
+                    elif current_phase == "BODY_ANALYSIS":
+                        active_models = ["pose"]
+                    elif current_phase in ("IDLE", "INITIALIZING"):
+                        # In IDLE, we only need face_det for distance warning
+                        active_models = ["face_det"]
                     else:
-                        # Simulation Overlays
-                        warning_type = None # Perfect distance
-                        face_detected = True
-                        pose_detected = True
-                        self._current_distance_warning = None
-                        
-                        if current_phase == "FACE_ANALYSIS":
-                            cv2.putText(frame, "Simulating Face Analysis...", (50, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                        elif current_phase == "BODY_ANALYSIS":
-                            cv2.putText(frame, "Simulating Body Analysis...", (50, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                        active_models = []  # PROCESSING or ERROR -> No AI needed
 
-                    self._update_scan_status(
-                        user_warnings={
-                            "distance_warning": warning_type,
-                            "face_detected": face_detected,
-                            "pose_detected": pose_detected,
+                    # Inference Logic
+                    inference_ran_this_frame = False
+                    if self.camera:
+                        # Real inference — throttled during active scans
+                        is_scanning = current_phase in ("FACE_ANALYSIS", "BODY_ANALYSIS")
+                        dynamic_interval = 4 if is_scanning else self._inference_interval
+                        if (self._frame_counter % dynamic_interval == 0) and active_models:
+                            self._last_inference_results = self.camera.detect_all(frame, active_models)
+                            inference_ran_this_frame = True
+                    else:
+                        # Simulation: mock successful detection for flow testing
+                        self._last_inference_results = {
+                            "face_det": [(100, 100, 200, 200)],
+                            "face_mesh": "simulated_mesh",
+                            "pose": "simulated_pose",
                         }
-                    )
-                    
-                    # Signal alignment event if conditions are met, so _wait_for_alignment
-                    # can wake up immediately instead of polling every 0.2s.
-                    _phase = self._scan_status.get("phase", "IDLE")
-                    if _phase == "FACE_ANALYSIS" or _phase == "FACE_AND_VITALS":
-                        if face_detected and warning_type is None:
-                            self._alignment_event.set()
-                    elif _phase == "BODY_ANALYSIS":
-                        if warning_type is None and pose_detected:
-                            self._alignment_event.set()
-                
-                # Encode to JPEG
-                ret, jpeg = cv2.imencode('.jpg', frame, encode_params)
-                if ret:
-                    with self._frame_lock:
-                        self._latest_frame_jpeg = jpeg.tobytes()
-                
-                # ── Real-time signal quality gate (lightweight, runs every 15 frames) ──
-                # Updates the UI during capture so the user knows to hold still.
-                if self._scan_active and self._frame_counter % 15 == 0:
-                    try:
-                        gray = np.mean(frame, axis=2).astype(np.uint8) if len(frame.shape) == 3 else frame.astype(np.uint8)
-                        brightness = float(np.mean(gray))
-                        lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
-                        quality_ok = bool(brightness >= 40 and lap_var >= 5)
-                        with self._scan_lock:
-                            warnings = self._scan_status.get("user_warnings", {}).copy()
-                            warnings["quality_ok"] = quality_ok
-                            warnings["brightness"] = round(brightness, 1)
-                            self._scan_status["user_warnings"] = warnings
-                    except Exception:
-                        pass
-                
-                # ── Push to rolling concurrent capture buffer ──
-                if self._rolling_capture_active:
-                    with self._rolling_lock:
-                        self._rolling_buffer.append({'frame': frame.copy(), 'timestamp': time.time()})
-            else:
-                time.sleep(0.01)  # Brief sleep if no frame
+                        inference_ran_this_frame = True
+
+                    # Apply server-side overlays using LAST KNOWN results (for smoothness)
+                    if self._enable_overlays:
+                        results = self._last_inference_results
+
+                        if self.camera:
+                            # Overlay based on Phase
+                            if current_phase == "FACE_ANALYSIS":
+                                frame = self.camera.draw_face_mesh_on_frame(frame, results)
+                            elif current_phase == "BODY_ANALYSIS":
+                                frame = self.camera.draw_pose_skeleton_on_frame(frame, results)
+
+                            # Calculate and draw distance warnings
+                            # face_detected defaults to current known state — only updated when
+                            # fresh inference data is available (avoids stale True overwriting real warning).
+                            with self._scan_lock:
+                                face_detected = self._scan_status.get("user_warnings", {}).get("face_detected", True)
+                            warning_type = self._current_distance_warning
+
+                            if current_phase in ("IDLE", "INITIALIZING", "FACE_ANALYSIS"):
+                                if inference_ran_this_frame:
+                                    warning_type, face_width = self.camera.calculate_face_distance(frame, results)
+                                    self._current_distance_warning = warning_type
+
+                                    # 'no_face' returned immediately when camera is blocked — no debounce needed
+                                    if warning_type == "no_face":
+                                        self._face_miss_streak += 1
+                                        face_detected = (self._face_miss_streak < 3)
+                                    elif face_width is None:
+                                        # Detection ran but found nothing (edge case)
+                                        self._face_miss_streak += 1
+                                        face_detected = (self._face_miss_streak < 3)
+                                    else:
+                                        # Face found and measured — reset streak
+                                        self._face_miss_streak = 0
+                                        face_detected = True
+                            elif current_phase == "BODY_ANALYSIS":
+                                warning_type = None
+                                self._current_distance_warning = None
+                                self._face_miss_streak = 0  # Reset streak between phases
+
+                            pose_detected = results.get("pose") is not None
+                        else:
+                            # Simulation Overlays
+                            warning_type = None
+                            face_detected = True
+                            pose_detected = True
+                            self._current_distance_warning = None
+
+                            if current_phase == "FACE_ANALYSIS":
+                                cv2.putText(frame, "Simulating Face Analysis...", (50, 360),
+                                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                            elif current_phase == "BODY_ANALYSIS":
+                                cv2.putText(frame, "Simulating Body Analysis...", (50, 360),
+                                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+                        self._update_scan_status(
+                            user_warnings={
+                                "distance_warning": warning_type,
+                                "face_detected": face_detected,
+                                "pose_detected": pose_detected,
+                            }
+                        )
+
+                        # Signal alignment event so _wait_for_alignment wakes immediately
+                        _phase = self._scan_status.get("phase", "IDLE")
+                        if _phase in ("FACE_ANALYSIS", "FACE_AND_VITALS"):
+                            if face_detected and warning_type not in ("no_face", "too_close", "too_far"):
+                                self._alignment_event.set()
+                        elif _phase == "BODY_ANALYSIS":
+                            if warning_type not in ("no_face", "too_close", "too_far") and pose_detected:
+                                self._alignment_event.set()
+
+                    # Encode to JPEG
+                    ret, jpeg = cv2.imencode('.jpg', frame, encode_params)
+                    if ret:
+                        with self._frame_lock:
+                            self._latest_frame_jpeg = jpeg.tobytes()
+
+                    # ── Real-time signal quality gate (lightweight, every 15 frames) ──
+                    if self._scan_active and self._frame_counter % 15 == 0:
+                        try:
+                            gray = (np.mean(frame, axis=2).astype(np.uint8)
+                                    if len(frame.shape) == 3 else frame.astype(np.uint8))
+                            brightness = float(np.mean(gray))
+                            lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+                            quality_ok = brightness >= 40 and lap_var >= 5
+                            self._update_scan_status(
+                                user_warnings={
+                                    "quality_ok": quality_ok,
+                                    "brightness": round(brightness, 1),
+                                }
+                            )
+                        except Exception:
+                            pass
+
+                    # ── Push to rolling concurrent capture buffer ──
+                    if self._rolling_capture_active:
+                        with self._rolling_lock:
+                            self._rolling_buffer.append(
+                                {'frame': frame.copy(), 'timestamp': time.time()}
+                            )
+                else:
+                    time.sleep(0.01)  # Brief sleep if no frame
+
+            except Exception as _loop_err:  # noqa: BLE001
+                # Catch ALL exceptions so the thread can never die silently.
+                # The stream will show a frozen frame rather than hanging forever.
+                logger.error(
+                    "_capture_loop unexpected error (will continue): %s",
+                    _loop_err,
+                    exc_info=True,
+                )
+                time.sleep(0.1)  # Brief back-off before retrying
     
     def get_video_stream(self) -> Generator[bytes, None, None]:
         """
@@ -582,11 +640,20 @@ class HardwareManager:
             return self._scan_status.copy()
     
     def _update_scan_status(self, **kwargs):
-        """Thread-safe status update."""
+        """Thread-safe, atomic status update."""
         with self._scan_lock:
-            self._scan_status.update(kwargs)
+            # Update in-place under the lock to prevent race conditions where
+            # another thread reads between our copy and write.
+            for key, value in kwargs.items():
+                if key == "user_warnings" and isinstance(value, dict):
+                    # Merge user_warnings sub-dict instead of replacing it
+                    existing = self._scan_status.get("user_warnings", {})
+                    existing.update(value)
+                    self._scan_status["user_warnings"] = existing
+                else:
+                    self._scan_status[key] = value
 
-    def _wait_for_alignment(self, target_phase: str, timeout: int = None):
+    def _wait_for_alignment(self, target_phase: str, timeout: Optional[float] = None):
         """
         Event-driven alignment wait: wakes up immediately when the capture loop
         signals that positioning conditions are met, instead of polling every 0.2s.
@@ -596,7 +663,7 @@ class HardwareManager:
         
         # Default timeout for FACE_ANALYSIS if none provided (15s to avoid blocking forever)
         if timeout is None and target_phase == "FACE_ANALYSIS":
-            timeout = 15
+            timeout = 15.0
         
         # Clear any stale signal from a previous phase, then give the capture loop
         # 1 frame (≈33ms) to process and potentially set it.
@@ -608,13 +675,14 @@ class HardwareManager:
         while self._scan_active:
             # Timeout check
             elapsed = time.time() - start_time
-            if timeout and elapsed > timeout:
+            # Guard: both are floats after default assignment above
+            if timeout is not None and elapsed > timeout:
                 logger.warning(f"Alignment timeout for {target_phase}. Proceeding anyway.")
                 self._update_scan_status(message="Proceeding with scan...")
                 time.sleep(0.5)  # Show message briefly
                 break
 
-            remaining = (timeout - elapsed) if timeout else 5.0
+            remaining: float = (timeout - elapsed) if timeout is not None else 5.0
             # Block efficiently until the capture loop signals alignment (or 0.5s max)
             signalled = self._alignment_event.wait(timeout=min(0.5, remaining))
 
@@ -650,11 +718,11 @@ class HardwareManager:
                 msg = "Please move closer to the camera."
             elif target_phase == "BODY_ANALYSIS" and not user_warnings.get("pose_detected"):
                 msg = "Please step back so your full body is visible."
-            elif target_phase == "FACE_ANALYSIS" and not user_warnings.get("face_detected"):
+            elif warning == "no_face" or (target_phase == "FACE_ANALYSIS" and not user_warnings.get("face_detected")):
                 msg = "Please look directly at the camera."
             self._update_scan_status(message=msg)
 
-    def _countdown(self, seconds: int, message_prefix: str, phase: str = None):
+    def _countdown(self, seconds: int, message_prefix: str, phase: Optional[str] = None):
         """Helper to update status with a visible countdown timer."""
         for i in range(seconds, 0, -1):
             if not self._scan_active: 
@@ -942,9 +1010,6 @@ class HardwareManager:
             # ============================================================
             # Phase 2: Body capture
             # ============================================================
-            # ============================================================
-            # Phase 2: Body capture
-            # ============================================================
             if self.camera:
                 self._update_scan_status(
                     phase="BODY_ANALYSIS",
@@ -1058,52 +1123,90 @@ class HardwareManager:
                     
                     logger.info(f"✅ Screening completed via service: {screening_id}")
                     
-                    # Update local screenings storage (directly injecting into main.py dict)
-                    from app.main import _screenings
-                    _screenings[screening_id] = {
+                    # Store results via callback instead of importing from app.main
+                    # (avoids circular import and tight coupling to main.py globals)
+                    scan_record = {
                         "patient_id": result["patient_id"],
                         "system_results": result["system_results_internal"],
                         "trusted_results": result["trusted_results"],
                         "composite_risk": result["composite_risk"],
                         "rejected_systems": result["rejected_systems"],
                         "timestamp": result["timestamp"],
-                        # Clinical Decision Layer output (Phase 1: CNS)
                         "clinical_findings": request_payload.get("clinical_findings", []),
                         "clinical_summary": request_payload.get("clinical_summary", {}),
                     }
                     
+                    if self._on_scan_complete:
+                        self._on_scan_complete(screening_id, scan_record)
+                    else:
+                        # Graceful fallback if no callback registered (e.g., in tests)
+                        logger.warning(
+                            "No _on_scan_complete callback registered — "
+                            "screening result will not be persisted"
+                        )
+                    
                     # Generate reports DIRECTLY using generators (instead of HTTP calls)
                     self._update_scan_status(message="Generating reports...", progress=90)
                     
-                    # Import here to avoid circular dependencies
-                    from app.main import _reports, _patient_report_gen, _doctor_report_gen
-                    
-                    try:
-                        p_report = _patient_report_gen.generate(
-                            system_results=result["system_results_internal"],
-                            composite_risk=result["composite_risk"],
-                            patient_id=result["patient_id"],
-                            trusted_results=result["trusted_results"],
-                            rejected_systems=result["rejected_systems"],
-                            clinical_findings=request_payload.get("clinical_findings", []),
-                        )
-                        patient_report_id = p_report.report_id
-                        _reports[patient_report_id] = p_report.pdf_path
-                        logger.info(f"Patient report generated: {patient_report_id}")
-                    except Exception as e:
-                        logger.warning(f"Patient report generation failed: {e}")
+                    # Use results callback instead of importing from app.main
+                    patient_report_id = None
+                    doctor_report_id = None
+                    patient_pdf_path = None
+                    doctor_pdf_path = None
 
-                    try:
-                        d_report = _doctor_report_gen.generate(
-                            system_results=result["system_results_internal"],
-                            composite_risk=result["composite_risk"],
-                            patient_id=result["patient_id"]
+                    if self._on_reports_ready is not None:
+                        # Caller provides a callback that runs the generators and
+                        # stores the result — no import from app.main needed.
+                        try:
+                            ids = self._on_reports_ready(
+                                result,
+                                request_payload,
+                            )
+                            if ids:
+                                patient_report_id, patient_pdf_path, \
+                                    doctor_report_id, doctor_pdf_path = ids
+                        except Exception as e:
+                            logger.warning(f"Report callback failed: {e}")
+                    else:
+                        # Legacy fallback: import directly from main.
+                        # This maintains backward compatibility when no callback is
+                        # registered. A deprecation warning is emitted.
+                        logger.warning(
+                            "No _on_reports_ready callback registered — "
+                            "falling back to direct app.main import (deprecated)"
                         )
-                        doctor_report_id = d_report.report_id
-                        _reports[doctor_report_id] = d_report.pdf_path
-                        logger.info(f"Doctor report generated: {doctor_report_id}")
-                    except Exception as e:
-                        logger.warning(f"Doctor report generation failed: {e}")
+                        try:
+                            from app.main import _reports, _patient_report_gen, _doctor_report_gen
+                            try:
+                                p_report = _patient_report_gen.generate(
+                                    system_results=result["system_results_internal"],
+                                    composite_risk=result["composite_risk"],
+                                    patient_id=result["patient_id"],
+                                    trusted_results=result["trusted_results"],
+                                    rejected_systems=result["rejected_systems"],
+                                    clinical_findings=request_payload.get("clinical_findings", []),
+                                )
+                                patient_report_id = p_report.report_id
+                                patient_pdf_path = p_report.pdf_path
+                                _reports[patient_report_id] = patient_pdf_path
+                                logger.info(f"Patient report generated: {patient_report_id}")
+                            except Exception as e:
+                                logger.warning(f"Patient report generation failed: {e}")
+
+                            try:
+                                d_report = _doctor_report_gen.generate(
+                                    system_results=result["system_results_internal"],
+                                    composite_risk=result["composite_risk"],
+                                    patient_id=result["patient_id"]
+                                )
+                                doctor_report_id = d_report.report_id
+                                doctor_pdf_path = d_report.pdf_path
+                                _reports[doctor_report_id] = doctor_pdf_path
+                                logger.info(f"Doctor report generated: {doctor_report_id}")
+                            except Exception as e:
+                                logger.warning(f"Doctor report generation failed: {e}")
+                        except ImportError as e:
+                            logger.error(f"Fallback import from app.main failed: {e}")
                         
                 except Exception as e:
                     logger.error(f"ScreeningService call failed: {e}")
@@ -1260,6 +1363,10 @@ class HardwareManager:
             return result
         else:
             # Legacy format aggregation
+            neck_temps = [
+                get_val(i, 'fever', 'neck_temp') for i in items
+                if get_val(i, 'fever', 'neck_temp', 0.0) > 25.0
+            ]
             avg_neck = float(np.median(neck_temps)) if neck_temps else 0.0
             stress_vals = [get_val(i, 'autonomic', 'stress_gradient') for i in items]
             avg_stress = float(np.median(stress_vals)) if stress_vals else 0.0

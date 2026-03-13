@@ -111,13 +111,14 @@ export function useScreening() {
         continuousPollRef.current = setInterval(async () => {
             try {
                 const status = await API.getScanStatus()
-                // Only update idle warnings if we aren't actively running a scan
-                if (status.state === 'idle' || status.state === 'complete') {
-                    if (status.user_warnings) {
-                        setScanStatus(prev => ({ ...prev, userWarnings: status.user_warnings }))
-                    } else {
-                        setScanStatus(prev => ({ ...prev, userWarnings: null }))
-                    }
+                // Always update warnings — they come from the live capture loop
+                // regardless of scan state (idle, complete, error, etc.)
+                // Only skip if a scan is actively running (that poll handles updates)
+                if (scanPollRef.current === null) {
+                    setScanStatus(prev => ({
+                        ...prev,
+                        userWarnings: status.user_warnings ?? null,
+                    }))
                 }
             } catch {
                 // Silent fail for background check

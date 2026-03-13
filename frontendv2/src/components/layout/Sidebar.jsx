@@ -1,14 +1,16 @@
 import { useLocation, NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded'
 import BiotechRoundedIcon from '@mui/icons-material/BiotechRounded'
 import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded'
 import heartIcon from '../../assets/heart_icon.png'
+import LanguageSwitcher from './LanguageSwitcher'
 /* ── Nav item definitions ─────────────────────────────────────── */
 const NAV_ITEMS = [
-    { to: '/', label: 'Home', icon: HomeRoundedIcon },
-    { to: '/screening', label: 'Screening', icon: BiotechRoundedIcon },
-    { to: '/chatbot', label: 'CHIRANJEEVAI', icon: SmartToyRoundedIcon },
+    { to: '/', labelKey: 'sidebar.home', icon: HomeRoundedIcon },
+    { to: '/screening', labelKey: 'sidebar.screening', icon: BiotechRoundedIcon },
+    { to: '/chatbot', labelKey: 'sidebar.chatbot', icon: SmartToyRoundedIcon },
 ]
 
 /* ── Spring configs ───────────────────────────────────────────── */
@@ -19,15 +21,17 @@ const pillSpring = { type: 'spring', stiffness: 380, damping: 30 }
 /* ── Individual Nav Item ─────────────────────────────────────── */
 function NavItem({ item }) {
     const location = useLocation()
+    const { t } = useTranslation()
 
     const Icon = item.icon
+    const label = t(item.labelKey)
 
     return (
         <NavLink
             to={item.to}
             end={item.to === '/'}
             className="relative block focus-visible:outline-none"
-            aria-label={item.label}
+            aria-label={label}
         >
             {() => {
                 const active = item.to === '/'
@@ -89,7 +93,7 @@ function NavItem({ item }) {
                                 letterSpacing: '0.1px',
                             }}
                         >
-                            {item.label}
+                            {label}
                         </span>
                     </motion.div>
                 )
@@ -171,22 +175,27 @@ export default function Sidebar() {
             </nav>
 
             {/* ── Footer ── */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.35, duration: 0.4 }}
-                style={{
-                    padding: '12px 8px 0',
-                    borderTop: '1px solid var(--md-surface-container-high)',
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    letterSpacing: '0.4px',
-                    color: 'var(--md-outline)',
-                    fontFamily: "'Roboto Flex', sans-serif",
-                }}
-            >
-                v3.0 &bull; M3 Expressive
-            </motion.div>
+            <div className="mt-auto pt-4 flex flex-col gap-4">
+                <LanguageSwitcher />
+
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.35, duration: 0.4 }}
+                    style={{
+                        padding: '12px 8px 0',
+                        borderTop: '1px solid var(--md-surface-container-high)',
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        letterSpacing: '0.4px',
+                        color: 'var(--md-outline)',
+                        fontFamily: "'Roboto Flex', sans-serif",
+                        textAlign: 'center',
+                    }}
+                >
+                    v3.0 &bull; M3 Expressive
+                </motion.div>
+            </div>
         </motion.aside>
     )
 }

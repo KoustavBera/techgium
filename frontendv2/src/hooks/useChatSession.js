@@ -4,6 +4,7 @@
  * token accumulation, translation, audio TTS, and citations.
  */
 import { useState, useRef, useCallback } from 'react'
+import toast from 'react-hot-toast'
 import { streamFetch, checkHealth } from '../lib/api'
 
 const AGENT_STATE = {
@@ -69,12 +70,21 @@ export function useChatSession() {
         let accumulatedEnglish = ''
         let translationApplied = false
 
+        // Timeout handler for stalling API
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 120000) // 120s timeout
+
         try {
             const response = await streamFetch('/api/v1/doctor/chat', {
                 query: text,
                 patient_id: 'WEB_USER',
                 language,
+            }, {
+                signal: controller.signal
             })
+
+            // Clear the 60s initial timeout once headers successfully arrive
+            clearTimeout(timeoutId)
 
             const reader = response.body.getReader()
             const decoder = new TextDecoder()
@@ -120,8 +130,8 @@ export function useChatSession() {
                                     updateMessage(assistantId, {
                                         content: lang === 'en-IN'
                                             ? accumulatedEnglish
-                                            : '⏳ Translating to your language…',
-                                        isStreaming: true,
+                                            : '', // Don't show translating text
+                                        isStreaming: lang === 'en-IN', // Keep streaming cursor for English, hide for translation
                                     })
                                     rafPending.current = false
                                 })
@@ -155,11 +165,19 @@ export function useChatSession() {
             }
 
         } catch (err) {
+            const isTimeout = err.name === 'AbortError' || err.message.includes('abort')
+            const errMsg = isTimeout 
+                ? "The server took too long to respond. Please try again." 
+                : `Error connecting to Chatbot. Make sure the backend is running.`
+            
+            toast.error(errMsg)
+
             updateMessage(assistantId, {
-                content: `⚠️ Error: ${err.message}. Make sure the backend is running at http://localhost:8000.`,
+                content: `⚠️ ${errMsg}`,
                 isStreaming: false,
             })
         } finally {
+            clearTimeout(timeoutId)
             setIsProcessing(false)
             setTypingState(null)
         }

@@ -23,12 +23,16 @@ function getTrustColor(value) {
     return { fg: '#D93025', bg: '#FCE8E6' }                    // Red
 }
 
+function adjust(value) {
+    return Math.max(0, (value || 0) - 0.10)
+}
+
 function pct(value) {
-    return Math.round((value || 0) * 100)
+    return Math.round(adjust(value) * 100)
 }
 
 function ProgressBar({ label, value, large = false }) {
-    const c = getTrustColor(value)
+    const c = getTrustColor(adjust(value))
     const p = pct(value)
 
     return (
@@ -66,7 +70,7 @@ export default function TrustDashboard({ scanState, reportId, trustMetadata, api
     }
 
     const overall = tm.overall_reliability || 0
-    const oc = getTrustColor(overall)
+    const oc = getTrustColor(adjust(overall))
 
     return (
         <motion.div
@@ -140,7 +144,8 @@ export default function TrustDashboard({ scanState, reportId, trustMetadata, api
                 {tm.system_reliability && Object.keys(tm.system_reliability).length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
                         {Object.entries(tm.system_reliability).map(([sys, val]) => {
-                            const c = getTrustColor(val)
+                            const adj = adjust(val)
+                            const c = getTrustColor(adj)
                             const name = sys.replace(/_/g, ' ').replace(/\b\w/g, L => L.toUpperCase())
                             return (
                                 <div key={sys} style={{
@@ -148,7 +153,7 @@ export default function TrustDashboard({ scanState, reportId, trustMetadata, api
                                     fontSize: '11px', fontWeight: 600,
                                     background: c.bg, color: c.fg, border: `1px solid ${c.fg}60`
                                 }}>
-                                    {name} {pct(val)}%
+                                    {name} {Math.round(adj * 100)}%
                                 </div>
                             )
                         })}
@@ -156,23 +161,28 @@ export default function TrustDashboard({ scanState, reportId, trustMetadata, api
                 )}
 
                 {/* ── Warnings Box ── */}
-                {(tm.critical_issues?.length > 0 || tm.warnings?.length > 0) && (
-                    <div style={{
-                        background: 'var(--md-surface)', borderRadius: '12px',
-                        border: '1px dashed var(--md-outline-variant)',
-                        padding: '12px', fontSize: '13px', color: 'var(--md-on-surface-variant)',
-                        lineHeight: 1.5, marginTop: '8px'
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--md-on-surface)', fontWeight: 600, marginBottom: '8px' }}>
-                            <WarningAmberRoundedIcon style={{ fontSize: 18 }} /> Notices
+                {(() => {
+                    const filteredWarnings = [...(tm.critical_issues || []), ...(tm.warnings || [])]
+                        .filter(w => !w.toLowerCase().includes('lesion_count'))
+                        .slice(0, 3)
+                    return filteredWarnings.length > 0 ? (
+                        <div style={{
+                            background: 'var(--md-surface)', borderRadius: '12px',
+                            border: '1px dashed var(--md-outline-variant)',
+                            padding: '12px', fontSize: '13px', color: 'var(--md-on-surface-variant)',
+                            lineHeight: 1.5, marginTop: '8px'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--md-on-surface)', fontWeight: 600, marginBottom: '8px' }}>
+                                <WarningAmberRoundedIcon style={{ fontSize: 18 }} /> Notices
+                            </div>
+                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                {filteredWarnings.map((w, i) => (
+                                    <li key={i}>{w}</li>
+                                ))}
+                            </ul>
                         </div>
-                        <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                            {[...(tm.critical_issues || []), ...(tm.warnings || []).slice(0, 3)].map((w, i) => (
-                                <li key={i}>{w}</li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
+                    ) : null
+                })()}
 
                 {/* ── Guidance Box ── */}
                 <div style={{

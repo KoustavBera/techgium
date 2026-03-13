@@ -141,6 +141,7 @@ def load_model():
         max_new_tokens=512,
         top_p=0.9,
         streaming=True,
+        timeout=30,  # Prevent indefinite hang during inference
     )
     
     chat_model = ChatHuggingFace(llm=llm)

@@ -41,19 +41,19 @@ LANG_CODE_MAP = {
     "or": "od-IN",
 }
 
-# Language-specific TTS speakers (all Indian female voices)
+# Language-specific TTS speakers — all set to Ritu (Bulbul v3 female voice)
 SPEAKERS_BY_LANG = {
-    "hi-IN": "priya",    # Hindi
-    "bn-IN": "simran",   # Bengali
-    "kn-IN": "kavya",    # Kannada
-    "en-IN": "shreya",   # English-India
-    "ta-IN": "ananya",   # Tamil
-    "te-IN": "aruna",    # Telugu
-    "ml-IN": "harini",   # Malayalam
-    "mr-IN": "meera",    # Marathi
-    "gu-IN": "divya",    # Gujarati
-    "pa-IN": "priya",    # Punjabi (fallback)
-    "od-IN": "priya",    # Odia (fallback)
+    "hi-IN": "ritu",    # Hindi
+    "bn-IN": "ritu",    # Bengali
+    "kn-IN": "ritu",    # Kannada
+    "en-IN": "ritu",    # English-India
+    "ta-IN": "ritu",    # Tamil
+    "te-IN": "ritu",    # Telugu
+    "ml-IN": "ritu",    # Malayalam
+    "mr-IN": "ritu",    # Marathi
+    "gu-IN": "ritu",    # Gujarati
+    "pa-IN": "ritu",    # Punjabi
+    "od-IN": "ritu",    # Odia
 }
 
 # Sarvam translate API max character limit per request
@@ -146,7 +146,7 @@ class SarvamAIService:
         # 2. Fallback: Sarvam API
         if self.api_key:
             try:
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(
                         f"{self.base_url}/text-lid",
                         json={"input": text.strip()[:500]},
@@ -255,7 +255,7 @@ class SarvamAIService:
         )
 
         translated_chunks: List[str] = []
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             for i, chunk in enumerate(chunks):
                 # Check cache per-chunk
                 text_hash = hashlib.md5(chunk.encode()).hexdigest()
@@ -307,13 +307,14 @@ class SarvamAIService:
             "text": tts_text,
             "target_language_code": t_lang,
             "speaker": speaker,
-            "pace": 1.0,
+            "pace": 1.1,
+            "speech_sample_rate": 22050,
             "enable_preprocessing": True,
             "model": "bulbul:v3"
         }
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=45.0) as client:
                 response = await client.post(
                     f"{self.base_url}/text-to-speech",
                     json=payload,

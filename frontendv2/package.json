@@ -15,9 +15,12 @@
     "@mui/icons-material": "^7.3.9",
     "@mui/material": "^7.3.9",
     "framer-motion": "^12.35.2",
+    "i18next": "^25.8.17",
     "marked": "^17.0.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-hot-toast": "^2.6.0",
+    "react-i18next": "^16.5.7",
     "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
