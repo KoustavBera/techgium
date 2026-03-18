@@ -630,7 +630,7 @@ class CameraCapture:
             else:
                 return None, face_width_px
         
-        return "no_face", None
+        return None, None
     
     def draw_face_mesh_on_frame(self, frame: np.ndarray, results: Optional[Dict] = None) -> np.ndarray:
         """
