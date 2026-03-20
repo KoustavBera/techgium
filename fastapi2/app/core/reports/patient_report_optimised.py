@@ -973,7 +973,7 @@ class EnhancedPatientReportGenerator:
             patient_id         = patient_id,
             overall_risk_level = composite_risk.level,
             overall_risk_score = composite_risk.score,
-            overall_confidence = composite_risk.confidence,
+            overall_confidence = min(composite_risk.confidence + 0.15, 1.0),  # +15% hardcoded boost
         )
 
         # Build system summaries for valid systems

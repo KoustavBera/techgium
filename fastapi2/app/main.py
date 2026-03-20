@@ -81,23 +81,38 @@ async def lifespan(app: FastAPI):
     # Initialize service
     app.state.screening_service = _screening_service
     
-    # Initialize hardware (camera, radar, thermal)
+    # Initialize hardware (camera, radar, thermal) — with timeout so
+    # the server can start even if serial ports are unavailable / hanging.
     config = HardwareConfig(
         camera_index=0,
         radar_port=os.environ.get("RADAR_PORT", "COM7"),
         esp32_port=os.environ.get("ESP32_PORT", "COM6"),
     )
-    await _hw_manager.startup(config, screening_service=_screening_service)
+    try:
+        await asyncio.wait_for(
+            _hw_manager.startup(config, screening_service=_screening_service),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        logger.error("⚠️ Hardware startup timed out after 30s — continuing without full hardware")
+    except Exception as e:
+        logger.error(f"⚠️ Hardware startup failed: {e} — continuing without hardware")
     
-    # Initialize Medical Agent (Chiranjeevi)
+    # Initialize Medical Agent (Chiranjeevi) — with timeout
     if AGENT_AVAILABLE:
         try:
             logger.info("Initializing Medical Agent (Chiranjeevi)...")
-            llm = await run_in_threadpool(load_model)
+            llm = await asyncio.wait_for(
+                run_in_threadpool(load_model),
+                timeout=60.0,
+            )
             # LLM is now set in load_model() for all modules
             set_llm(llm)
             app.state.medical_agent = build_graph()
             logger.info("Medical Agent ready with Trust Envelope™")
+        except asyncio.TimeoutError:
+            logger.error("⚠️ Medical Agent loading timed out after 60s — chat disabled")
+            app.state.medical_agent = None
         except Exception as e:
             logger.error(f"Failed to load Medical Agent: {e}")
             app.state.medical_agent = None

@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as API from '../lib/api' // using the standard fetch wrapper
+import { API_BASE } from '../lib/api'
 
 const POLL_INTERVAL_MS = 500
 
@@ -65,7 +66,7 @@ export function useScreening() {
         }
 
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:8000'}/api/v1/hardware/start-screening`, {
+            const res = await fetch(`${API_BASE}/api/v1/hardware/start-screening`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

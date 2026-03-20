@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C.H.I.R.A.N.J.E.E.V.I | Contactless Health Screening</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Roboto+Flex:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- GSAP & Plugins -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    
+    <!-- Lenis (Smooth Scroll) -->
+    <script src="https://unpkg.com/@studio-freight/lenis@1.0.35/dist/lenis.min.js"></script>
+    
+    <!-- Motion (Popmotion by Framer) for spring animations -->
+    <script src="https://unpkg.com/popmotion@11.0.5/dist/popmotion.global.min.js"></script>
+</head>
+<body>
+    
+    <!-- Preloader -->
+    <div class="preloader">
+        <div class="preloader-text">C.H.I.R.A.N.J.E.E.V.I</div>
+        <div class="preloader-bar">
+            <div class="preloader-progress"></div>
+        </div>
+    </div>
+
+    <!-- Custom Cursor -->
+    <div class="cursor"></div>
+
+    <nav class="navbar">
+        <div class="logo">
+            <div class="pulse-dot"></div>
+            CHIRANJEEV.AI
+        </div>
+        <div class="nav-links">
+            <a href="#about" class="nav-link">Platform</a>
+            <a href="#modalities" class="nav-link">Sensors</a>
+            <a href="#modules" class="nav-link">Modules</a>
+        </div>
+        <button class="nav-btn">Live Demo</button>
+    </nav>
+
+    <!-- Main Content wrapper for Lenis -->
+    <main id="smooth-wrapper">
+        <div id="smooth-content">
+            
+            <!-- Hero Section -->
+            <section class="hero">
+                <div class="ambient-blob hero-blob-1"></div>
+                <div class="ambient-blob hero-blob-2"></div>
+                
+                <div class="hero-content">
+                    <div class="tagline">
+                        <span class="tagline-dot"></span>
+                        Contactless Health Screening
+                    </div>
+                    
+                    <h1 class="hero-title">
+                        Health screening,<br>
+                        <span class="text-gradient">reimagined</span><br>
+                        by AI.
+                    </h1>
+                    
+                    <p class="hero-subtitle">
+                        Comprehensive Health Intelligence for Realtime Assessment and Non-invasive Joint Evaluation with Enhanced Vital Interpretation.
+                    </p>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value">3+</div>
+                            <div class="stat-label">Sensor Modalities</div>
+                            <div class="stat-sub">Camera · Thermal · mmWave</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value"><2s</div>
+                            <div class="stat-label">Analysis Latency</div>
+                            <div class="stat-sub">Real-time multimodal inference</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">20+</div>
+                            <div class="stat-label">Biomarkers Tracked</div>
+                            <div class="stat-sub">HR · Resp · Temp · HRV …</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">7+</div>
+                            <div class="stat-label">Languages Supported</div>
+                            <div class="stat-sub">Including Kannada, Hindi & more</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hero-image-container">
+                    <!-- The hero_abstract image will be placed here via CSS -->
+                    <div class="hero-image-wrapper">
+                        <img id="heroImg" src="" alt="Abstract Medical Tech" class="hero-img">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Marquee Section -->
+            <section class="marquee-section">
+                <div class="marquee" id="marquee1">
+                    <div class="marquee-content">
+                        <span>RGB Camera</span> • <span>mmWave Radar</span> • <span>Thermal Imaging</span> • <span>Multilingual AI</span> • <span>Privacy-First</span> • <span>Real-time</span> • 
+                    </div>
+                    <div class="marquee-content" aria-hidden="true">
+                        <span>RGB Camera</span> • <span>mmWave Radar</span> • <span>Thermal Imaging</span> • <span>Multilingual AI</span> • <span>Privacy-First</span> • <span>Real-time</span> • 
+                    </div>
+                </div>
+            </section>
+
+            <!-- Modalities Section (Horizontal Scroll) -->
+            <section class="modalities" id="modalities">
+                <div class="section-header">
+                    <h2>Advanced Sensor Modalities</h2>
+                    <p>Powered by three sensor modalities working in parallel to ensure accurate, non-invasive assessment without physical contact.</p>
+                </div>
+                
+                <div class="horizontal-scroll-container">
+                    <div class="horizontal-scroll-content">
+                        <div class="modality-card">
+                            <img id="sensorImg1" src="" alt="Sensor" class="modality-img">
+                            <div class="modality-info">
+                                <h3>rPPG Camera</h3>
+                                <p>Extracts Heart Rate and Breathing patterns purely from facial micro-color variations.</p>
+                            </div>
+                        </div>
+                        <div class="modality-card">
+                            <img id="sensorImg2" src="" alt="Radar" class="modality-img">
+                            <div class="modality-info">
+                                <h3>mmWave Radar</h3>
+                                <p>Penetrates clothing to accurately measure Respiratory Rate and Heart Rate Variability.</p>
+                            </div>
+                        </div>
+                        <div class="modality-card">
+                            <img id="sensorImg3" src="" alt="Thermal" class="modality-img">
+                            <div class="modality-info">
+                                <h3>Thermal Imaging</h3>
+                                <p>Maps surface temperature variations in real-time, detecting anomalies instantly.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Modules Section -->
+            <section class="modules" id="modules">
+                <div class="section-header center">
+                    <div class="label-line">
+                        <span>Explore modules</span>
+                        <div class="line"></div>
+                    </div>
+                </div>
+                
+                <div class="modules-grid">
+                    <!-- Module 1 -->
+                    <div class="module-card card-health">
+                        <div class="module-glow health-glow"></div>
+                        <div class="module-top">
+                            <div class="module-icon health-icon">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
+                                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H9v-2h2v2zm0-4H9V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                                </svg>
+                            </div>
+                            <div class="module-badge badge-health">Live Demo</div>
+                        </div>
+                        <div class="module-content">
+                            <h3 class="module-title">Health Screening</h3>
+                            <div class="module-subtitle">Non-invasive · Multimodal · Real-time</div>
+                            <p class="module-desc">Comprehensive vitals and body assessment without any contact. Powered by three sensor modalities working in parallel.</p>
+                            
+                            <ul class="feature-list">
+                                <li>Heart rate & Breathing via rPPG camera</li>
+                                <li>Respiratory rate & HRV via mmWave radar</li>
+                                <li>Surface temperature via thermal imaging</li>
+                                <li>AI-generated clinical report in seconds</li>
+                            </ul>
+                        </div>
+                        <button class="module-cta cta-health">
+                            Open module
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                                <path d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59c.39-.39.39-1.02 0-1.41l-6.58-6.6a.9959.9959 0 00-1.41 0c-.39.39-.39 1.02 0 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Module 2 -->
+                    <div class="module-card card-ai">
+                        <div class="module-glow ai-glow"></div>
+                        <div class="module-top">
+                            <div class="module-icon ai-icon">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
+                                    <path d="M19.99 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h15.99c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM15 14h-2v-2h2v2zm0-4h-2V8h2v2zm-4 4H9v-2h2v2zm0-4H9V8h2v2z"/>
+                                </svg>
+                            </div>
+                            <div class="module-badge badge-ai">AI Assistant</div>
+                        </div>
+                        <div class="module-content">
+                            <h3 class="module-title">CHIRANJEEVAI</h3>
+                            <div class="module-subtitle">Evidence-based · Multilingual · Empathetic</div>
+                            <p class="module-desc">Your AI medical companion — ask health questions, get report summaries, and receive evidence-backed clinical guidance in your language.</p>
+                            
+                            <ul class="feature-list">
+                                <li>Interprets your screening report in plain language</li>
+                                <li>Answers evidence-based health questions 24/7</li>
+                                <li>Supports 7+ Indic languages via Sarvam AI</li>
+                                <li>Cites sources with every clinical claim</li>
+                            </ul>
+                        </div>
+                        <button class="module-cta cta-ai">
+                            Open module
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                                <path d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59c.39-.39.39-1.02 0-1.41l-6.58-6.6a.9959.9959 0 00-1.41 0c-.39.39-.39 1.02 0 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="footer">
+                <div class="footer-content">
+                    <div class="footer-brand">
+                        <div class="footer-logo">C.H.I.R.A.N.J.E.E.V.I</div>
+                        <p>Health screening, reimagined by AI.</p>
+                    </div>
+                    <div class="footer-links">
+                        <a href="#">Privacy Policy</a>
+                        <a href="#">Terms of Service</a>
+                        <a href="#">Contact</a>
+                    </div>
+                </div>
+            </footer>
+            
+        </div>
+    </main>
+
+    <script src="main.js"></script>
+    
+    <!-- Inline script to load generated images correctly due to absolute paths. You'll need to manually adjust this or let the JS handle it -->
+    <script>
+        // Update paths dynamically based on generated artifacts (Assuming the python script will serve them)
+        // I will dynamically fetch them via JS later or hardcode the paths injected by the agent
+    </script>
+</body>
+</html>

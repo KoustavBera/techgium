@@ -3,6 +3,7 @@
  * The main Health Screening dashboard integrating Camera, Controls, Progress, and Trust metrics.
  */
 import { useState } from 'react'
+import { API_BASE } from '../lib/api'
 import { useScreening } from '../hooks/useScreening'
 import CameraFeed from '../components/screening/CameraFeed'
 import ScreeningControls from '../components/screening/ScreeningControls'
@@ -12,8 +13,7 @@ import TrustDashboard from '../components/screening/TrustDashboard'
 export default function ScreeningPage() {
     const [isCameraActive, setIsCameraActive] = useState(false)
 
-    // Note: VITE_API_BASE needs to be set in .env in production, here we default to :8000
-    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+    // API_BASE is imported from lib/api.js (reads VITE_API_BASE env var with localhost:8000 fallback)
 
     const {
         scanState,

@@ -95,10 +95,10 @@ export default function ChatPage() {
                     onCitationClick={setActiveCitations}
                 />
 
-                {/* Typing indicator (Forced ON for UI testing) */}
+                {/* Typing indicator */}
                 <TypingIndicator
-                    visible={true} 
-                    label="🩺 Dr. Chiranjeevi is thinking"
+                    visible={isProcessing}
+                    label={typingState}
                 />
 
                 {/* Input */}
