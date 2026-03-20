@@ -58,5 +58,6 @@ pillow>=11.1.0
 # Multilingual Indian Language Support
 langdetect>=1.0.9  # Offline fallback for language detection (Sarvam /text-lid is primary)
 diskcache  # Fast disk-based persistent cache for Sarvam TTS and Translation
+redis>=5.0.0  # Redis cache for screening results and patient context
 inference-sdk
 langchain-huggingface

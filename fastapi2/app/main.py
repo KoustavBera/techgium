@@ -51,6 +51,7 @@ from app.core.agents.medical_agents import AgentConsensus, ConsensusResult
 from app.core.reports import PatientReportGenerator, DoctorReportGenerator
 from app.core.hardware.manager import HardwareManager, HardwareConfig
 from app.services.screening import ScreeningService
+from app.utils.redis_client import redis_client
 
 from app.models.screening import (
     BiomarkerInput,
@@ -80,6 +81,13 @@ async def lifespan(app: FastAPI):
     """Manage hardware lifecycle: startup → yield → shutdown."""
     # Initialize service
     app.state.screening_service = _screening_service
+    
+    # Initialize Redis cache
+    redis_ok = redis_client.connect()
+    if redis_ok:
+        logger.info("Redis cache active — screening results will be cached")
+    else:
+        logger.warning("Redis unavailable — falling back to in-memory storage only")
     
     # Initialize hardware (camera, radar, thermal) — with timeout so
     # the server can start even if serial ports are unavailable / hanging.
@@ -259,18 +267,27 @@ def _format_screening_context(patient_id: str) -> str:
     """
     Build a concise Markdown summary of the patient's most recent screening.
 
-    Searches _screenings for the latest entry that matches `patient_id`.
-    Returns an empty string if no match is found, so the agent falls back
-    to general medical knowledge gracefully.
+    STRICT PATIENT ID MATCHING: Only returns context if `patient_id` matches
+    exactly. No cross-patient data is ever returned.
+    Returns an empty string if no match is found.
+
+    Checks Redis cache first for speed; falls back to in-memory _screenings.
     """
-    # Find all screenings for this patient (could be multiple sessions)
+    # ── 1. Try Redis cache first (fast path) ────────────────────────
+    cached = redis_client.get_screening_context(patient_id)
+    if cached:
+        logger.info(f"Redis cache HIT for patient context '{patient_id}'")
+        return cached
+
+    # ── 2. Fall back to in-memory _screenings ───────────────────────
+    # STRICT: only exact patient_id match (case-insensitive)
     patient_screenings = {
         sid: s for sid, s in _screenings.items()
         if s.get("patient_id", "").lower() == patient_id.lower()
     }
 
     if not patient_screenings:
-        return ""  # No screening available yet
+        return ""  # No screening available for THIS patient
 
     # Pick the most recent one by timestamp
     latest_id = max(
@@ -319,7 +336,13 @@ def _format_screening_context(patient_id: str) -> str:
             for alert in alerts[:3]:  # cap at 3 alerts per system
                 lines.append(f"  ⚠️ {alert}")
 
-    return "\n".join(lines)
+    context_md = "\n".join(lines)
+
+    # ── 3. Cache the rendered context in Redis ──────────────────────
+    redis_client.cache_screening_context(patient_id, context_md)
+    logger.info(f"Cached screening context for patient '{patient_id}' in Redis")
+
+    return context_md
 
 
 # ---- API Endpoints ----
@@ -401,8 +424,8 @@ async def run_screening(request: ScreeningRequest):
             include_validation=request.include_validation
         )
         
-        # Store for report generation
-        _screenings[result["screening_id"]] = {
+        # Store for report generation (in-memory + Redis cache)
+        screening_data = {
             "patient_id": result["patient_id"],
             "system_results": result["system_results_internal"],
             "trusted_results": result["trusted_results"],
@@ -410,6 +433,18 @@ async def run_screening(request: ScreeningRequest):
             "rejected_systems": result["rejected_systems"],
             "timestamp": result["timestamp"]
         }
+        _screenings[result["screening_id"]] = screening_data
+        
+        # Cache in Redis for fast retrieval
+        redis_client.cache_screening_result(result["screening_id"], {
+            "patient_id": result["patient_id"],
+            "screening_id": result["screening_id"],
+            "timestamp": result["timestamp"].isoformat(),
+            "overall_risk_level": result["overall_risk_level"],
+            "overall_risk_score": result["overall_risk_score"],
+        })
+        # Invalidate stale context so next chat picks up latest screening
+        redis_client.invalidate_screening_context(result["patient_id"])
         
         # Map to response model
         response_results = [RiskResultResponse(**r) for r in result["system_results"]]
@@ -708,17 +743,23 @@ async def doctor_chat(request: DoctorChatRequest):
             set_status_callback(on_status)
             set_token_callback(on_token)
             try:
-                # Build patient screening context (RAG) for this patient
+                # STRICT PATIENT ID MATCHING:
+                # Only inject screening context if exact patient ID match exists.
+                # NO cross-patient data is ever used.
                 patient_ctx = _format_screening_context(request.patient_id or "GUEST")
+
                 if patient_ctx:
                     logger.info(
                         f"Injecting screening context for patient '{request.patient_id}' "
                         f"({len(patient_ctx)} chars)"
                     )
                 else:
+                    # No screening data for this patient — the agent's own
+                    # medically-scoped pipeline (Router → Research Evaluator →
+                    # Tavily + PubMed) will handle web search if needed.
                     logger.info(
-                        f"No prior screening found for patient '{request.patient_id}' — "
-                        "agent will use general knowledge only."
+                        f"No screening data for patient '{request.patient_id}' — "
+                        "agent will use its own medical research pipeline."
                     )
 
                 result = app.state.medical_agent.invoke(
@@ -729,11 +770,12 @@ async def doctor_chat(request: DoctorChatRequest):
                     config={"configurable": {"thread_id": request.patient_id or "GUEST"}}
                 )
                 final = result.get("final_answer", "")
+
                 if final and not tokens_emitted:
                     on_token(final)
                 loop.call_soon_threadsafe(queue.put_nowait, {
                     "type": "_internal_done",
-                    "final_english": final
+                    "final_english": final,
                 })
             except Exception as e:
                 logger.error(f"Agent error: {e}")
