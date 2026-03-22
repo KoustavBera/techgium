@@ -7,6 +7,8 @@ import { useState, useRef, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import { streamFetch, checkHealth } from '../lib/api'
 
+const SESSION_PATIENT_KEY = 'chiranjeevi_patient_id'
+
 const AGENT_STATE = {
     ANALYZING: 'analyzing',
     SEARCHING_WEB: 'searching_web',
@@ -75,9 +77,10 @@ export function useChatSession() {
         const timeoutId = setTimeout(() => controller.abort(), 120000) // 120s timeout
 
         try {
+            const patientId = sessionStorage.getItem(SESSION_PATIENT_KEY) || undefined
             const response = await streamFetch('/api/v1/doctor/chat', {
                 query: text,
-                patient_id: 'WEB_USER',
+                patient_id: patientId,
                 language,
             }, {
                 signal: controller.signal

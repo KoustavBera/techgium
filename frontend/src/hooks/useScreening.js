@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import * as API from '../lib/api' // using the standard fetch wrapper
 
 const POLL_INTERVAL_MS = 500
+const SESSION_PATIENT_KEY = 'chiranjeevi_patient_id'
 
 export function useScreening() {
     // Overall state: idle | initializing | running | complete | error
@@ -89,6 +90,7 @@ export function useScreening() {
                 throw new Error(data.error || 'Failed to start scan')
             }
 
+            sessionStorage.setItem(SESSION_PATIENT_KEY, config.patientId)
             setScanState('running')
 
             // Begin active polling
@@ -144,7 +146,7 @@ export function useScreening() {
                 scanPollRef.current = null
 
                 setScanState('complete')
-                setReportId(status.patient_report_id)
+                setReportId(status.report_id)
                 if (status.trust_metadata) {
                     setTrustMetadata(status.trust_metadata)
                 }
