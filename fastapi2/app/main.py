@@ -11,7 +11,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Response, UploadFile, File, BackgroundTasks, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
@@ -48,10 +47,12 @@ from app.core.extraction.base import PhysiologicalSystem
 from app.core.inference.risk_engine import RiskEngine, RiskScore, RiskLevel, SystemRiskResult
 from app.core.validation.trust_envelope import TrustEnvelope
 from app.core.agents.medical_agents import AgentConsensus, ConsensusResult
-from app.core.reports import PatientReportGenerator, DoctorReportGenerator
+from app.core.reports import PatientReportGenerator
 from app.core.hardware.manager import HardwareManager, HardwareConfig
 from app.services.screening import ScreeningService
+from app.services.persistence import PersistenceService, build_report_summary_text
 from app.utils.redis_client import redis_client
+from app.config import settings
 
 from app.models.screening import (
     BiomarkerInput,
@@ -96,9 +97,15 @@ async def lifespan(app: FastAPI):
         radar_port=os.environ.get("RADAR_PORT", "COM7"),
         esp32_port=os.environ.get("ESP32_PORT", "COM6"),
     )
+    _persistence.init_db()
     try:
         await asyncio.wait_for(
-            _hw_manager.startup(config, screening_service=_screening_service),
+            _hw_manager.startup(
+                config,
+                screening_service=_screening_service,
+                report_generator=_patient_report_gen,
+                persistence=_persistence,
+            ),
             timeout=30.0,
         )
     except asyncio.TimeoutError:
@@ -106,21 +113,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"⚠️ Hardware startup failed: {e} — continuing without hardware")
     
-    # Initialize Medical Agent (Chiranjeevi) — with timeout
+    # Initialize Medical Agent (Chiranjeevi)
     if AGENT_AVAILABLE:
         try:
             logger.info("Initializing Medical Agent (Chiranjeevi)...")
-            llm = await asyncio.wait_for(
-                run_in_threadpool(load_model),
-                timeout=60.0,
-            )
+            llm = await run_in_threadpool(load_model)
             # LLM is now set in load_model() for all modules
             set_llm(llm)
             app.state.medical_agent = build_graph()
             logger.info("Medical Agent ready with Trust Envelope™")
-        except asyncio.TimeoutError:
-            logger.error("⚠️ Medical Agent loading timed out after 60s — chat disabled")
-            app.state.medical_agent = None
         except Exception as e:
             logger.error(f"Failed to load Medical Agent: {e}")
             app.state.medical_agent = None
@@ -155,23 +156,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---- Serve Frontend ----
-frontend_path = Path(__file__).resolve().parent.parent.parent / "frontend"
-if not frontend_path.exists():
-    # Fallback to local directory if parent path fails
-    frontend_path = Path("frontend")
-
-app.mount("/frontend", StaticFiles(directory=str(frontend_path)), name="frontend")
 
 
-# ---- In-memory storage (replace with database in production) ----
-_screenings: Dict[str, Dict[str, Any]] = {}
-_reports: Dict[str, str] = {}
 START_TIME = datetime.now()
 
 # ---- Generators ----
 _patient_report_gen = PatientReportGenerator(output_dir="reports")
-_doctor_report_gen = DoctorReportGenerator(output_dir="reports")
 _risk_engine = RiskEngine()
 _consensus = AgentConsensus()
 
@@ -184,6 +174,7 @@ from app.services.sarvam import sarvam_service
 
 # ---- Unified Services ----
 _screening_service = ScreeningService(risk_engine=_risk_engine, interpreter=_multi_llm_interpreter)
+_persistence = PersistenceService(settings.database_url)
 
 
 
@@ -263,85 +254,24 @@ def _get_local_ip():
         return "127.0.0.1"
 
 
-def _format_screening_context(patient_id: str) -> str:
-    """
-    Build a concise Markdown summary of the patient's most recent screening.
+def _get_patient_report_context(patient_id: str) -> str:
+    """Load the persisted report summary for the patient's latest screening."""
+    return _load_patient_report_context(patient_id)
 
-    STRICT PATIENT ID MATCHING: Only returns context if `patient_id` matches
-    exactly. No cross-patient data is ever returned.
-    Returns an empty string if no match is found.
 
-    Checks Redis cache first for speed; falls back to in-memory _screenings.
-    """
-    # ── 1. Try Redis cache first (fast path) ────────────────────────
+def _load_patient_report_context(patient_id: str) -> str:
+    """Single-source patient context lookup: Redis cache first, then SQLite."""
     cached = redis_client.get_screening_context(patient_id)
     if cached:
         logger.info(f"Redis cache HIT for patient context '{patient_id}'")
         return cached
 
-    # ── 2. Fall back to in-memory _screenings ───────────────────────
-    # STRICT: only exact patient_id match (case-insensitive)
-    patient_screenings = {
-        sid: s for sid, s in _screenings.items()
-        if s.get("patient_id", "").lower() == patient_id.lower()
-    }
+    context_md = _persistence.get_patient_report_context(patient_id)
+    if not context_md:
+        return ""
 
-    if not patient_screenings:
-        return ""  # No screening available for THIS patient
-
-    # Pick the most recent one by timestamp
-    latest_id = max(
-        patient_screenings.keys(),
-        key=lambda sid: patient_screenings[sid].get("timestamp", datetime.min)
-    )
-    screening = patient_screenings[latest_id]
-    composite = screening.get("composite_risk")
-    system_results = screening.get("system_results", {})
-    timestamp = screening.get("timestamp", datetime.now())
-
-    lines = [
-        f"## Health Screening — {timestamp.strftime('%d %b %Y, %I:%M %p')}",
-        f"- **Patient ID**: {patient_id}",
-        f"- **Screening ID**: {latest_id}",
-    ]
-
-    if composite:
-        lines.append(
-            f"- **Overall Risk**: {composite.level.value.upper()} "
-            f"(score {composite.score:.1f}/100, confidence {composite.confidence:.0%})"
-        )
-
-    lines.append("")
-    lines.append("### System-Level Results")
-
-    for system, result in system_results.items():
-        sys_name = system.value.title() if hasattr(system, "value") else str(system)
-        risk = result.overall_risk
-        lines.append(
-            f"#### {sys_name}: **{risk.level.value.upper()}** "
-            f"(score {risk.score:.1f}/100, confidence {risk.confidence:.0%})"
-        )
-        # Include key biomarkers (up to 8 per system to keep context compact)
-        for bm_name, bm_data in list(result.biomarker_summary.items())[:8]:
-            friendly = bm_name.replace("_", " ").title()
-            val = round(bm_data.get("value", bm_data.get("estimated", "N/A")), 2) \
-                if isinstance(bm_data.get("value", bm_data.get("estimated")), (int, float)) \
-                else bm_data.get("value", bm_data.get("estimated", "N/A"))
-            unit = bm_data.get("unit", "")
-            status_flag = bm_data.get("status", "")
-            lines.append(f"  - {friendly}: **{val} {unit}** ({status_flag})")
-
-        alerts = result.alerts
-        if alerts:
-            for alert in alerts[:3]:  # cap at 3 alerts per system
-                lines.append(f"  ⚠️ {alert}")
-
-    context_md = "\n".join(lines)
-
-    # ── 3. Cache the rendered context in Redis ──────────────────────
     redis_client.cache_screening_context(patient_id, context_md)
-    logger.info(f"Cached screening context for patient '{patient_id}' in Redis")
-
+    logger.info(f"Cached persisted report context for patient '{patient_id}' in Redis")
     return context_md
 
 
@@ -424,16 +354,8 @@ async def run_screening(request: ScreeningRequest):
             include_validation=request.include_validation
         )
         
-        # Store for report generation (in-memory + Redis cache)
-        screening_data = {
-            "patient_id": result["patient_id"],
-            "system_results": result["system_results_internal"],
-            "trusted_results": result["trusted_results"],
-            "composite_risk": result["composite_risk"],
-            "rejected_systems": result["rejected_systems"],
-            "timestamp": result["timestamp"]
-        }
-        _screenings[result["screening_id"]] = screening_data
+        # Persist to SQLite first so report/chat survives restart
+        _persistence.save_screening(result)
         
         # Cache in Redis for fast retrieval
         redis_client.cache_screening_result(result["screening_id"], {
@@ -473,46 +395,38 @@ async def run_screening(request: ScreeningRequest):
 @app.post("/api/v1/reports/generate", response_model=ReportResponse, tags=["Reports"])
 async def generate_report(request: ReportRequest):
     """
-    Generate PDF report for a completed screening.
-    
-    Report types: 'patient' or 'doctor'
+    Generate the single canonical PDF report for a completed screening.
     """
-    # Check screening exists
-    if request.screening_id not in _screenings:
+    screening = _persistence.get_screening_by_id(request.screening_id)
+    if screening is None:
         raise HTTPException(
             status_code=404,
             detail=f"Screening {request.screening_id} not found. Run screening first."
         )
-    
-    screening = _screenings[request.screening_id]
-    
+
     try:
-        if request.report_type == "patient":
-            report = _patient_report_gen.generate(
-                system_results=screening["system_results"],
-                composite_risk=screening["composite_risk"],
-                patient_id=screening["patient_id"],
-                trusted_results=screening.get("trusted_results"),
-                rejected_systems=screening.get("rejected_systems")
-            )
-        elif request.report_type == "doctor":
-            report = _doctor_report_gen.generate(
-                system_results=screening["system_results"],
-                composite_risk=screening["composite_risk"],
-                patient_id=screening["patient_id"]
-            )
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid report_type. Use 'patient' or 'doctor'."
-            )
-        
-        # Store report reference
-        _reports[report.report_id] = report.pdf_path
-        
+        report = _patient_report_gen.generate(
+            system_results=screening["system_results"],
+            composite_risk=screening["composite_risk"],
+            patient_id=screening["patient_id"],
+            trusted_results=screening.get("trusted_results"),
+            rejected_systems=screening.get("rejected_systems"),
+            clinical_findings=screening.get("clinical_findings"),
+        )
+        report_summary_text = build_report_summary_text(report, request.screening_id)
+        _persistence.save_report(
+            screening_id=request.screening_id,
+            patient_id=screening["patient_id"],
+            report_id=report.report_id,
+            pdf_path=report.pdf_path or "",
+            generated_at=report.generated_at,
+            report_summary_text=report_summary_text,
+        )
+        redis_client.cache_screening_context(screening["patient_id"], report_summary_text)
+
         return ReportResponse(
             report_id=report.report_id,
-            report_type=request.report_type,
+            report_type="patient",
             pdf_path=report.pdf_path or "",
             generated_at=report.generated_at.isoformat()
         )
@@ -527,10 +441,11 @@ async def download_report(report_id: str):
     """
     Download a generated PDF report.
     """
-    if report_id not in _reports:
+    report = _persistence.get_report_by_id(report_id)
+    if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
-    
-    pdf_path = _reports[report_id]
+
+    pdf_path = report["pdf_path"]
     
     if not pdf_path or not os.path.exists(pdf_path):
         raise HTTPException(status_code=404, detail="PDF file not found")
@@ -549,7 +464,7 @@ async def get_report_qr(report_id: str, request: Request):
     The QR URL uses the same host the browser used to reach this server,
     so a phone on the same Wi-Fi can scan it and reach the correct address.
     """
-    if report_id not in _reports:
+    if _persistence.get_report_by_id(report_id) is None:
         raise HTTPException(status_code=404, detail="Report not found")
 
     # Use the Host header from the incoming request (e.g. 192.168.1.x:8000).
@@ -588,11 +503,10 @@ async def get_screening(screening_id: str):
     """
     Get details of a completed screening.
     """
-    if screening_id not in _screenings:
+    screening = _persistence.get_screening_by_id(screening_id)
+    if screening is None:
         raise HTTPException(status_code=404, detail="Screening not found")
-    
-    screening = _screenings[screening_id]
-    
+
     results = []
     for system, result in screening["system_results"].items():
         results.append({
@@ -602,7 +516,7 @@ async def get_screening(screening_id: str):
             "confidence": round(result.overall_risk.confidence, 2),
             "biomarker_count": len(result.biomarker_summary)
         })
-    
+
     composite = screening["composite_risk"]
     
     return {
@@ -646,8 +560,7 @@ class HardwareScreeningResponse(BaseModel):
     """Response from hardware screening."""
     status: str
     screening_id: Optional[str] = None
-    patient_report_id: Optional[str] = None
-    doctor_report_id: Optional[str] = None
+    report_id: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -682,7 +595,6 @@ async def start_hardware_screening(request: HardwareScreeningRequest):
 
     started = _hw_manager.start_scan(
         patient_id=request.patient_id,
-        screenings_dict=_screenings,
         patient_context=patient_context,
     )
     
@@ -746,7 +658,7 @@ async def doctor_chat(request: DoctorChatRequest):
                 # STRICT PATIENT ID MATCHING:
                 # Only inject screening context if exact patient ID match exists.
                 # NO cross-patient data is ever used.
-                patient_ctx = _format_screening_context(request.patient_id or "GUEST")
+                patient_ctx = _load_patient_report_context(request.patient_id or "GUEST")
 
                 if patient_ctx:
                     logger.info(

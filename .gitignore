@@ -11,3 +11,12 @@ __pycache__/
 
 # Environment files
 .env
+
+
+CONTEXT_PERSISTENCE_CHANGE_PLAN.md
+DATABASE_SCHEMA_DESIGN.md
+
+# Local SQLite artifacts
+*.db
+*.db-shm
+*.db-wal
