@@ -57,7 +57,7 @@ Minimal identity anchor. Created automatically the first time a patient ID is se
 | `created_at` | TEXT | `NOT NULL` | ISO-8601 — first seen timestamp |
 | `updated_at` | TEXT | `NOT NULL` | ISO-8601 — updated on every upsert |
 
-**Upsert behaviour**: `ON CONFLICT(patient_id) DO UPDATE SET updated_at=excluded.updated_at`  
+**Upsert behaviour**: `ON CONFLICT(patient_id) DO UPDATE SET updated_at=excluded.updated_at`
 → safe to call `create_or_get_patient()` on every screening without duplicates.
 
 ---
@@ -105,7 +105,7 @@ One row per completed hardware screening run. Stores the full clinical payload a
 
 ### `reports`
 
-One row per generated PDF report. One-to-one with screenings (enforced via `UNIQUE` on `screening_id`).  
+One row per generated PDF report. One-to-one with screenings (enforced via `UNIQUE` on `screening_id`).
 The `report_summary_text` column is the **single source of truth** for chatbot context.
 
 | Column | Type | Constraint | Notes |
@@ -118,7 +118,7 @@ The `report_summary_text` column is the **single source of truth** for chatbot c
 | `generated_at` | TEXT | `NOT NULL` | Report generation timestamp |
 | `created_at` | TEXT | `NOT NULL` | Row insert timestamp |
 
-**Upsert behaviour**: `ON CONFLICT(screening_id) DO UPDATE SET ...`  
+**Upsert behaviour**: `ON CONFLICT(screening_id) DO UPDATE SET ...`
 → re-generating a report for the same screening safely overwrites the old row.
 
 ---

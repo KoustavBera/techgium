@@ -47,63 +47,8 @@ export function useScreening() {
         try {
             const data = await API.getSensorStatus()
             setSensorStatus(data)
-        } catch (e) {
+        } catch {
             console.error('Failed to check sensors')
-        }
-    }, [])
-
-    // 2. Start Scan
-    const startScan = useCallback(async (config) => {
-        setScanState('initializing')
-        setScanStatus(prev => ({ ...prev, phase: 'INITIALIZING', message: 'Preparing sensors...', userWarnings: null }))
-        setErrorMsg(null)
-        setTrustMetadata(null)
-        setReportId(null)
-
-        // Stop the background "idle" polling so it doesn't conflict
-        if (continuousPollRef.current) {
-            clearInterval(continuousPollRef.current)
-            continuousPollRef.current = null
-        }
-
-        try {
-            const res = await fetch(`${API_BASE}/api/v1/hardware/start-screening`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    patient_id: config.patientId,
-                    radar_port: config.radarPort,
-                    esp32_port: config.esp32Port,
-                    camera_index: 0,
-                    age: config.age,
-                    gender: config.gender,
-                    activity_mode: config.activityMode
-                })
-            })
-
-            if (!res.ok) {
-                const errorData = await res.json()
-                throw new Error(errorData.detail || `Server error: ${res.status}`)
-            }
-
-            const data = await res.json()
-            if (data.status === 'error') {
-                throw new Error(data.error || 'Failed to start scan')
-            }
-
-            sessionStorage.setItem(SESSION_PATIENT_KEY, config.patientId)
-            setScanState('running')
-
-            // Begin active polling
-            if (!scanPollRef.current) {
-                scanPollRef.current = setInterval(pollScanStatus, POLL_INTERVAL_MS)
-            }
-
-        } catch (e) {
-            setScanState('error')
-            setScanStatus(prev => ({ ...prev, phase: 'ERROR', message: e.message }))
-            setErrorMsg(e.message)
-            startContinuousPolling() // Resume idle polling
         }
     }, [])
 
@@ -167,6 +112,60 @@ export function useScreening() {
             console.error('Error polling scan status:', e)
         }
     }, [startContinuousPolling])
+
+    // 2. Start Scan
+    const startScan = useCallback(async (config) => {
+        setScanState('initializing')
+        setScanStatus(prev => ({ ...prev, phase: 'INITIALIZING', message: 'Preparing sensors...', userWarnings: null }))
+        setErrorMsg(null)
+        setTrustMetadata(null)
+        setReportId(null)
+
+        // Stop the background "idle" polling so it doesn't conflict
+        if (continuousPollRef.current) {
+            clearInterval(continuousPollRef.current)
+            continuousPollRef.current = null
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/api/v1/hardware/start-screening`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    patient_id: config.patientId,
+                    radar_port: config.radarPort,
+                    esp32_port: config.esp32Port,
+                    camera_index: 0,
+                    age: config.age,
+                    gender: config.gender,
+                    activity_mode: config.activityMode
+                })
+            })
+
+            if (!res.ok) {
+                const errorData = await res.json()
+                throw new Error(errorData.detail || `Server error: ${res.status}`)
+            }
+
+            const data = await res.json()
+            if (data.status === 'error') {
+                throw new Error(data.error || 'Failed to start scan')
+            }
+
+            sessionStorage.setItem(SESSION_PATIENT_KEY, config.patientId)
+            setScanState('running')
+
+            // Begin active polling
+            if (!scanPollRef.current) {
+                scanPollRef.current = setInterval(pollScanStatus, POLL_INTERVAL_MS)
+            }
+        } catch (e) {
+            setScanState('error')
+            setScanStatus(prev => ({ ...prev, phase: 'ERROR', message: e.message }))
+            setErrorMsg(e.message)
+            startContinuousPolling() // Resume idle polling
+        }
+    }, [pollScanStatus, startContinuousPolling])
 
     // 5. Reset
     const resetScreening = useCallback(() => {
