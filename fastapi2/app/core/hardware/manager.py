@@ -40,7 +40,7 @@ from app.core.extraction.pulmonary import PulmonaryExtractor
 
 from app.core.extraction.eyes import EyeExtractor
 from app.core.extraction.nasal import NasalExtractor
-from app.core.extraction.visual_classification import VisualDiseaseClassifier
+
 from app.core.extraction.base import BiomarkerSet
 
 logger = logging.getLogger(__name__)
@@ -347,9 +347,8 @@ class HardwareManager:
             frame_height=720
         )
         self.nasal_extractor = NasalExtractor()
-        self.visual_extractor = VisualDiseaseClassifier()
         self._extractors_initialized = True
-        logger.info("✅ All 9 extractors initialized")
+        logger.info("✅ All 7 extractors initialized")
     
     # ------------------------------------------------------------------
     # CONTINUOUS CAPTURE (Video Stream)
@@ -1483,7 +1482,7 @@ class HardwareManager:
             ("Skeletal",       self.skeletal_extractor),
             ("Eyes",           self.eye_extractor),
             ("Nasal",          self.nasal_extractor),
-            ("Visual API",     self.visual_extractor),
+
         ]
 
         self._update_scan_status(

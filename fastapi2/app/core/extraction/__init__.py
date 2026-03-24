@@ -2,7 +2,7 @@
 Feature Extraction Module
 
 Extracts clinically relevant biomarkers from multimodal sensor data
-for 9 physiological systems.
+for 7 physiological systems.
 """
 from .base import BaseExtractor, BiomarkerSet
 from .cns import CNSExtractor
@@ -12,7 +12,7 @@ from .skeletal import SkeletalExtractor
 from .skin import SkinExtractor
 from .eyes import EyeExtractor
 from .nasal import NasalExtractor
-from .visual_classification import VisualDiseaseClassifier
+
 
 __all__ = [
     "BaseExtractor",
@@ -24,5 +24,5 @@ __all__ = [
     "SkinExtractor",
     "EyeExtractor",
     "NasalExtractor",
-    "VisualDiseaseClassifier",
+
 ]
