@@ -42,6 +42,7 @@ from app.core.extraction.eyes import EyeExtractor
 from app.core.extraction.nasal import NasalExtractor
 
 from app.core.extraction.base import BiomarkerSet
+from app.services.persistence import build_report_summary_text
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,8 @@ class HardwareManager:
         
         # Service and Event Loop
         self.screening_service = None
+        self.report_generator = None
+        self.persistence = None
         self.loop = None
         
         # Hardware handles
@@ -162,8 +165,7 @@ class HardwareManager:
             "message": "Ready for screening",
             "progress": 0,
             "screening_id": None,
-            "patient_report_id": None,
-            "doctor_report_id": None,
+            "report_id": None,
             "user_warnings": {
                 "distance_warning": None,  # "too_close", "too_far", or None
                 "face_detected": True,
@@ -204,12 +206,20 @@ class HardwareManager:
     # LIFECYCLE
     # ------------------------------------------------------------------
     
-    async def startup(self, config: Optional[HardwareConfig] = None, screening_service = None):
+    async def startup(
+        self,
+        config: Optional[HardwareConfig] = None,
+        screening_service=None,
+        report_generator=None,
+        persistence=None,
+    ):
         """Initialize all hardware. Call during FastAPI lifespan startup."""
         if config:
             self.config = config
         
         self.screening_service = screening_service
+        self.report_generator = report_generator
+        self.persistence = persistence
         self.loop = asyncio.get_running_loop()
         
         logger.info("=" * 60)
@@ -667,8 +677,6 @@ class HardwareManager:
     def start_scan(
         self,
         patient_id: str,
-        screenings_dict: Dict,
-        app_internals: Dict = None,
         patient_context: Dict = None,
     ) -> bool:
         """
@@ -676,8 +684,6 @@ class HardwareManager:
 
         Args:
             patient_id:      Patient identifier
-            screenings_dict: Reference to main.py's _screenings dict for direct injection
-            app_internals:   Dict with references to _risk_engine, _multi_llm_interpreter etc.
             patient_context: Optional dict with keys: age (int), gender (str), activity_mode (str).
                              Used for dynamic biomarker plausibility validation.
                              Example: {"age": 35, "gender": "female", "activity_mode": "resting"}
@@ -697,15 +703,14 @@ class HardwareManager:
             message="Preparing sensors...",
             progress=5,
             screening_id=None,
-            patient_report_id=None,
-            doctor_report_id=None,
+            report_id=None,
         )
 
         logger.info("Launching scan thread...")
         logger.info(f"Target function: {self._run_scan}")
         self._scan_thread = threading.Thread(
             target=self._run_scan,
-            args=(patient_id, screenings_dict, app_internals, patient_context),
+            args=(patient_id, patient_context),
             daemon=True,
             name="hw-scan"
         )
@@ -749,8 +754,6 @@ class HardwareManager:
     def _run_scan(
         self,
         patient_id: str,
-        screenings_dict: Dict,
-        app_internals: Dict = None,
         patient_context: Dict = None,
     ):
         """
@@ -1034,8 +1037,7 @@ class HardwareManager:
             )
             
             screening_id = None
-            patient_report_id = None
-            doctor_report_id = None
+            report_id = None
             
             if self.screening_service and self.loop:
                 try:
@@ -1057,19 +1059,15 @@ class HardwareManager:
                     
                     logger.info(f"✅ Screening completed via service: {screening_id}")
                     
-                    # Update local screenings storage (directly injecting into main.py dict)
-                    from app.main import _screenings
-                    _screenings[screening_id] = {
-                        "patient_id": result["patient_id"],
-                        "system_results": result["system_results_internal"],
-                        "trusted_results": result["trusted_results"],
-                        "composite_risk": result["composite_risk"],
-                        "rejected_systems": result["rejected_systems"],
-                        "timestamp": result["timestamp"],
-                        # Clinical Decision Layer output (Phase 1: CNS)
-                        "clinical_findings": request_payload.get("clinical_findings", []),
-                        "clinical_summary": request_payload.get("clinical_summary", {}),
-                    }
+                    if not self.persistence:
+                        raise Exception("Persistence service not available")
+                    self.persistence.save_screening(
+                        result,
+                        extra_payload={
+                            "clinical_findings": request_payload.get("clinical_findings", []),
+                            "clinical_summary": request_payload.get("clinical_summary", {}),
+                        },
+                    )
 
                     # Cache in Redis — keeps API path and hardware scan path consistent
                     from app.utils.redis_client import redis_client as _redis
@@ -1087,11 +1085,13 @@ class HardwareManager:
                     # Generate reports DIRECTLY using generators (instead of HTTP calls)
                     self._update_scan_status(message="Generating reports...", progress=90)
                     
-                    # Import here to avoid circular dependencies
-                    from app.main import _reports, _patient_report_gen, _doctor_report_gen
-                    
+                    if not self.report_generator:
+                        raise Exception("Report generator not available")
+                    if not self.persistence:
+                        raise Exception("Persistence service not available")
+
                     try:
-                        p_report = _patient_report_gen.generate(
+                        report = self.report_generator.generate(
                             system_results=result["system_results_internal"],
                             composite_risk=result["composite_risk"],
                             patient_id=result["patient_id"],
@@ -1099,23 +1099,20 @@ class HardwareManager:
                             rejected_systems=result["rejected_systems"],
                             clinical_findings=request_payload.get("clinical_findings", []),
                         )
-                        patient_report_id = p_report.report_id
-                        _reports[patient_report_id] = p_report.pdf_path
-                        logger.info(f"Patient report generated: {patient_report_id}")
-                    except Exception as e:
-                        logger.warning(f"Patient report generation failed: {e}")
-
-                    try:
-                        d_report = _doctor_report_gen.generate(
-                            system_results=result["system_results_internal"],
-                            composite_risk=result["composite_risk"],
-                            patient_id=result["patient_id"]
+                        report_id = report.report_id
+                        report_summary_text = build_report_summary_text(report, screening_id)
+                        self.persistence.save_report(
+                            screening_id=screening_id,
+                            patient_id=result["patient_id"],
+                            report_id=report_id,
+                            pdf_path=report.pdf_path or "",
+                            generated_at=report.generated_at,
+                            report_summary_text=report_summary_text,
                         )
-                        doctor_report_id = d_report.report_id
-                        _reports[doctor_report_id] = d_report.pdf_path
-                        logger.info(f"Doctor report generated: {doctor_report_id}")
+                        _redis.cache_screening_context(result["patient_id"], report_summary_text)
+                        logger.info(f"Canonical report generated: {report_id}")
                     except Exception as e:
-                        logger.warning(f"Doctor report generation failed: {e}")
+                        logger.warning(f"Canonical report generation failed: {e}")
                         
                 except Exception as e:
                     logger.error(f"ScreeningService call failed: {e}")
@@ -1133,8 +1130,7 @@ class HardwareManager:
                 message="Screening complete!",
                 progress=100,
                 screening_id=screening_id,
-                patient_report_id=patient_report_id,
-                doctor_report_id=doctor_report_id,
+                report_id=report_id,
                 trust_metadata=result.get("trust_metadata")  # NEW: Expose trust metadata
             )
             
