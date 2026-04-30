@@ -16,8 +16,15 @@ __pycache__/
 CONTEXT_PERSISTENCE_CHANGE_PLAN.md
 DATABASE_SCHEMA_DESIGN.md
 DATABASE_SCHEMA_REFERENCE.md
+interview_prep_health_screening.md
 
 # Local SQLite artifacts
 *.db
 *.db-shm
 *.db-wal
+
+# Tinkercad 3D Guide (PDF + temp files)
+tinkercad_guide.pdf
+tinkercad_guide_temp.md
+horizontal_cradle_design.png
+md_to_pdf.py

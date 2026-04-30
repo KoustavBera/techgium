@@ -1,4 +1,22 @@
 services:
+  # ── Redis Cache ───────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine          # Lightweight official Redis image (~30MB)
+    container_name: chiranjeevi-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data           # Persist cache across container restarts
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  # ── FastAPI Backend ───────────────────────────────────────────────────
   fastapi2:
     build:
       context: ./fastapi2
@@ -10,12 +28,19 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret}
+      REDIS_URL: redis://redis:6379/0   # Points to the redis service above
     volumes:
       - ./fastapi2:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      redis:
+        condition: service_healthy   # Wait for Redis to be ready before starting
     networks:
       - app-net
 
+  # ── Node.js Backend ───────────────────────────────────────────────────
   node-backend:
     build:
       context: ./backend
@@ -33,6 +58,7 @@ services:
     networks:
       - app-net
 
+  # ── Frontend ──────────────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -51,10 +77,10 @@ services:
       - app-net
 
 volumes:
+  redis_data:                      # Redis persistence volume
   node_backend_node_modules:
   frontend_node_modules:
   frontend_next_cache:
-
 
 networks:
   app-net:
