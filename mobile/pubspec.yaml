@@ -1,0 +1,50 @@
+name: chiranjeevi
+description: "Chiranjeevi health report companion app — scan QR codes to access patient reports."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+  flutter: ">=3.41.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # QR Scanning
+  mobile_scanner: ^7.2.0
+
+  # HTTP Downloads
+  dio: ^5.8.0
+
+  # PDF Viewing
+  pdfrx: ^1.0.0
+
+  # Local Database (report metadata)
+  sqflite: ^2.4.0
+
+  # File path resolution
+  path_provider: ^2.1.4
+
+  # State Management
+  provider: ^6.1.2
+
+  # Camera/Storage Permissions
+  permission_handler: ^11.4.0
+
+  # Date formatting
+  intl: ^0.20.2
+
+  # Theming
+  flex_color_scheme: ^8.4.0
+  google_fonts: ^6.2.1
+  path: ^1.9.1
+  share_plus: ^13.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
