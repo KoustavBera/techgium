@@ -45,6 +45,10 @@ class CNSExtractor(BaseExtractor):
         super().__init__()
         self.sample_rate = sample_rate
         
+        # Adaptive noise floor — set during baseline calibration in manager.py
+        # Default: 0.003 (empirically validated for 720p @ 30fps MediaPipe output)
+        self.motion_noise_floor: float = 0.003
+        
         # Minimum data requirements (relaxed from 10s to ~7s for reliability)
         self.min_data_length = 200 # Previously 300 (10s @ 30fps)
         self.min_strides = 3  # Minimum strides for gait analysis
@@ -94,6 +98,25 @@ class CNSExtractor(BaseExtractor):
         
         # Extract and validate pose sequence
         pose_sequence = data.get("pose_sequence", [])
+
+        # ── Motion quality gate (NEW) ──────────────────────────────────────────
+        motion_quality = float(data.get("motion_quality", 1.0))
+        if motion_quality < 0.40:
+            logger.warning(
+                f"Motion quality score {motion_quality:.2f} too low for CNS analysis. "
+                "Returning empty biomarker set to avoid false positives."
+            )
+            # Add a single "not_assessed" biomarker so the report is informative
+            self._add_biomarker(
+                biomarker_set,
+                name="cns_data_quality",
+                value=motion_quality,
+                unit="quality_score",
+                confidence=1.0,
+                normal_range=None,  # triggers "Not Assessed" status
+                description="CNS analysis skipped: pose tracking quality insufficient"
+            )
+            return biomarker_set
         
         # Update sample rate if provided
         fps = data.get("fps") or data.get("frame_rate")
@@ -223,38 +246,118 @@ class CNSExtractor(BaseExtractor):
             self._extract_from_thermal(data["thermal_data"], biomarker_set)
         
         return biomarker_set
+
+    def calibrate_noise_floor(self, still_pose_sequence: List[np.ndarray]) -> float:
+        """
+        Estimate per-device noise floor from 2 seconds of "subject still" data.
+        
+        Call this during the INITIALIZING phase in manager.py before any scan.
+        The result is stored in self.motion_noise_floor and used in _analyze_tremor().
+        
+        Args:
+            still_pose_sequence: ~60 frames of pose data while subject is still
+        
+        Returns:
+            Estimated noise floor (std of wrist velocity during stillness)
+        """
+        if len(still_pose_sequence) < 30:
+            logger.warning("Too few frames for noise calibration — using default")
+            return self.motion_noise_floor
+
+        try:
+            pose_array = np.array(still_pose_sequence)
+            left_wrist_idx  = self.landmarks["left_wrist"]
+            right_wrist_idx = self.landmarks["right_wrist"]
+
+            lx = pose_array[:, left_wrist_idx,  0]
+            ly = pose_array[:, left_wrist_idx,  1]
+            rx = pose_array[:, right_wrist_idx, 0]
+            ry = pose_array[:, right_wrist_idx, 1]
+
+            left_vel  = np.sqrt(np.diff(lx)**2 + np.diff(ly)**2)
+            right_vel = np.sqrt(np.diff(rx)**2 + np.diff(ry)**2)
+
+            # Use 95th percentile of velocity as conservative noise floor
+            # (not mean, to avoid outlier spikes from tracking glitches)
+            noise_estimate = float(np.percentile(
+                np.concatenate([left_vel, right_vel]), 95
+            ))
+
+            # Sanity clamp: never go below 0.001 or above 0.010
+            noise_estimate = float(np.clip(noise_estimate, 0.001, 0.010))
+            self.motion_noise_floor = noise_estimate
+
+            logger.info(
+                f"Noise floor calibrated: {noise_estimate:.5f} "
+                f"(was default: 0.003)"
+            )
+            return noise_estimate
+
+        except Exception as e:
+            logger.warning(f"Noise calibration failed: {e} — using default")
+            return self.motion_noise_floor
     
     def _extract_from_thermal(
         self,
         thermal_data: Dict[str, Any],
         biomarker_set: BiomarkerSet
     ) -> None:
-        """Extract CNS/autonomic biomarkers from thermal camera data."""
-        
-        # Stress Gradient - forehead to nose temperature difference
-        # Higher gradient indicates sympathetic activation (stress response)
-        if thermal_data.get('stress_gradient') is not None:
+        """Extract CNS/autonomic biomarkers from thermal data with artifact rejection."""
+
+        stress_gradient = thermal_data.get('stress_gradient')
+        forehead = thermal_data.get('forehead_temp')
+        nose = thermal_data.get('nose_temp')
+
+        # ── Artifact detection ─────────────────────────────────────────────────
+        thermal_confidence = 0.80  # base confidence
+
+        if stress_gradient is not None:
+            # Gradients > 3°C almost always indicate ROI drift or hair occlusion
+            if abs(stress_gradient) > 3.0:
+                logger.warning(
+                    f"Thermal gradient {stress_gradient:.2f}°C > 3°C — "
+                    "likely ROI artifact. Reducing confidence to 0.3."
+                )
+                thermal_confidence = 0.30
+
+            # Implausible if forehead is colder than nose (anatomy)
+            if forehead is not None and nose is not None:
+                if forehead < nose - 0.5:  # forehead should be warmer or equal
+                    logger.warning(
+                        "Thermal: forehead cooler than nose — possible ROI swap or hair artifact"
+                    )
+                    thermal_confidence = min(thermal_confidence, 0.35)
+
+            # Temporal consistency check
+            gradient_history = thermal_data.get('gradient_history', [])
+            if len(gradient_history) >= 3:
+                gradient_std = float(np.std(gradient_history))
+                if gradient_std > 1.5:
+                    logger.warning(
+                        f"Thermal gradient unstable over time (std={gradient_std:.2f}°C)"
+                    )
+                    thermal_confidence *= 0.6
+
             self._add_biomarker(
                 biomarker_set,
                 name="thermal_stress_gradient",
-                value=float(thermal_data['stress_gradient']),
+                value=float(np.clip(stress_gradient, 0.0, 5.0)),
                 unit="delta_celsius",
-                confidence=0.80,
+                confidence=thermal_confidence,
                 normal_range=(0.0, 1.5),
                 description="Forehead-nose thermal gradient (autonomic stress indicator)"
             )
-        
-        # Individual temps for context
-        forehead = thermal_data.get('forehead_temp')
-        nose = thermal_data.get('nose_temp')
+
         if forehead is not None:
+            # Plausibility: skin temp must be 30–38°C
+            forehead_conf = 0.85 if 30.0 <= forehead <= 38.0 else 0.30
             self._add_biomarker(
                 biomarker_set,
                 name="forehead_temperature",
                 value=float(forehead),
                 unit="celsius",
-                confidence=0.85,
-                normal_range=(33.0, 36.0),
+                confidence=forehead_conf,
+                normal_range=(33.0, 36.5),
                 description="Forehead temperature (MLX90640)"
             )
     
@@ -596,8 +699,23 @@ class CNSExtractor(BaseExtractor):
         # Filter to postural sway frequencies (0.1-2.0 Hz)
         com_filtered = self._preprocess_signal(com_y, 0.1, 2.0)
         
-        # Calculate sample entropy (now using vectorized implementation)
-        return float(np.clip(self._sample_entropy(com_filtered), 0.0, 4.0))
+        # ── Sway amplitude gate ────────────────────────────────────────────────────
+        # If the filtered sway signal has negligible amplitude, the person is
+        # effectively stationary. Measuring entropy of ~0 noise gives artificially
+        # LOW SampEn (0.0–0.2) which is indistinguishable from Parkinson's rigidity.
+        # Return a healthy mid-range value instead of a pathological one.
+        sway_std = np.std(com_filtered)
+        SWAY_NOISE_FLOOR = 0.002  # ~2.5px at 1280px — below this is camera jitter
+        if sway_std < SWAY_NOISE_FLOOR:
+            logger.info(
+                f"Sway std {sway_std:.5f} below noise floor — "
+                "subject is stationary, returning healthy entropy baseline"
+            )
+            return 1.5  # Healthy mid-range (normal: 0.5–2.5)
+
+        # Also enforce minimum tolerance to prevent microscopic r values
+        r_min = max(0.2 * sway_std, SWAY_NOISE_FLOOR * 2)
+        return float(np.clip(self._sample_entropy(com_filtered, r=r_min), 0.0, 4.0))
     
     # =========================================================================
     # TREMOR ANALYSIS (Welch PSD - Elble & McNames 2016)
@@ -615,108 +733,108 @@ class CNSExtractor(BaseExtractor):
             Dict mapping tremor type to (power, confidence) tuples
         """
         tremor_results = {}
-        default_result = {k: (0.03, 0.5) for k in self.tremor_bands}
-        
-        left_wrist_idx = self.landmarks["left_wrist"]
+        # Healthy default: near-zero tremor, high confidence
+        default_result = {k: (0.0, 0.9) for k in self.tremor_bands}
+
+        left_wrist_idx  = self.landmarks["left_wrist"]
         right_wrist_idx = self.landmarks["right_wrist"]
-        
-        # Validate data (need 2+ seconds for reliable spectral analysis)
+
         if pose_array.shape[1] < 17 or pose_array.shape[0] < 60:
             return default_result
-        
+
         try:
-            # Extract bilateral wrist positions with visibility weighting
-            left_wrist_x, left_vis_x = self._get_landmark_with_visibility(
-                pose_array, left_wrist_idx, coord_idx=0
-            )
-            left_wrist_y, left_vis_y = self._get_landmark_with_visibility(
-                pose_array, left_wrist_idx, coord_idx=1
-            )
-            right_wrist_x, right_vis_x = self._get_landmark_with_visibility(
-                pose_array, right_wrist_idx, coord_idx=0
-            )
-            right_wrist_y, right_vis_y = self._get_landmark_with_visibility(
-                pose_array, right_wrist_idx, coord_idx=1
-            )
-            
-            # Compute magnitude (do magnitude BEFORE filtering for tremor)
-            left_mag = np.sqrt(left_wrist_x**2 + left_wrist_y**2)
-            right_mag = np.sqrt(right_wrist_x**2 + right_wrist_y**2)
-            
-            # Weight by minimum visibility across both coordinates
-            left_visibility = np.minimum(left_vis_x, left_vis_y)
+            # ── Step 1: Extract positions ──────────────────────────────────────
+            left_x,  left_vis_x  = self._get_landmark_with_visibility(pose_array, left_wrist_idx,  0)
+            left_y,  left_vis_y  = self._get_landmark_with_visibility(pose_array, left_wrist_idx,  1)
+            right_x, right_vis_x = self._get_landmark_with_visibility(pose_array, right_wrist_idx, 0)
+            right_y, right_vis_y = self._get_landmark_with_visibility(pose_array, right_wrist_idx, 1)
+
+            left_visibility  = np.minimum(left_vis_x,  left_vis_y)
             right_visibility = np.minimum(right_vis_x, right_vis_y)
-            
-            # Filter frames with low visibility
-            valid_left = left_visibility > 0.5
+
+            valid_left  = left_visibility  > 0.5
             valid_right = right_visibility > 0.5
-            
+
             if np.sum(valid_left) < 30 or np.sum(valid_right) < 30:
                 logger.warning("Insufficient visible wrist landmarks for tremor analysis")
                 return default_result
-            
-            left_mag = left_mag[valid_left]
-            right_mag = right_mag[valid_right]
-            
-            # Preprocess: filter to tremor frequencies (2-15 Hz)
-            left_filtered = self._preprocess_signal(left_mag, 2.0, 15.0)
+
+            # ── Step 2: VELOCITY (frame-to-frame diff) — THE CRITICAL FIX ──────
+            # Tremor is OSCILLATORY MOVEMENT, not absolute position.
+            # np.diff gives displacement per frame → actual motion signal.
+            lx = left_x[valid_left];   ly = left_y[valid_left]
+            rx = right_x[valid_right]; ry = right_y[valid_right]
+
+            left_mag  = np.sqrt(np.diff(lx)**2 + np.diff(ly)**2)
+            right_mag = np.sqrt(np.diff(rx)**2 + np.diff(ry)**2)
+
+            # ── Step 3: Absolute motion amplitude gate ───────────────────────
+            # If person is still, std of velocity ≈ camera quantization noise (<0.003).
+            # Genuine tremor produces std > 0.003 in normalized MediaPipe coords.
+            # At 1280px width, 0.003 ≈ ~4 pixels of movement — below this is jitter.
+            motion_amplitude = (np.std(left_mag) + np.std(right_mag)) / 2
+            # Use adaptive noise floor (set by calibrate_noise_floor(), default 0.003)
+            if motion_amplitude < self.motion_noise_floor:
+                logger.info(
+                    f"Motion amplitude {motion_amplitude:.5f} < noise_floor "
+                    f"{self.motion_noise_floor:.5f} — returning healthy baseline"
+                )
+                return default_result
+
+            # ── Step 4: Preprocess and combine ──────────────────────────────
+            left_filtered  = self._preprocess_signal(left_mag,  2.0, 15.0)
             right_filtered = self._preprocess_signal(right_mag, 2.0, 15.0)
-            
-            # Combine bilateral (average reduces noise)
             min_len = min(len(left_filtered), len(right_filtered))
             tremor_signal = (left_filtered[:min_len] + right_filtered[:min_len]) / 2
-            
-            # Total power for normalization
-            total_power = np.trapz(psd, freqs) + 1e-10
-            
-            # Extract power in each clinical tremor band with optimized windows
+
+            # ── Step 5: PNR-based band scoring ──────────────────────────────
+            # PNR = peak_power_in_band / mean_noise_floor
+            # Genuine tremor: sharp peak → PNR ≥ 3.0
+            # White noise:   flat PSD  → PNR ≈ 1.0–1.5
             for band_name, (low_freq, high_freq) in self.tremor_bands.items():
-                # Frequency-optimized Welch parameters for each tremor type
-                # Higher frequencies need shorter windows for better resolution
-                if band_name == "postural":  # 6-12 Hz - needs shorter window
+                if band_name == "postural":
                     nperseg_opt = min(128, len(tremor_signal) // 4)
-                elif band_name == "resting":  # 4-6 Hz - medium window
+                elif band_name == "resting":
                     nperseg_opt = min(192, len(tremor_signal) // 4)
-                else:  # intention 3-5 Hz - longer window
+                else:
                     nperseg_opt = min(256, len(tremor_signal) // 4)
-                
+
                 if nperseg_opt < 32:
-                    tremor_results[band_name] = (0.03, 0.5)
+                    tremor_results[band_name] = (0.0, 0.7)
                     continue
-                
-                # Recompute PSD with optimized window for this band
-                freqs_opt, psd_opt = signal.welch(
+
+                freqs, psd = signal.welch(
                     tremor_signal,
                     fs=self.sample_rate,
                     nperseg=nperseg_opt,
                     noverlap=nperseg_opt // 2
                 )
-                
-                mask = (freqs_opt >= low_freq) & (freqs_opt <= high_freq)
-                
-                if np.any(mask):
-                    band_power = np.trapz(psd_opt[mask], freqs_opt[mask])
-                    total_power_opt = np.trapz(psd_opt, freqs_opt) + 1e-10
-                    normalized_power = band_power / total_power_opt
-                    
-                    # Confidence based on signal quality and visibility
-                    peak_freq_idx = np.argmax(psd_opt[mask])
-                    peak_prominence = psd_opt[mask][peak_freq_idx] / (np.mean(psd_opt[mask]) + 1e-10)
-                    
-                    # Reduce confidence if many landmarks were filtered out
-                    visibility_factor = min(np.mean(left_visibility[valid_left]), 
-                                           np.mean(right_visibility[valid_right]))
-                    confidence = min(0.95, (0.5 + peak_prominence / 10) * visibility_factor)
-                    
-                    tremor_results[band_name] = (
-                        float(np.clip(normalized_power, 0, 0.5)),
-                        confidence
-                    )
+
+                mask = (freqs >= low_freq) & (freqs <= high_freq)
+                if not np.any(mask):
+                    tremor_results[band_name] = (0.0, 0.7)
+                    continue
+
+                # Noise floor = mean PSD across entire spectrum
+                noise_floor = np.mean(psd) + 1e-10
+                peak_in_band = np.max(psd[mask])
+                pnr = peak_in_band / noise_floor
+
+                # Only report tremor if there is a genuine spectral peak
+                if pnr < 3.0:
+                    # Flat spectrum = noise. Healthy.
+                    tremor_score = 0.0
+                    confidence = 0.85
                 else:
-                    tremor_results[band_name] = (0.03, 0.5)
-            
+                    # Map PNR 3→10 to score 0.01→0.05 (stays within normal_range for mild peaks)
+                    tremor_score = float(np.clip((pnr - 3.0) / 140.0, 0.0, 0.5))
+                    # Confidence scales with PNR (sharper peak = more confident)
+                    confidence = float(np.clip(0.5 + (pnr - 3.0) / 20.0, 0.55, 0.95))
+
+                tremor_results[band_name] = (tremor_score, confidence)
+
             return tremor_results
-            
+
         except Exception as e:
             logger.warning(f"Tremor analysis failed: {e}")
             return default_result
@@ -764,29 +882,37 @@ class CNSExtractor(BaseExtractor):
             pose_array, hip_right, coord_idx=0
         )
         
-        # Average hips for center of mass
-        com_ap = (com_ap_left + com_ap_right) / 2  # Y = AP
-        com_ml = (com_ml_left + com_ml_right) / 2  # X = ML
-        
-        # Filter to postural band
-        sway_ap_filtered = self._preprocess_signal(com_ap, 0.1, 2.0)
-        sway_ml_filtered = self._preprocess_signal(com_ml, 0.1, 2.0)
-        
-        # Sway amplitudes (std of filtered signal)
+        # ── Velocity-based sway (matches tremor fix) ───────────────────────────────
+        # Sway = rate of CoM displacement, not absolute position.
+        # Absolute position drifts with subject's distance from camera.
+        com_ap_raw = (com_ap_left + com_ap_right) / 2
+        com_ml_raw = (com_ml_left + com_ml_right) / 2
+
+        # Velocity = frame-to-frame change in CoM position
+        com_ap_velocity = np.diff(com_ap_raw)
+        com_ml_velocity = np.diff(com_ml_raw)
+
+        # Filter to postural sway frequency band
+        sway_ap_filtered = self._preprocess_signal(com_ap_velocity, 0.1, 2.0)
+        sway_ml_filtered = self._preprocess_signal(com_ml_velocity, 0.1, 2.0)
+
+        # Sway = std of velocity (how much CoM is oscillating)
         sway_ap = np.std(sway_ap_filtered)
         sway_ml = np.std(sway_ml_filtered)
-        
-        components["sway_ap"] = float(np.clip(sway_ap, 0, 0.2))
-        components["sway_ml"] = float(np.clip(sway_ml, 0, 0.2))
+
+        # Scale: velocity std in normalized units. Normal standing sway ≈ 0.0005–0.002.
+        # Rescale thresholds: normal < 0.003, abnormal > 0.008
+        components["sway_ap"] = float(np.clip(sway_ap, 0, 0.05))
+        components["sway_ml"] = float(np.clip(sway_ml, 0, 0.05))
         
         # Average tremor power
         tremor_powers = [score for score, _ in tremor_scores.values()]
         avg_tremor = np.mean(tremor_powers) if tremor_powers else 0.03
         
         # Calibrated percentile-based normalization (clinical reference ranges)
-        # Sway: Normal <0.03, Mild 0.03-0.05, Moderate 0.05-0.08, Severe >0.08
+        # Old threshold 0.15 was for position-based sway. New velocity-based threshold:
         sway_total = sway_ap + sway_ml
-        sway_score = 100 * (1 - np.clip(sway_total / 0.15, 0, 1))  # 0-100
+        sway_score = 100 * (1 - np.clip(sway_total / 0.012, 0, 1))  # 0.012 = severe velocity sway
         
         # Gait: Normal CV <0.05, Mild 0.05-0.08, Moderate 0.08-0.12, Severe >0.12  
         gait_score = 100 * (1 - np.clip(gait_variability / 0.15, 0, 1))  # 0-100

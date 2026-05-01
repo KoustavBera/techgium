@@ -60,10 +60,10 @@ class HardwareConfig:
     face_capture_seconds: int = 10
     body_capture_seconds: int = 10
     
-    # Serial ports
-    radar_port: str = "COM7"
+    # Serial ports  (matched to physical wiring: radar=COM6, thermal=COM7)
+    radar_port: str = "COM6"
     radar_baud: int = 115200
-    esp32_port: str = "COM6"
+    esp32_port: str = "COM7"
     esp32_baud: int = 115200
     
     # MJPEG quality
@@ -820,6 +820,43 @@ class HardwareManager:
                         break
                 logger.info("Thermal queue cleared.")
 
+            # ── Baseline noise calibration (2 seconds during INITIALIZING) ────────────
+            # Collect still frames before subject starts moving.
+            # This adapts tremor/sway thresholds to this specific webcam.
+            self._update_scan_status(
+                message="Calibrating sensors — please stand still...",
+                phase="INITIALIZING",
+                progress=8
+            )
+
+            CALIBRATION_DURATION = 2.0  # seconds
+            calibration_poses = []
+            cal_start = time.time()
+
+            while time.time() - cal_start < CALIBRATION_DURATION and self._scan_active:
+                with self._rolling_lock:
+                    if self._rolling_buffer:
+                        latest_frame = self._rolling_buffer[-1]['frame']
+                    else:
+                        latest_frame = None
+                
+                if latest_frame is not None and self.camera:
+                    results = self.camera.detect_all(latest_frame, ["pose"])
+                    pose_result = results.get("pose")
+                    if pose_result and pose_result.pose_landmarks:
+                        landmarks = pose_result.pose_landmarks.landmark
+                        landmark_array = np.array([
+                            [lm.x, lm.y, lm.z, lm.visibility]
+                            for lm in landmarks
+                        ])
+                        calibration_poses.append(landmark_array)
+                
+                time.sleep(1/15)  # 15 Hz calibration sampling
+
+            if calibration_poses and self.cns_extractor:
+                estimated_floor = self.cns_extractor.calibrate_noise_floor(calibration_poses)
+                logger.info(f"CNS noise floor calibrated to: {estimated_floor:.5f}")
+
             # ============================================================
             # Phase 1: UNIFIED Concurrent Face + Vitals + Calibration
             # ============================================================
@@ -973,16 +1010,17 @@ class HardwareManager:
                 
                 logger.info(f"Captured {len(raw_captures)} body frames from hardware driver")
                 
-                # Post-process frames — subsample every 2nd frame for pose.
-                # Posture is quasi-static during the body scan, so 15 FPS is
-                # identical in accuracy to 30 FPS and halves CPU time here.
+                # Post-process ALL frames for pose (no subsampling).
+                # CNS extractor requires min 200 frames for reliable analysis.
+                # At 30fps × 10s = 300 frames; subsampling to 150 starved the
+                # CNS and skeletal extractors below their minimums.
                 pose_sequence = []
-                for item in raw_captures[::2]:
+                for item in raw_captures:
                     pose = self.camera.extract_pose_from_frame(item['frame'])
                     if pose is not None:
                         pose_sequence.append(pose)
 
-                logger.info(f"Extracted {len(pose_sequence)} pose frames (subsampled from {len(raw_captures)} at 2x)")
+                logger.info(f"Extracted {len(pose_sequence)} pose frames from {len(raw_captures)} body captures")
             
             self._update_scan_status(progress=70)
             
@@ -1012,6 +1050,21 @@ class HardwareManager:
                 progress=80,
             )
             
+            # ── Compute motion quality score ───────────────────────────────────────────
+            from app.core.validation.signal_quality import SignalQualityAssessor
+            motion_quality_score = 1.0  # default: assume good
+            try:
+                sq_assessor = SignalQualityAssessor(use_anomaly_detection=False)
+                if pose_sequence:
+                    mq = sq_assessor.assess_motion(pose_sequence)
+                    motion_quality_score = mq.overall_quality
+                    logger.info(
+                        f"Motion quality: {motion_quality_score:.2f} "
+                        f"(continuity={mq.continuity:.2f}, snr={mq.snr:.2f})"
+                    )
+            except Exception as e:
+                logger.warning(f"Motion quality assessment failed (non-critical): {e}")
+
             request_payload = self._build_screening_request(
                 patient_id=patient_id,
                 radar_data=radar_data,
@@ -1021,7 +1074,8 @@ class HardwareManager:
                 face_landmarks_sequence=face_landmarks_sequence if face_landmarks_sequence else None,
                 fps=self.config.camera_fps,
                 session_baseline=session_baseline,
-                raw_face_frames=raw_face_frames_for_skin if raw_face_frames_for_skin else None  # Uncropped frames for skin FaceMesh
+                raw_face_frames=raw_face_frames_for_skin if raw_face_frames_for_skin else None,  # Uncropped frames for skin FaceMesh
+                motion_quality=motion_quality_score
             )
             
             logger.info(f"Screening request: {len(request_payload['systems'])} systems")
@@ -1357,7 +1411,8 @@ class HardwareManager:
         face_landmarks_sequence: Optional[List[np.ndarray]] = None,
         fps: float = 30.0,
         session_baseline: Optional[Any] = None,
-        raw_face_frames: Optional[List[np.ndarray]] = None  # Uncropped frames for skin FaceMesh
+        raw_face_frames: Optional[List[np.ndarray]] = None,  # Uncropped frames for skin FaceMesh
+        motion_quality: float = 1.0
     ) -> Dict[str, Any]:
         """Build complete screening request using all 8 extractors.
         
@@ -1365,7 +1420,7 @@ class HardwareManager:
         """
         systems = []
         
-        raw_data_context = {"fps": fps, "patient_id": patient_id}
+        raw_data_context = {"fps": fps, "patient_id": patient_id, "motion_quality": motion_quality}
         
         if radar_data:
             raw_data_context["radar_data"] = radar_data

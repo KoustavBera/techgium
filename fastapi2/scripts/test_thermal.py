@@ -4,7 +4,7 @@ import time
 import sys
 
 # CONFIGURATION
-PORT = "COM6"
+PORT = "COM7"
 BAUD = 115200
 TIMEOUT = 1
 

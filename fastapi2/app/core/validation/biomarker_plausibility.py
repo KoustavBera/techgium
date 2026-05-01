@@ -218,6 +218,8 @@ class BiomarkerPlausibilityValidator:
             "stance_stability_score": {"hard": (0.0, 100.0),    "physiological": (30.0, 100.0)},
             "sway_velocity":          {"hard": (0.0, 1.0),      "physiological": (0.0, 0.1)},
             "average_joint_rom":      {"hard": (0.0, 3.14),     "physiological": (0.1, 2.5)},
+            "posture_score":          {"hard": (0.0, 100.0),    "physiological": (20.0, 100.0)},
+            "sway_entropy":           {"hard": (0.0, 5.0),      "physiological": (0.1, 3.0)},
 
             # Skin
             "texture_roughness":      {"hard": (0.0, 1000.0),   "physiological": (0.0, 50.0)},
@@ -253,7 +255,7 @@ class BiomarkerPlausibilityValidator:
             PhysiologicalSystem.CNS: ["gait_variability", "cns_stability_score"],
             PhysiologicalSystem.CARDIOVASCULAR: ["heart_rate"],
             PhysiologicalSystem.GASTROINTESTINAL: ["abdominal_rhythm_score"],
-            PhysiologicalSystem.SKELETAL: ["gait_symmetry_ratio"],
+            PhysiologicalSystem.SKELETAL: ["stance_stability_score"],
             PhysiologicalSystem.SKIN: ["color_uniformity"],
             PhysiologicalSystem.EYES: ["blink_rate"],
             PhysiologicalSystem.NASAL: ["respiratory_rate"],
