@@ -16,6 +16,7 @@ __pycache__/
 CONTEXT_PERSISTENCE_CHANGE_PLAN.md
 DATABASE_SCHEMA_DESIGN.md
 DATABASE_SCHEMA_REFERENCE.md
+interview_prep_health_screening.md
 
 # Local SQLite artifacts
 *.db
@@ -43,3 +44,11 @@ mobile/ios/Flutter/flutter_export_environment.sh
 
 #General
 .idea/
+# Tinkercad 3D Guide (PDF + temp files)
+tinkercad_guide.pdf
+tinkercad_guide_temp.md
+horizontal_cradle_design.png
+interview_prep_health_screening.pdf
+Database_Architecture_Complete.pdf
+md_to_pdf.py
+convert_md.py
