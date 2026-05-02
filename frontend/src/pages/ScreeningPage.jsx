@@ -21,6 +21,9 @@ export default function ScreeningPage() {
         message,
         progress,
         userWarnings,
+        uiHint,
+        phaseIcon,
+        stableFramesPct,
         trustMetadata,
         reportId,
         sensorStatus,
@@ -67,6 +70,8 @@ export default function ScreeningPage() {
                     userWarnings={userWarnings}
                     scanState={scanState}
                     phase={phase}
+                    uiHint={uiHint}
+                    phaseIcon={phaseIcon}
                 />
             </div>
 
@@ -97,6 +102,9 @@ export default function ScreeningPage() {
                         message={message}
                         scanState={scanState}
                         progress={progress}
+                        uiHint={uiHint}
+                        phaseIcon={phaseIcon}
+                        stableFramesPct={stableFramesPct}
                     />
                 )}
 

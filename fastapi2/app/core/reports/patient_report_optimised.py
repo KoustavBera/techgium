@@ -147,6 +147,24 @@ BIOMARKER_NAMES: Dict[str, str] = {
     "lesion_count":                  "Skin Lesions",
     "blink_rate":                    "Eye Blink Rate",
     "blink_count":                   "Total Blinks",
+    # Skeletal
+    "stance_stability_score":        "Postural Stability",
+    "sway_velocity":                 "Sway Velocity",
+    "sway_amplitude_ap":             "Forward-Backward Sway",
+    "sway_amplitude_ml":             "Side-to-Side Sway",
+    "gait_symmetry_ratio":           "Gait Symmetry",
+    "step_length_symmetry":          "Step Length Symmetry",
+    "average_joint_rom":             "Joint Flexibility",
+    # CNS
+    "gait_variability":              "Walking Stability",
+    "posture_entropy":               "Postural Complexity",
+    "cns_stability_score":           "Neurological Stability",
+    "tremor_resting":                "Resting Tremor",
+    "tremor_postural":               "Postural Tremor",
+    "tremor_intention":              "Intention Tremor",
+    "thermal_stress_gradient":       "Autonomic Stress Marker",
+    "forehead_temperature":          "Forehead Temperature",
+    "thermal_breathing_regularity":  "Thermal Breathing Proxy",
 }
 
 # ---------------------------------------------------------------------------
@@ -761,6 +779,164 @@ class EnhancedPatientReportGenerator:
                 "Schedule a dermatology appointment for professional skin examination.",
             ),
         },
+        # ── Skeletal / Musculoskeletal ─────────────────────────────────
+        "stance_stability_score": {
+            "normal": (
+                "Your balance and posture stability is excellent.",
+                "Strong core and lower limb muscles maintain postural control.",
+                "Continue weight-bearing activities and balance exercises.",
+            ),
+            "low": (
+                "Reduced postural stability detected.",
+                "Muscle weakness, inner ear issues, or neurological factors may be involved.",
+                "Practice standing balance exercises; consult a physiotherapist if this persists.",
+            ),
+        },
+        "sway_velocity": {
+            "normal": (
+                "Your body sway while standing is within the normal range.",
+                "Indicates healthy postural reflexes and balance control.",
+                "Maintain regular physical activity to preserve balance.",
+            ),
+            "high": (
+                "Higher-than-normal postural sway detected.",
+                "Fatigue, inner ear imbalance, medication effects, or muscle weakness.",
+                "Avoid high surfaces without support. Discuss with your doctor if persistent.",
+            ),
+        },
+        "gait_symmetry_ratio": {
+            "normal": (
+                "Left-right movement symmetry is healthy.",
+                "Both sides of the body contribute equally to movement.",
+                "Maintain activity and continue any physiotherapy if prescribed.",
+            ),
+            "low": (
+                "Asymmetry in limb movement detected.",
+                "Joint pain, muscle imbalance, old injury, or neurological changes.",
+                "Consult a physiotherapist to assess and correct any gait imbalance.",
+            ),
+        },
+        "step_length_symmetry": {
+            "normal": (
+                "Your step lengths are well balanced.",
+                "Both legs take similar-length steps, indicating healthy gait.",
+                "Keep up regular walking to maintain this balance.",
+            ),
+            "low": (
+                "Step length is unequal between legs.",
+                "Hip or knee pain, weakness, or compensatory movement patterns.",
+                "A gait assessment with a physiotherapist is recommended.",
+            ),
+        },
+        "average_joint_rom": {
+            "normal": (
+                "Joint range of motion is within the expected range.",
+                "Healthy connective tissue, muscle flexibility, and joint function.",
+                "Continue stretching and mobility exercises.",
+            ),
+            "low": (
+                "Limited joint range of motion detected.",
+                "Stiffness, arthritis, injury, or prolonged inactivity.",
+                "Gentle range-of-motion exercises and physiotherapy can help restore mobility.",
+            ),
+        },
+        # ── CNS / Neurological ─────────────────────────────────────────
+        "posture_entropy": {
+            "normal": (
+                "Your postural control shows healthy complexity.",
+                "Normal postural sway complexity indicates a responsive nervous system.",
+                "Maintain balance training and cardiovascular exercise.",
+            ),
+            "low": (
+                "Reduced postural sway complexity detected.",
+                "Overly rigid posture control can be an early marker of neurological changes.",
+                "Consider balance and coordination exercises. Consult a neurologist if concerned.",
+            ),
+        },
+        "cns_stability_score": {
+            "normal": (
+                "Overall neurological stability score is healthy.",
+                "Combines sway, gait, and tremor signals for a composite assessment.",
+                "No specific action needed. Maintain active lifestyle.",
+            ),
+            "low": (
+                "Composite neurological stability score is reduced.",
+                "One or more of tremor, sway, or gait variability is elevated.",
+                "Discuss results with your doctor. Avoid high-risk activities until assessed.",
+            ),
+        },
+        "tremor_resting": {
+            "normal": (
+                "No significant resting tremor detected.",
+                "Resting tremor (4–6 Hz) is a key marker for Parkinsonian conditions.",
+                "No action needed.",
+            ),
+            "high": (
+                "Elevated resting tremor power detected.",
+                "Resting tremor can be associated with Parkinson's disease or medication effects.",
+                "Consult a neurologist for formal evaluation — this is a screening flag, not a diagnosis.",
+            ),
+        },
+        "tremor_postural": {
+            "normal": (
+                "Postural tremor is within normal limits.",
+                "Some hand tremor during sustained posture is normal.",
+                "No action needed.",
+            ),
+            "high": (
+                "Elevated postural tremor detected.",
+                "Essential tremor, caffeine, fatigue, anxiety, or thyroid conditions.",
+                "Reduce caffeine, ensure adequate sleep. See a doctor if it interferes with daily tasks.",
+            ),
+        },
+        "tremor_intention": {
+            "normal": (
+                "No significant intention tremor detected.",
+                "Intention tremor during movement is associated with cerebellar disorders.",
+                "No action needed.",
+            ),
+            "high": (
+                "Elevated intention tremor detected.",
+                "Cerebellar dysfunction, multiple sclerosis, or alcohol effects.",
+                "Consult a neurologist for further assessment.",
+            ),
+        },
+        "thermal_stress_gradient": {
+            "normal": (
+                "Thermal autonomic balance appears stable.",
+                "Normal forehead-to-nose temperature gradient indicates calm autonomic state.",
+                "No action needed.",
+            ),
+            "high": (
+                "Elevated thermal stress gradient detected.",
+                "Sympathetic nervous system activation — stress, anxiety, or discomfort.",
+                "Practice relaxation techniques. Re-test in a calm, rested state.",
+            ),
+        },
+        "sway_amplitude_ap": {
+            "normal": (
+                "Front-to-back postural sway is within normal limits.",
+                "Normal anterior-posterior sway indicates good sagittal balance.",
+                "No action needed.",
+            ),
+            "high": (
+                "Increased forward-backward sway detected.",
+                "Muscle weakness, vision problems, or vestibular disturbance.",
+                "Practice standing balance exercises on a firm surface.",
+            ),
+        },
+        "sway_amplitude_ml": {
+            "normal": (
+                "Side-to-side postural sway is within normal limits.",
+                "Normal medial-lateral sway indicates good frontal plane stability.",
+                "No action needed.",
+            ),
+            "high": (
+                "Increased side-to-side sway detected.",
+                "Hip abductor weakness or vestibular asymmetry.",
+                "Side-stepping and single-leg stance exercises can help.",
+            ),
+        },
     }
 
     def _get_explanation_tuple(
@@ -800,6 +976,11 @@ class EnhancedPatientReportGenerator:
             cns = system_results[PhysiologicalSystem.CNS]
             if cns.overall_risk.level in [RiskLevel.MODERATE, RiskLevel.HIGH]:
                 recs.append("Work on balance exercises and ensure adequate sleep.")
+        if PhysiologicalSystem.SKELETAL in system_results:
+            skel = system_results[PhysiologicalSystem.SKELETAL]
+            if skel.overall_risk.level in [RiskLevel.MODERATE, RiskLevel.HIGH]:
+                recs.append("Incorporate weight-bearing exercise and physiotherapy for musculoskeletal health.")
+                recs.append("Reduce fall risk by clearing home walkways and using supportive footwear.")
         recs.extend([
             "Consult a healthcare professional for comprehensive evaluation.",
             "Maintain a balanced diet rich in fruits and vegetables.",

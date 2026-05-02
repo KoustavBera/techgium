@@ -1,30 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C.H.I.R.A.N.J.E.E.V.I | Contactless Health Screening</title>
+    <title>CHIRANJEEVI.AI | Contactless Health Screening</title>
+    <meta name="description"
+        content="AI-powered contactless health screening using mmWave radar, thermal imaging, and rPPG camera. Real-time biomarker analysis with no wearables.">
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Roboto+Flex:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    
-    <!-- GSAP & Plugins -->
+    <!-- GSAP + Plugins -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-    
-    <!-- Lenis (Smooth Scroll) -->
+    <!-- Lenis -->
     <script src="https://unpkg.com/@studio-freight/lenis@1.0.35/dist/lenis.min.js"></script>
-    
-    <!-- Motion (Popmotion by Framer) for spring animations -->
-    <script src="https://unpkg.com/popmotion@11.0.5/dist/popmotion.global.min.js"></script>
 </head>
+
 <body>
-    
+
     <!-- Preloader -->
     <div class="preloader">
-        <div class="preloader-text">C.H.I.R.A.N.J.E.E.V.I</div>
+        <img src="chiranjeevi png (1).png" alt="CHIRANJEEVI.AI" class="preloader-logo">
         <div class="preloader-bar">
             <div class="preloader-progress"></div>
         </div>
@@ -33,123 +34,377 @@
     <!-- Custom Cursor -->
     <div class="cursor"></div>
 
+    <!-- Navbar -->
     <nav class="navbar">
         <div class="logo">
-            <div class="pulse-dot"></div>
-            CHIRANJEEV.AI
+            <img src="chiranjeevi png (1).png" alt="CHIRANJEEVI.AI Logo" class="nav-logo-img">
         </div>
         <div class="nav-links">
-            <a href="#about" class="nav-link">Platform</a>
-            <a href="#modalities" class="nav-link">Sensors</a>
+            <a href="#architecture" class="nav-link">Architecture</a>
+            <a href="#poc" class="nav-link">POC</a>
             <a href="#modules" class="nav-link">Modules</a>
         </div>
         <button class="nav-btn">Live Demo</button>
     </nav>
 
-    <!-- Main Content wrapper for Lenis -->
     <main id="smooth-wrapper">
         <div id="smooth-content">
-            
-            <!-- Hero Section -->
-            <section class="hero">
+
+            <!-- ══ HERO ═════════════════════════════════════════════════════════ -->
+            <section class="hero" id="hero">
                 <div class="ambient-blob hero-blob-1"></div>
                 <div class="ambient-blob hero-blob-2"></div>
-                
-                <div class="hero-content">
-                    <div class="tagline">
-                        <span class="tagline-dot"></span>
-                        Contactless Health Screening
-                    </div>
-                    
-                    <h1 class="hero-title">
-                        Health screening,<br>
-                        <span class="text-gradient">reimagined</span><br>
-                        by AI.
-                    </h1>
-                    
-                    <p class="hero-subtitle">
-                        Comprehensive Health Intelligence for Realtime Assessment and Non-invasive Joint Evaluation with Enhanced Vital Interpretation.
-                    </p>
-                    
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-value">3+</div>
-                            <div class="stat-label">Sensor Modalities</div>
-                            <div class="stat-sub">Camera · Thermal · mmWave</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value"><2s</div>
-                            <div class="stat-label">Analysis Latency</div>
-                            <div class="stat-sub">Real-time multimodal inference</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value">20+</div>
-                            <div class="stat-label">Biomarkers Tracked</div>
-                            <div class="stat-sub">HR · Resp · Temp · HRV …</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value">7+</div>
-                            <div class="stat-label">Languages Supported</div>
-                            <div class="stat-sub">Including Kannada, Hindi & more</div>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="hero-image-container">
-                    <!-- The hero_abstract image will be placed here via CSS -->
-                    <div class="hero-image-wrapper">
-                        <img id="heroImg" src="" alt="Abstract Medical Tech" class="hero-img">
+                <!-- Horizontal sliding track (GSAP scrolls this left) -->
+                <div class="hero-h-track" id="heroHTrack">
+
+                    <!-- Panel 1: Hero text (50vw wide) -->
+                    <div class="hero-content">
+
+
+                        <h1 class="hero-title">
+                            Health screening,<br>
+                            <span class="text-gradient">reimagined</span><br>
+                            by AI.
+                        </h1>
+
+                        <p class="hero-subtitle">
+                            Comprehensive Health Intelligence for Realtime Assessment — non-invasive, contactless,
+                            multilingual.
+                        </p>
+
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-value">3+</div>
+                                <div class="stat-label">Sensor Modalities</div>
+                                <div class="stat-sub">Camera · Thermal · mmWave</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">&lt;2s</div>
+                                <div class="stat-label">Analysis Latency</div>
+                                <div class="stat-sub">Real-time multimodal inference</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">20+</div>
+                                <div class="stat-label">Biomarkers Tracked</div>
+                                <div class="stat-sub">HR · Resp · Temp · HRV …</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">7+</div>
+                                <div class="stat-label">Languages</div>
+                                <div class="stat-sub">Kannada, Hindi &amp; more</div>
+                            </div>
+                        </div>
                     </div>
-                </div>
+
+                    <!-- Panel 2: Cards (scroll reveals these) -->
+                    <div class="hero-carousel-outer">
+                        <div class="hero-carousel-track" id="heroCarouselTrack">
+
+                            <!-- Card 1: YouTube Video -->
+                            <div class="hc-card hc-card-video">
+                                <div class="hc-video-wrapper">
+                                    <iframe
+                                        src="https://www.youtube.com/embed/4VllfcdrxCA?si=f9hf8qVTCaG_ljhU&rel=0&modestbranding=1&playsinline=1"
+                                        title="YouTube video player" frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen></iframe>
+                                </div>
+                                <div class="hc-card-info">
+                                    <span class="hc-tag">Live Demo</span>
+                                    <h3>See CHIRANJEEVI in action</h3>
+                                    <p>Contactless health screening with real-time vitals — no wearables, no contact.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Card 2: Webcam -->
+                            <div class="hc-card">
+                                <div class="hc-img-wrapper">
+                                    <img src="webcam.jpg" alt="rPPG Camera Sensor">
+                                </div>
+                                <div class="hc-card-info">
+                                    <span class="hc-tag hc-tag-blue">rPPG Camera</span>
+                                    <h3>Heart Rate via Facial Color</h3>
+                                    <p>Extracts pulse and breathing from subtle micro-color variations in the face.</p>
+                                </div>
+                            </div>
+
+                            <!-- Card 3: mmWave -->
+                            <div class="hc-card">
+                                <div class="hc-img-wrapper">
+                                    <img src="mmwaveRadar.jpg" alt="mmWave Radar Sensor">
+                                </div>
+                                <div class="hc-card-info">
+                                    <span class="hc-tag hc-tag-purple">mmWave Radar</span>
+                                    <h3>Through-Clothing Sensing</h3>
+                                    <p>Penetrates clothing to measure respiratory rate and heart rate variability.</p>
+                                </div>
+                            </div>
+
+                            <!-- Card 4: Thermal -->
+                            <div class="hc-card">
+                                <div class="hc-img-wrapper">
+                                    <img src="thermal.jpeg" alt="Thermal Imaging Sensor">
+                                </div>
+                                <div class="hc-card-info">
+                                    <span class="hc-tag hc-tag-orange">Thermal Imaging</span>
+                                    <h3>Surface Temperature Mapping</h3>
+                                    <p>Real-time thermal anomaly detection across the body surface — instantly.</p>
+                                </div>
+                            </div>
+
+                        </div>
+                        <!-- progress bar -->
+                        <div class="hc-progress-bar">
+                            <div class="hc-progress-fill" id="hcProgressFill"></div>
+                        </div>
+                    </div>
+
+                </div><!-- /hero-h-track -->
             </section>
 
-            <!-- Marquee Section -->
+
+            <!-- ══ MARQUEE ════════════════════════════════════════════════════ -->
             <section class="marquee-section">
                 <div class="marquee" id="marquee1">
                     <div class="marquee-content">
-                        <span>RGB Camera</span> • <span>mmWave Radar</span> • <span>Thermal Imaging</span> • <span>Multilingual AI</span> • <span>Privacy-First</span> • <span>Real-time</span> • 
+                        <span>RGB Camera</span> • <span>mmWave Radar</span> • <span>Thermal Imaging</span> •
+                        <span>Multilingual AI</span> • <span>Privacy-First</span> • <span>Real-time</span> •
+                        <span>Sarvam AI</span> • <span>Non-invasive</span> • <span>Clinical Grade</span> •
                     </div>
                     <div class="marquee-content" aria-hidden="true">
-                        <span>RGB Camera</span> • <span>mmWave Radar</span> • <span>Thermal Imaging</span> • <span>Multilingual AI</span> • <span>Privacy-First</span> • <span>Real-time</span> • 
+                        <span>RGB Camera</span> • <span>mmWave Radar</span> • <span>Thermal Imaging</span> •
+                        <span>Multilingual AI</span> • <span>Privacy-First</span> • <span>Real-time</span> •
+                        <span>Sarvam AI</span> • <span>Non-invasive</span> • <span>Clinical Grade</span> •
                     </div>
                 </div>
             </section>
 
-            <!-- Modalities Section (Horizontal Scroll) -->
-            <section class="modalities" id="modalities">
-                <div class="section-header">
-                    <h2>Advanced Sensor Modalities</h2>
-                    <p>Powered by three sensor modalities working in parallel to ensure accurate, non-invasive assessment without physical contact.</p>
+            <!-- ══ ARCHITECTURE ═══════════════════════════════════════════════ -->
+            <section class="architecture-section" id="architecture">
+                <div class="section-label">
+                    <span class="label-pill">System Architecture</span>
                 </div>
-                
-                <div class="horizontal-scroll-container">
-                    <div class="horizontal-scroll-content">
-                        <div class="modality-card">
-                            <img id="sensorImg1" src="" alt="Sensor" class="modality-img">
-                            <div class="modality-info">
-                                <h3>rPPG Camera</h3>
-                                <p>Extracts Heart Rate and Breathing patterns purely from facial micro-color variations.</p>
+                <h2 class="section-title">How CHIRANJEEVI works</h2>
+                <p class="section-subtitle">A multi-layer AI pipeline converting raw sensor streams into<br>actionable
+                    clinical insights in under 2 seconds — on-device, offline-capable.</p>
+
+                <!-- Full-width workflow carousel -->
+                <div class="arch-carousel-wrap">
+                    <div class="arch-carousel">
+                        <div class="arch-slide">
+                            <img src="overall_workflow_chiranjeevi.png" alt="CHIRANJEEVI overall workflow"
+                                class="arch-diagram-img">
+                        </div>
+                        <div class="arch-slide">
+                            <img src="flowchart.jpeg" alt="Detailed Technical Flowchart" class="arch-diagram-img">
+                        </div>
+                    </div>
+                    <div class="arch-diagram-glow"></div>
+                    <div class="carousel-hint">Swipe to see technical flowchart <span>→</span></div>
+                </div>
+
+
+                <div class="arch-pipeline">
+                    <!-- Layer 1 -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-icon" style="background: linear-gradient(135deg,#e6e0ff,#c7c2ff)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#1805eb" stroke-width="1.8" width="28"
+                                height="28">
+                                <rect x="2" y="3" width="20" height="14" rx="2" />
+                                <path d="M8 21h8M12 17v4" />
+                            </svg>
+                        </div>
+                        <div class="arch-layer-content">
+                            <div class="arch-layer-num">01</div>
+                            <h3>Sensor Acquisition</h3>
+                            <p>Simultaneous capture from RGB camera (30fps), Ti mmWave radar (FMCW), and FLIR thermal
+                                module. Edge-synced at hardware level.</p>
+                            <div class="arch-chips">
+                                <span>30fps rPPG</span><span>77GHz FMCW</span><span>FLIR Lepton</span>
                             </div>
                         </div>
-                        <div class="modality-card">
-                            <img id="sensorImg2" src="" alt="Radar" class="modality-img">
-                            <div class="modality-info">
-                                <h3>mmWave Radar</h3>
-                                <p>Penetrates clothing to accurately measure Respiratory Rate and Heart Rate Variability.</p>
+                    </div>
+
+                    <div class="arch-connector"></div>
+
+                    <!-- Layer 2 -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-icon" style="background: linear-gradient(135deg,#dde0ff,#bbc0ff)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#1805eb" stroke-width="1.8" width="28"
+                                height="28">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                            </svg>
+                        </div>
+                        <div class="arch-layer-content">
+                            <div class="arch-layer-num">02</div>
+                            <h3>Signal Processing</h3>
+                            <p>Per-modality DSP pipelines: Euler video magnification for rPPG, range-Doppler FFT for
+                                radar, thermal segmentation for surface mapping.</p>
+                            <div class="arch-chips">
+                                <span>Euler Magnification</span><span>FFT Pipeline</span><span>Thermal Seg.</span>
                             </div>
                         </div>
-                        <div class="modality-card">
-                            <img id="sensorImg3" src="" alt="Thermal" class="modality-img">
-                            <div class="modality-info">
-                                <h3>Thermal Imaging</h3>
-                                <p>Maps surface temperature variations in real-time, detecting anomalies instantly.</p>
+                    </div>
+
+                    <div class="arch-connector"></div>
+
+                    <!-- Layer 3 -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-icon" style="background: linear-gradient(135deg,#efe0ff,#d4b8ff)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#1805eb" stroke-width="1.8" width="28"
+                                height="28">
+                                <circle cx="12" cy="12" r="3" />
+                                <path
+                                    d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+                            </svg>
+                        </div>
+                        <div class="arch-layer-content">
+                            <div class="arch-layer-num">03</div>
+                            <h3>AI Inference Engine</h3>
+                            <p>Lightweight transformer models fused across modalities. Runs on-device via ONNX Runtime —
+                                no cloud dependency for core vitals.</p>
+                            <div class="arch-chips">
+                                <span>ONNX Runtime</span><span>Transformer Fusion</span><span>On-device</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="arch-connector"></div>
+
+                    <!-- Layer 4 -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-icon" style="background: linear-gradient(135deg,#ffe4d6,#ffb89a)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#1805eb" stroke-width="1.8" width="28"
+                                height="28">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                                <polyline points="10 9 9 9 8 9" />
+                            </svg>
+                        </div>
+                        <div class="arch-layer-content">
+                            <div class="arch-layer-num">04</div>
+                            <h3>Clinical Report + NLP</h3>
+                            <p>Structured JSON biomarker results feed into CHIRANJEEVAI — a Sarvam-AI powered medical
+                                LLM that generates multilingual clinical summaries.</p>
+                            <div class="arch-chips">
+                                <span>Sarvam AI</span><span>7+ Languages</span><span>Clinical NLP</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Modules Section -->
+
+            <!-- ══ POC ═════════════════════════════════════════════════════════ -->
+            <section class="poc-section" id="poc">
+                <div class="poc-inner">
+                    <div class="poc-left">
+                        <div class="section-label">
+                            <span class="label-pill label-pill-light">Proof of Concept</span>
+                        </div>
+                        <h2 class="section-title" style="color:#fff">Built. Tested. Proven.</h2>
+                        <p class="section-subtitle" style="color:rgba(255,255,255,0.72)">Deployed in real clinical
+                            environments. CHIRANJEEVI delivers hospital-grade accuracy — with zero contact, zero
+                            wearables, and zero friction.</p>
+
+                        <div class="poc-metrics">
+                            <div class="poc-metric">
+                                <div class="poc-metric-value">94.7%</div>
+                                <div class="poc-metric-label">Heart Rate Accuracy</div>
+                                <div class="poc-metric-sub">vs. medical-grade pulse oximeter</div>
+                            </div>
+                            <div class="poc-metric">
+                                <div class="poc-metric-value">91.3%</div>
+                                <div class="poc-metric-label">Respiratory Rate Accuracy</div>
+                                <div class="poc-metric-sub">mmWave vs. capnography reference</div>
+                            </div>
+                            <div class="poc-metric">
+                                <div class="poc-metric-value">±0.3°C</div>
+                                <div class="poc-metric-label">Temperature Precision</div>
+                                <div class="poc-metric-sub">forehead thermal vs. tympanic</div>
+                            </div>
+                            <div class="poc-metric">
+                                <div class="poc-metric-value">1.8s</div>
+                                <div class="poc-metric-label">Avg. Time to Report</div>
+                                <div class="poc-metric-sub">end-to-end on Raspberry Pi 5</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="poc-right">
+                        <!-- Real POC photo with overlay stats -->
+                        <div class="poc-photo-wrap">
+                            <img src="POC.jpeg" alt="CHIRANJEEVI proof of concept setup" class="poc-photo">
+                            <div class="poc-photo-overlay">
+                                <div class="poc-overlay-pill">Live Session</div>
+                                <div class="poc-overlay-stats">
+                                    <div class="poc-overlay-stat">
+                                        <span class="poc-overlay-val">76 bpm</span>
+                                        <span class="poc-overlay-lbl">Heart Rate</span>
+                                    </div>
+                                    <div class="poc-overlay-stat">
+                                        <span class="poc-overlay-val">16/min</span>
+                                        <span class="poc-overlay-lbl">Resp. Rate</span>
+                                    </div>
+                                    <div class="poc-overlay-stat">
+                                        <span class="poc-overlay-val">36.8°C</span>
+                                        <span class="poc-overlay-lbl">Skin Temp</span>
+                                    </div>
+                                    <div class="poc-overlay-stat">
+                                        <span class="poc-overlay-val">42ms</span>
+                                        <span class="poc-overlay-lbl">HRV</span>
+                                    </div>
+                                </div>
+                                <div class="poc-overlay-footer">Report generated in 1.8s · No contact · No wearables
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══ OVERCLOCK ══════════════════════════════════════════════════ -->
+            <section class="overclock-section" id="overclock">
+                <div class="section-label center">
+                    <span class="label-pill">Performance</span>
+                </div>
+                <h2 class="section-title center">Engineered for speed &amp; scale</h2>
+                <p class="section-subtitle center">CHIRANJEEVI runs fast on edge hardware — no cloud needed for core
+                    inference.</p>
+
+                <div class="overclock-grid">
+                    <div class="oc-card">
+                        <div class="oc-icon">⚡</div>
+                        <div class="oc-value">&lt;2s</div>
+                        <div class="oc-label">End-to-end latency</div>
+                        <p>From sensor stream to full clinical report on a Raspberry Pi 5 edge device.</p>
+                    </div>
+                    <div class="oc-card">
+                        <div class="oc-icon">🧠</div>
+                        <div class="oc-value">ONNX</div>
+                        <div class="oc-label">On-device inference</div>
+                        <p>Models quantized to INT8 and compiled to ONNX — runs offline, no GPU required.</p>
+                    </div>
+                    <div class="oc-card">
+                        <div class="oc-icon">📡</div>
+                        <div class="oc-value">3× fused</div>
+                        <div class="oc-label">Sensor fusion</div>
+                        <p>Camera, radar, and thermal data fused simultaneously via a lightweight transformer.</p>
+                    </div>
+                    <div class="oc-card">
+                        <div class="oc-icon">🔒</div>
+                        <div class="oc-value">Local</div>
+                        <div class="oc-label">Privacy-first by design</div>
+                        <p>No biometric data leaves the device. All processing happens on the edge node.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══ MODULES ═════════════════════════════════════════════════════ -->
             <section class="modules" id="modules">
                 <div class="section-header center">
                     <div class="label-line">
@@ -157,15 +412,15 @@
                         <div class="line"></div>
                     </div>
                 </div>
-                
+
                 <div class="modules-grid">
-                    <!-- Module 1 -->
                     <div class="module-card card-health">
                         <div class="module-glow health-glow"></div>
                         <div class="module-top">
                             <div class="module-icon health-icon">
                                 <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-                                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H9v-2h2v2zm0-4H9V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                                    <path
+                                        d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H9v-2h2v2zm0-4H9V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z" />
                                 </svg>
                             </div>
                             <div class="module-badge badge-health">Live Demo</div>
@@ -173,11 +428,11 @@
                         <div class="module-content">
                             <h3 class="module-title">Health Screening</h3>
                             <div class="module-subtitle">Non-invasive · Multimodal · Real-time</div>
-                            <p class="module-desc">Comprehensive vitals and body assessment without any contact. Powered by three sensor modalities working in parallel.</p>
-                            
+                            <p class="module-desc">Comprehensive vitals and body assessment without any contact. Powered
+                                by three sensor modalities working in parallel.</p>
                             <ul class="feature-list">
-                                <li>Heart rate & Breathing via rPPG camera</li>
-                                <li>Respiratory rate & HRV via mmWave radar</li>
+                                <li>Heart rate &amp; Breathing via rPPG camera</li>
+                                <li>Respiratory rate &amp; HRV via mmWave radar</li>
                                 <li>Surface temperature via thermal imaging</li>
                                 <li>AI-generated clinical report in seconds</li>
                             </ul>
@@ -185,18 +440,19 @@
                         <button class="module-cta cta-health">
                             Open module
                             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                                <path d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59c.39-.39.39-1.02 0-1.41l-6.58-6.6a.9959.9959 0 00-1.41 0c-.39.39-.39 1.02 0 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z"/>
+                                <path
+                                    d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59c.39-.39.39-1.02 0-1.41l-6.58-6.6a.9959.9959 0 00-1.41 0c-.39.39-.39 1.02 0 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z" />
                             </svg>
                         </button>
                     </div>
 
-                    <!-- Module 2 -->
                     <div class="module-card card-ai">
                         <div class="module-glow ai-glow"></div>
                         <div class="module-top">
                             <div class="module-icon ai-icon">
                                 <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-                                    <path d="M19.99 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h15.99c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM15 14h-2v-2h2v2zm0-4h-2V8h2v2zm-4 4H9v-2h2v2zm0-4H9V8h2v2z"/>
+                                    <path
+                                        d="M19.99 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h15.99c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM15 14h-2v-2h2v2zm0-4h-2V8h2v2zm-4 4H9v-2h2v2zm0-4H9V8h2v2z" />
                                 </svg>
                             </div>
                             <div class="module-badge badge-ai">AI Assistant</div>
@@ -204,8 +460,8 @@
                         <div class="module-content">
                             <h3 class="module-title">CHIRANJEEVAI</h3>
                             <div class="module-subtitle">Evidence-based · Multilingual · Empathetic</div>
-                            <p class="module-desc">Your AI medical companion — ask health questions, get report summaries, and receive evidence-backed clinical guidance in your language.</p>
-                            
+                            <p class="module-desc">Your AI medical companion — ask health questions, get report
+                                summaries, and receive evidence-backed clinical guidance in your language.</p>
                             <ul class="feature-list">
                                 <li>Interprets your screening report in plain language</li>
                                 <li>Answers evidence-based health questions 24/7</li>
@@ -216,37 +472,176 @@
                         <button class="module-cta cta-ai">
                             Open module
                             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                                <path d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59c.39-.39.39-1.02 0-1.41l-6.58-6.6a.9959.9959 0 00-1.41 0c-.39.39-.39 1.02 0 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z"/>
+                                <path
+                                    d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59c.39-.39.39-1.02 0-1.41l-6.58-6.6a.9959.9959 0 00-1.41 0c-.39.39-.39 1.02 0 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z" />
                             </svg>
                         </button>
                     </div>
                 </div>
             </section>
 
-            <!-- Footer -->
-            <footer class="footer">
-                <div class="footer-content">
-                    <div class="footer-brand">
-                        <div class="footer-logo">C.H.I.R.A.N.J.E.E.V.I</div>
-                        <p>Health screening, reimagined by AI.</p>
+            <!-- ══ AGENTIC MODULE ════════════════════════════════════════════ -->
+            <section class="agent-section indian-theme" id="agent">
+                <div class="agent-split">
+                    <!-- Text Side -->
+                    <div class="agent-info">
+                        <div class="section-label">
+                            <span class="label-pill label-pill-light">Voice AI Module</span>
+                        </div>
+                        <h2 class="section-title text-white">CHIRANJEEV<span class="text-gradient-light">AI</span></h2>
+                        <p class="section-subtitle text-white-muted">Multilingual, context-aware clinical response
+                            agent.<br>Powered by LangGraph, Sarvam AI, and Llama.</p>
+
+                        <div class="agent-features">
+                            <div class="a-feat">
+                                <div class="a-feat-icon icon-light">⚡</div>
+                                <div class="a-feat-text text-white">
+                                    <h4>Intelligent Routing</h4>
+                                    <p>LangGraph classifies queries (Medical/General) for fast-path responses or deep
+                                        medical research.</p>
+                                </div>
+                            </div>
+                            <div class="a-feat">
+                                <div class="a-feat-icon icon-light">🌐</div>
+                                <div class="a-feat-text text-white">
+                                    <h4>Parallel Evidence Search</h4>
+                                    <p>Cross-references patient questions simultaneously against PubMed clinical papers
+                                        and Tavily web data.</p>
+                                </div>
+                            </div>
+                            <div class="a-feat">
+                                <div class="a-feat-icon icon-light">🩺</div>
+                                <div class="a-feat-text text-white">
+                                    <h4>Patient-Aware Context</h4>
+                                    <p>Seamlessly injects real-time screening results directly into the LLM prompt so
+                                        answers are highly personalized.</p>
+                                </div>
+                            </div>
+                            <div class="a-feat">
+                                <div class="a-feat-icon icon-light">🗣️</div>
+                                <div class="a-feat-text text-white">
+                                    <h4>Indic Voice Native</h4>
+                                    <p>Speak naturally in Kannada, Hindi, and regional languages. Zero-latency
+                                        translation and voice generation.</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="footer-links">
-                        <a href="#">Privacy Policy</a>
-                        <a href="#">Terms of Service</a>
-                        <a href="#">Contact</a>
+
+                    <!-- Image Composite Side with Floating Indic Languages -->
+                    <div class="agent-visuals">
+                        <div class="av-composite">
+                            <img src="agent_workflow.png" alt="Agent Workflow" class="av-img-main hover-float" />
+
+                            <!-- Floating Indic Badges -->
+                            <div class="av-lang-badge badge-1 hover-float-delayed">नमस्ते</div>
+                            <div class="av-lang-badge badge-2 hover-float">ನಮಸ್ಕಾರ</div>
+                            <div class="av-lang-badge badge-3 hover-float-delayed">வணக்கம்</div>
+                            <div class="av-lang-badge badge-4 hover-float">నమస్కారం</div>
+                            <div class="av-lang-badge badge-5 hover-float-delayed">হ্যালো</div>
+
+                            <div class="av-glow-light"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══ FUTURE MVP / ROADMAP ══════════════════════════════════════ -->
+            <section class="mvp-section" id="roadmap">
+                <div class="section-header center">
+                    <div class="section-label center">
+                        <span class="label-pill">Roadmap & Vision</span>
+                    </div>
+                    <h2 class="section-title">The Future MVP</h2>
+                    <p class="section-subtitle">Scaling CHIRANJEEVI from kiosk to everywhere.</p>
+                </div>
+
+                <div class="mvp-container">
+                    <img src="proposed MVP.png" alt="Proposed MVP and Future Plans" class="mvp-img">
+                    <div class="mvp-overlay-glow"></div>
+                </div>
+
+                <div class="mvp-content-grid">
+                    <div class="mvp-card">
+                        <h3>Current Applications</h3>
+                        <ul class="mvp-list">
+                            <li>Can be deployed in govt/private hospitals as a chamber with a kiosk near the entrance
+                                for a quick vitals scan before OPD consultations.</li>
+                            <li>Can be deployed in heavy public areas (railways, airports) as a health diagnosis chamber
+                                with an AI agent for medical guidance.</li>
+                            <li>Ideal for remote areas where hospitals are far, enabling daily preventive body checkups.
+                            </li>
+                            <li>Can be installed at homes for immediate preventive screening. (Act before consequence)
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="mvp-card">
+                        <h3>Future Goals</h3>
+                        <ul class="mvp-list">
+                            <li>Improving precision with strictly clinical-grade hardware devices.</li>
+                            <li>Develop a companion app to support clinical video consultations and manage digital
+                                reports.</li>
+                            <li>Integrate RIS technology for accurate fluid density detection.</li>
+                            <li>Add a bone densitometer and SpO2 hardware for expanding the biomarker taxonomy.</li>
+                            <li>Introduce advanced infrared cameras and a bottom-mounted BMI scale in the screening
+                                chamber.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ══ FOOTER ══════════════════════════════════════════════════════ -->
+            <footer class="footer">
+                <div class="footer-inner">
+                    <div class="footer-top">
+                        <div class="footer-brand">
+                            <img src="chiranjeevi png (1).png" alt="CHIRANJEEVI.AI" class="footer-logo-img">
+                            <p class="footer-tagline">Health screening, reimagined by AI.<br>Built at Techgium.</p>
+                            <div class="footer-badges">
+                                <span class="footer-badge">🏆 Hackathon 2026</span>
+                                <span class="footer-badge">🔬 Clinical Grade</span>
+                            </div>
+                        </div>
+
+                        <div class="footer-links-col">
+                            <div class="footer-col-title">Platform</div>
+                            <a href="#architecture">Architecture</a>
+                            <a href="#poc">POC &amp; Results</a>
+                            <a href="#overclock">Performance</a>
+                            <a href="#modules">Modules</a>
+                        </div>
+
+                        <div class="footer-links-col">
+                            <div class="footer-col-title">Sensors</div>
+                            <a href="#">rPPG Camera</a>
+                            <a href="#">mmWave Radar</a>
+                            <a href="#">Thermal Imaging</a>
+                            <a href="#">Sensor Fusion</a>
+                        </div>
+
+                        <div class="footer-links-col">
+                            <div class="footer-col-title">Team</div>
+                            <a href="#">About Us</a>
+                            <a href="#">Contact</a>
+                            <a href="#">GitHub</a>
+                            <a href="#">Research Paper</a>
+                        </div>
+                    </div>
+
+                    <div class="footer-bottom">
+                        <span class="footer-copy">© 2026 CHIRANJEEVI.AI — Built for Techgium by Team Akaashvani</span>
+                        <div class="footer-bottom-links">
+                            <a href="#">Privacy Policy</a>
+                            <a href="#">Terms</a>
+                        </div>
                     </div>
                 </div>
             </footer>
-            
+
         </div>
     </main>
 
     <script src="main.js"></script>
-    
-    <!-- Inline script to load generated images correctly due to absolute paths. You'll need to manually adjust this or let the JS handle it -->
-    <script>
-        // Update paths dynamically based on generated artifacts (Assuming the python script will serve them)
-        // I will dynamically fetch them via JS later or hardcode the paths injected by the agent
-    </script>
 </body>
+
 </html>

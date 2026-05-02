@@ -110,3 +110,11 @@ export const getReportQrUrl = (reportId) =>
  */
 export const getVideoFeedUrl = () =>
     `${API_BASE}/api/v1/hardware/video-feed?t=${Date.now()}`;
+
+/**
+ * Run a pre-scan ITA calibration check (skin tone + lighting analysis).
+ * @returns {Promise<{status: string, calibration: object}>}
+ */
+export const getCalibrationCheck = () =>
+    apiFetch('/api/v1/hardware/calibration-check');
+

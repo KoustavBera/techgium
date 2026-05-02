@@ -182,11 +182,15 @@ class RiskEngine:
                 "abdominal_respiratory_rate": 0.25,
             },
             PhysiologicalSystem.SKELETAL: {
-                "gait_symmetry_ratio": 0.25,
-                "step_length_symmetry": 0.20,
-                "stance_stability_score": 0.25,
-                "sway_velocity": 0.15,
-                "average_joint_rom": 0.15,
+                # Always-available (stationary subject) — dominate the score
+                "stance_stability_score": 0.25,  # primary: falls/balance risk
+                "posture_score":          0.20,  # NEW: spinal alignment
+                "sway_velocity":          0.10,  # secondary sway metric
+                "sway_entropy":           0.10,  # NEW: balance quality
+                "average_joint_rom":      0.10,  # joint stiffness
+                # Walking-only — contribute when present (normalised automatically)
+                "gait_symmetry_ratio":    0.15,  # bilateral ROM symmetry
+                "step_length_symmetry":   0.10,  # stride balance
             },
             PhysiologicalSystem.SKIN: {
                 "texture_roughness": 0.20,
@@ -481,42 +485,45 @@ class RiskEngine:
         )
     
     def _calculate_biomarker_risk(self, biomarker: Biomarker) -> Tuple[float, Optional[str]]:
-        """
-        Calculate risk score for individual biomarker.
-        
-        Returns:
-            Tuple of (risk_score 0-100, alert_message or None)
-        """
+        # ── NEW: Confidence gate ───────────────────────────────────────────────
+        # A biomarker with confidence < 0.45 is unreliable measurement noise.
+        # Returning LOW risk (not HIGH) prevents false alarms from noisy data.
+        CONFIDENCE_FLOOR = 0.45
+        if biomarker.confidence < CONFIDENCE_FLOOR:
+            logger.debug(
+                f"Biomarker '{biomarker.name}' confidence {biomarker.confidence:.2f} "
+                f"< {CONFIDENCE_FLOOR} — treating as Not Assessed (low risk)"
+            )
+            return 15.0, None  # Low risk, no alert
+
         if biomarker.normal_range is None:
-            # No normal range defined - assume normal baseline (e.g., stationary gait)
-            # Use 20.0 (Low Risk) instead of 30.0 to avoid false moderate risk
-            return 20.0, None
-        
+            return 20.0, None  # Stationary gait — no range to assess
+
         low, high = biomarker.normal_range
         value = biomarker.value
-        
-        # Use range width for consistent deviation calculation
         range_width = (high - low) if high != low else 1.0
-        
-        # Calculate deviation from normal range
+
         if low <= value <= high:
-            # Within normal range
-            # Score based on closeness to center
             center = (low + high) / 2
-            range_half = range_width / 2
-            deviation = abs(value - center) / (range_half + 1e-6)
-            risk = 20 * deviation  # 0-20 within normal
+            deviation = abs(value - center) / ((range_width / 2) + 1e-6)
+            # ── NEW: Scale deviation by confidence ────────────────────────────
+            # Low confidence pulls the deviation toward center (less alarming).
+            confidence_factor = max(0.5, biomarker.confidence)
+            risk = 20 * deviation * confidence_factor
             return risk, None
+
         elif value < low:
-            # Below normal - deviation relative to range width
             deviation = (low - value) / range_width
-            risk = 25 + min(deviation * 75, 75)  # 25-100
+            # ── NEW: Confidence-dampened deviation ────────────────────────────
+            dampened_deviation = deviation * max(0.5, biomarker.confidence)
+            risk = 25 + min(dampened_deviation * 75, 75)
             severity = "significantly " if deviation > 0.3 else ""
             return risk, f"{biomarker.name} is {severity}below normal range"
-        else:
-            # Above normal - deviation relative to range width
+
+        else:  # above high
             deviation = (value - high) / range_width
-            risk = 25 + min(deviation * 75, 75)  # 25-100
+            dampened_deviation = deviation * max(0.5, biomarker.confidence)
+            risk = 25 + min(dampened_deviation * 75, 75)
             severity = "significantly " if deviation > 0.3 else ""
             return risk, f"{biomarker.name} is {severity}above normal range"
     

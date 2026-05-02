@@ -9,6 +9,7 @@ import ThermostatRoundedIcon from '@mui/icons-material/ThermostatRounded'
 import CellTowerRoundedIcon from '@mui/icons-material/CellTowerRounded'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import HighlightOffRoundedIcon from '@mui/icons-material/HighlightOffRounded'
+import CalibrationPanel from './CalibrationPanel'
 
 const cardStyle = {
     background: '#F3F4F4',
@@ -79,26 +80,31 @@ export default function ScreeningControls({
 }) {
     const [config, setConfig] = useState({
         patientId: 'PATIENT_001',
-        radarPort: 'COM7',
-        esp32Port: 'COM6'
+        radarPort: 'COM6',
+        esp32Port: 'COM7'
     })
 
     const [showModal, setShowModal] = useState(false)
+    const [modalStep, setModalStep] = useState(1) // 1 = Patient Profile, 2 = Calibration
     const [context, setContext] = useState({
-        age: 30,
+        age: '30',
         gender: 'male',
         activityMode: 'resting'
     })
 
     const handleStartSubmit = (e) => {
         e.preventDefault()
-        // Show modal to collect context before actually starting
+        setModalStep(1)
         setShowModal(true)
     }
 
+    const handleProfileNext = () => setModalStep(2)
+    const handleCalibrationBack = () => setModalStep(1)
+
     const handleConfirmStart = () => {
         setShowModal(false)
-        onStartScreening({ ...config, ...context })
+        setModalStep(1)
+        onStartScreening({ ...config, ...context, age: parseInt(context.age) || 30 })
     }
 
     const isBusy = scanState === 'initializing' || scanState === 'running'
@@ -213,6 +219,7 @@ export default function ScreeningControls({
                         }}
                     >
                         <motion.div
+                            className="scrollbar-none"
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
@@ -222,59 +229,99 @@ export default function ScreeningControls({
                                 width: '90%', maxWidth: '400px',
                                 padding: '24px', borderRadius: '28px',
                                 boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
+                                maxHeight: '90vh',
+                                overflowY: 'auto',
                             }}
                         >
-                            <h2 style={{ margin: '0 0 8px 0', fontFamily: "'Google Sans', sans-serif", fontSize: '24px', fontWeight: 400 }}>
-                                Patient Profile
-                            </h2>
-                            <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: 'var(--md-on-surface-variant)' }}>
-                                Help Chiranjeevi calibrate physiological baselines for higher accuracy.
-                            </p>
+                            {/* ── Step indicator ── */}
+                            <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
+                                {[1, 2].map(s => (
+                                    <div key={s} style={{
+                                        flex: 1, height: '3px', borderRadius: '2px',
+                                        background: s <= modalStep ? 'var(--md-primary)' : 'rgba(255,255,255,0.15)',
+                                        transition: 'background 0.3s'
+                                    }} />
+                                ))}
+                            </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                <div>
-                                    <label style={{ ...labelStyle, color: 'var(--md-primary)', textTransform: 'uppercase' }}>Age</label>
-                                    <input
-                                        type="number" style={{ ...inputStyle, borderRadius: '8px', border: '1px solid var(--md-outline)' }}
-                                        value={context.age} onChange={e => setContext({ ...context, age: parseInt(e.target.value) || 30 })}
-                                        min={5} max={120}
+                            <AnimatePresence mode="wait">
+                            {modalStep === 1 && (
+                                <motion.div
+                                    key="step1"
+                                    initial={{ opacity: 0, x: -12 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -12 }}
+                                    transition={{ duration: 0.22 }}
+                                >
+                                    <h2 style={{ margin: '0 0 4px 0', fontFamily: "'Google Sans', sans-serif", fontSize: '22px', fontWeight: 500 }}>
+                                        Patient Profile
+                                    </h2>
+                                    <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: 'var(--md-on-surface-variant)' }}>
+                                        Step 1 of 2 · Calibrate physiological baselines
+                                    </p>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                        <div>
+                                            <label style={{ ...labelStyle, color: 'var(--md-primary)', textTransform: 'uppercase' }}>Age</label>
+                                            <input
+                                                type="number" style={{ ...inputStyle, borderRadius: '8px', border: '1px solid var(--md-outline)' }}
+                                                value={context.age} onChange={e => setContext({ ...context, age: e.target.value })}
+                                                min={5} max={120}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ ...labelStyle, color: 'var(--md-primary)', textTransform: 'uppercase' }}>Gender</label>
+                                            <select
+                                                style={{ ...inputStyle, borderRadius: '8px', border: '1px solid var(--md-outline)' }}
+                                                value={context.gender} onChange={e => setContext({ ...context, gender: e.target.value })}
+                                            >
+                                                <option value="male">Male</option>
+                                                <option value="female">Female</option>
+                                                <option value="other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style={{ ...labelStyle, color: 'var(--md-primary)', textTransform: 'uppercase' }}>Activity Level</label>
+                                            <select
+                                                style={{ ...inputStyle, borderRadius: '8px', border: '1px solid var(--md-outline)' }}
+                                                value={context.activityMode} onChange={e => setContext({ ...context, activityMode: e.target.value })}
+                                            >
+                                                <option value="resting">Resting (seated &gt;5 mins)</option>
+                                                <option value="post_exercise">Post-Exercise / Active</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '28px' }}>
+                                        <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowModal(false)}
+                                            style={{ background: 'transparent', color: 'var(--md-on-surface-variant)', border: '1px solid var(--md-outline)', padding: '10px 20px', borderRadius: '24px', fontWeight: 500, cursor: 'pointer', fontFamily: "'Google Sans', sans-serif" }}
+                                        >
+                                            Cancel
+                                        </motion.button>
+                                        <motion.button whileTap={{ scale: 0.95 }} onClick={handleProfileNext}
+                                            style={{ background: 'var(--md-primary)', color: 'var(--md-on-primary)', border: 'none', padding: '10px 28px', borderRadius: '24px', fontWeight: 500, cursor: 'pointer', fontFamily: "'Google Sans', sans-serif" }}
+                                        >
+                                            Next: Calibration →
+                                        </motion.button>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {modalStep === 2 && (
+                                <motion.div
+                                    key="step2"
+                                    initial={{ opacity: 0, x: 12 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 12 }}
+                                    transition={{ duration: 0.22 }}
+                                >
+                                    <CalibrationPanel
+                                        onProceed={handleConfirmStart}
+                                        onBack={handleCalibrationBack}
                                     />
-                                </div>
-                                <div>
-                                    <label style={{ ...labelStyle, color: 'var(--md-primary)', textTransform: 'uppercase' }}>Gender</label>
-                                    <select
-                                        style={{ ...inputStyle, borderRadius: '8px', border: '1px solid var(--md-outline)' }}
-                                        value={context.gender} onChange={e => setContext({ ...context, gender: e.target.value })}
-                                    >
-                                        <option value="male">Male</option>
-                                        <option value="female">Female</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={{ ...labelStyle, color: 'var(--md-primary)', textTransform: 'uppercase' }}>Activity Level (Current)</label>
-                                    <select
-                                        style={{ ...inputStyle, borderRadius: '8px', border: '1px solid var(--md-outline)' }}
-                                        value={context.activityMode} onChange={e => setContext({ ...context, activityMode: e.target.value })}
-                                    >
-                                        <option value="resting">Resting (seated &gt;5 mins)</option>
-                                        <option value="post_exercise">Post-Exercise / Active</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '32px' }}>
-                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowModal(false)}
-                                    style={{ background: 'transparent', color: 'var(--md-primary)', border: 'none', padding: '10px 24px', borderRadius: '24px', fontWeight: 500, cursor: 'pointer' }}
-                                >
-                                    Cancel
-                                </motion.button>
-                                <motion.button whileTap={{ scale: 0.95 }} onClick={handleConfirmStart}
-                                    style={{ background: 'var(--md-primary)', color: 'var(--md-on-primary)', border: 'none', padding: '10px 24px', borderRadius: '24px', fontWeight: 500, cursor: 'pointer' }}
-                                >
-                                    Start Scan
-                                </motion.button>
-                            </div>
+                                </motion.div>
+                            )}
+                            </AnimatePresence>
                         </motion.div>
                     </motion.div>
                 )}

@@ -1,183 +1,291 @@
-// Initialize Lenis for Smooth Scrolling
-const lenis = new Lenis({
-    duration: 1.2,
-    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-    direction: 'vertical',
-    gestureDirection: 'vertical',
-    smooth: true,
-    mouseMultiplier: 1,
-    smoothTouch: false,
-    touchMultiplier: 2,
-    infinite: false,
-});
+/* ============================================================
+   CHIRANJEEVI — main.js
+   Awwwards-style: GSAP horizontal scroll pin on hero
+   ============================================================ */
 
-function raf(time) {
-    lenis.raf(time);
-    requestAnimationFrame(raf);
-}
-requestAnimationFrame(raf);
+// ── Globals (Loaded via CDN in index.html) ────────────────
+// gsap, ScrollTrigger, Lenis are available globally.
 
-// Integrate Lenis with GSAP ScrollTrigger
 gsap.registerPlugin(ScrollTrigger);
 
-lenis.on('scroll', ScrollTrigger.update);
-gsap.ticker.add((time)=>{
-  lenis.raf(time * 1000);
-});
-gsap.ticker.lagSmoothing(0, 0);
+// ── Preloader ──────────────────────────────────────────────
+const preloader = document.querySelector('.preloader');
+const preloaderProgress = document.querySelector('.preloader-progress');
 
-// Populate Images using actual paths created by generate_image
-document.getElementById('heroImg').src = 'file:///C:/Users/Swetanjana%20Maity/.gemini/antigravity/brain/4a96c56f-021b-4e53-8690-0bb95922abab/hero_abstract_1773897666048.png';
-document.getElementById('sensorImg1').src = 'file:///C:/Users/Swetanjana%20Maity/.gemini/antigravity/brain/4a96c56f-021b-4e53-8690-0bb95922abab/sensor_visual_1773897682866.png';
-document.getElementById('sensorImg2').src = 'file:///C:/Users/Swetanjana%20Maity/.gemini/antigravity/brain/4a96c56f-021b-4e53-8690-0bb95922abab/ai_health_1773897699352.png';
-document.getElementById('sensorImg3').src = 'file:///C:/Users/Swetanjana%20Maity/.gemini/antigravity/brain/4a96c56f-021b-4e53-8690-0bb95922abab/hero_abstract_1773897666048.png';
+let progress = 0;
+const loadInterval = setInterval(() => {
+    progress += Math.random() * 18;
+    if (progress >= 100) {
+        progress = 100;
+        clearInterval(loadInterval);
+        setTimeout(hidePreloader, 300);
+    }
+    preloaderProgress.style.width = progress + '%';
+}, 80);
 
-
-// Custom Cursor Logic with motion
-const cursor = document.querySelector('.cursor');
-const hoverElements = document.querySelectorAll('a, button, .module-card');
-
-document.addEventListener('mousemove', (e) => {
-    // Basic cursor tracking
-    gsap.to(cursor, {
-        x: e.clientX,
-        y: e.clientY,
-        duration: 0.1,
-        ease: "power2.out"
+function hidePreloader() {
+    gsap.to(preloader, {
+        opacity: 0,
+        duration: 0.6,
+        ease: 'power2.inOut',
+        onComplete: () => {
+            preloader.style.display = 'none';
+            initAll();
+        }
     });
-});
+}
 
-hoverElements.forEach(el => {
-    el.addEventListener('mouseenter', () => {
-        cursor.classList.add('hovered');
-    });
-    el.addEventListener('mouseleave', () => {
-        cursor.classList.remove('hovered');
-    });
-});
+// ── Main init (after preloader) ────────────────────────────
+function initAll() {
+    initLenis();
+    initCursor();
+    initHeroHorizontalScroll();
+    initMarquee();
+    initCarousel();
+    initEntranceAnims();
+}
 
-// Preloader Animation
-window.addEventListener('load', () => {
-    const tl = gsap.timeline();
-    
-    tl.to('.preloader-progress', {
-        width: '100%',
-        duration: 1.5,
-        ease: 'power3.inOut'
-    })
-    .to('.preloader', {
-        yPercent: -100,
+// ── Custom Cursor ──────────────────────────────────────────
+function initCursor() {
+    const cursor = document.querySelector('.cursor');
+    if (!cursor) return;
+
+    // Move cursor
+    document.addEventListener('mousemove', (e) => {
+        cursor.style.left = e.clientX + 'px';
+        cursor.style.top = e.clientY + 'px';
+    });
+
+    // Add hovered class on interactive elements
+    const interactables = document.querySelectorAll('a, button, .hc-card, .hc-card-video iframe');
+    interactables.forEach(el => {
+        el.addEventListener('mouseenter', () => cursor.classList.add('hovered'));
+        el.addEventListener('mouseleave', () => cursor.classList.remove('hovered'));
+    });
+}
+
+// ── Lenis Smooth Scroll ────────────────────────────────────
+let lenis;
+function initLenis() {
+    lenis = new Lenis({
+        duration: 1.2,
+        easing: t => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        smoothWheel: true,
+    });
+
+    // Connect Lenis to GSAP ticker
+    gsap.ticker.add(time => lenis.raf(time * 1000));
+    gsap.ticker.lagSmoothing(0);
+
+    // Also feed Lenis scroll position into ScrollTrigger
+    lenis.on('scroll', ScrollTrigger.update);
+}
+
+// ── Hero: GSAP Horizontal Scroll Pin ──────────────────────
+function initHeroHorizontalScroll() {
+    const hero      = document.getElementById('hero');
+    const track     = document.getElementById('heroHTrack');
+    const progress  = document.getElementById('hcProgressFill');
+    const carousel  = document.querySelector('.hero-carousel-outer');
+
+    if (!hero || !track || !carousel) return;
+
+    // We need the carousel strip width (everything to the right of the text panel)
+    // The text panel is 50vw, the carousel adds extra width
+    // Total horizontal travel = track.scrollWidth - window.innerWidth
+    const getScrollAmount = () => -(track.scrollWidth - window.innerWidth);
+
+    const st = gsap.to(track, {
+        x: getScrollAmount,
+        ease: 'none',
+        scrollTrigger: {
+            trigger: hero,
+            start: 'top top',
+            end: () => '+=' + Math.abs(getScrollAmount()),
+            pin: true,
+            anticipatePin: 1,
+            scrub: 1.2,
+            invalidateOnRefresh: true,
+            onUpdate: (self) => {
+                // Update the bottom progress bar
+                if (progress) {
+                    progress.style.width = (self.progress * 100) + '%';
+                }
+            }
+        }
+    });
+
+    // Recalc on resize
+    window.addEventListener('resize', () => ScrollTrigger.refresh());
+}
+
+// ── Marquee ────────────────────────────────────────────────
+function initMarquee() {
+    const marquee = document.getElementById('marquee1');
+    if (!marquee) return;
+
+    let x = 0;
+    const speed = 0.4;
+    const content = marquee.querySelector('.marquee-content');
+    if (!content) return;
+    const w = content.offsetWidth;
+
+    function tick() {
+        x -= speed;
+        if (Math.abs(x) >= w) x = 0;
+        marquee.querySelectorAll('.marquee-content').forEach(el => {
+            el.style.transform = `translateX(${x}px)`;
+        });
+        requestAnimationFrame(tick);
+    }
+    tick();
+}
+
+// ── Architecture Carousel Auto-Swipe ───────────────────────
+function initCarousel() {
+    const carousel = document.querySelector('.arch-carousel');
+    if (!carousel) return;
+
+    // Clone the first slide to create a seamless infinite loop illusion
+    const slides = carousel.querySelectorAll('.arch-slide');
+    if (slides.length > 0) {
+        carousel.appendChild(slides[0].cloneNode(true));
+    }
+
+    let autoScroll;
+    const scrollDelay = 3000;
+
+    function startScroll() {
+        autoScroll = setInterval(() => {
+            const isAtEnd = Math.ceil(carousel.scrollLeft + carousel.clientWidth) >= carousel.scrollWidth - 5;
+            
+            if (isAtEnd) {
+                // Instantly teleport back to real first slide (0px) silently
+                carousel.scrollTo({ left: 0, behavior: 'instant' });
+                // Wait a frame, then smoothly scroll to the second slide
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        carousel.scrollBy({ left: carousel.clientWidth, behavior: 'smooth' });
+                    });
+                });
+            } else {
+                // Normal smooth scroll to next slide
+                carousel.scrollBy({ left: carousel.clientWidth, behavior: 'smooth' });
+            }
+        }, scrollDelay);
+    }
+
+    function stopScroll() {
+        clearInterval(autoScroll);
+    }
+
+    startScroll();
+
+    // Pause on hover or interaction
+    carousel.addEventListener('mouseenter', stopScroll);
+    carousel.addEventListener('mouseleave', startScroll);
+    carousel.addEventListener('touchstart', stopScroll, {passive: true});
+    carousel.addEventListener('touchend', startScroll, {passive: true});
+}
+
+// ── Entrance animations (sections below hero) ──────────────
+function initEntranceAnims() {
+    // Arch layers slide in
+    gsap.utils.toArray('.arch-layer').forEach((layer, i) => {
+        gsap.from(layer, {
+            opacity: 0,
+            x: -40,
+            duration: 0.7,
+            delay: i * 0.1,
+            ease: 'power3.out',
+            scrollTrigger: {
+                trigger: layer,
+                start: 'top 85%',
+            }
+        });
+    });
+
+    // OC cards pop up
+    gsap.utils.toArray('.oc-card').forEach((card, i) => {
+        gsap.from(card, {
+            opacity: 0,
+            y: 40,
+            duration: 0.6,
+            delay: i * 0.08,
+            ease: 'power3.out',
+            scrollTrigger: {
+                trigger: card,
+                start: 'top 88%',
+            }
+        });
+    });
+
+    // POC metrics count-up feel
+    gsap.utils.toArray('.poc-metric').forEach((m, i) => {
+        gsap.from(m, {
+            opacity: 0,
+            y: 24,
+            duration: 0.5,
+            delay: i * 0.1,
+            ease: 'power2.out',
+            scrollTrigger: {
+                trigger: m,
+                start: 'top 90%',
+            }
+        });
+    });
+
+    // Agent text features stagger
+    gsap.utils.toArray('.a-feat').forEach((feat, i) => {
+        gsap.from(feat, {
+            opacity: 0,
+            x: -30,
+            duration: 0.6,
+            delay: i * 0.15,
+            ease: 'power3.out',
+            scrollTrigger: {
+                trigger: '.agent-features',
+                start: 'top 85%',
+            }
+        });
+    });
+
+    // Agent images composite
+    gsap.from('.av-img-main', {
+        opacity: 0,
+        scale: 0.9,
+        y: 40,
         duration: 0.8,
-        ease: 'power4.inOut'
-    }, '+=0.2')
-    // Hero Entrance
-    .from('.hero-title', {
-        y: 100,
+        ease: 'power3.out',
+        scrollTrigger: {
+            trigger: '.agent-visuals',
+            start: 'top 80%',
+        }
+    });
+
+    gsap.from('.av-img-sub', {
         opacity: 0,
-        duration: 1,
-        ease: 'power3.out'
-    }, '-=0.4')
-    .from('.hero-subtitle', {
-        y: 50,
-        opacity: 0,
-        duration: 1,
-        ease: 'power3.out'
-    }, '-=0.8')
-    .from('.stat-card', {
-        y: 50,
-        opacity: 0,
-        stagger: 0.1,
-        duration: 0.8,
-        ease: 'back.out(1.7)'
-    }, '-=0.8')
-    .from('.hero-image-wrapper', {
         scale: 0.8,
+        x: 40,
+        y: 40,
+        duration: 0.8,
+        delay: 0.3,
+        ease: 'power3.out',
+        scrollTrigger: {
+            trigger: '.agent-visuals',
+            start: 'top 80%',
+        }
+    });
+
+    // MVP Roadmap Image
+    gsap.from('.mvp-container', {
         opacity: 0,
-        rotationY: -20,
-        duration: 1.5,
-        ease: 'power4.out'
-    }, '-=1');
-});
-
-// Marquee Animation
-gsap.to('.marquee-content', {
-    xPercent: -100,
-    ease: "none",
-    duration: 20,
-    repeat: -1,
-});
-
-// Horizontal Scroll for Modalities
-const scrollContainer = document.querySelector('.horizontal-scroll-content');
-const scrollOffset = scrollContainer.scrollWidth - window.innerWidth + 100; // 100 for padding
-
-gsap.to(scrollContainer, {
-    x: -scrollOffset,
-    ease: "none",
-    scrollTrigger: {
-        trigger: ".modalities",
-        pin: true,
-        scrub: 1,
-        end: () => "+=" + scrollOffset
-    }
-});
-
-// Modules Entrance Animation
-gsap.from('.module-card', {
-    y: 100,
-    opacity: 0,
-    duration: 1,
-    stagger: 0.2,
-    ease: "power3.out",
-    scrollTrigger: {
-        trigger: ".modules",
-        start: "top 70%",
-    }
-});
-
-// Parallax effect on hero image
-gsap.to('.hero-img', {
-    yPercent: 20,
-    ease: "none",
-    scrollTrigger: {
-        trigger: ".hero",
-        start: "top top",
-        end: "bottom top",
-        scrub: true
-    }
-});
-
-// Motion interaction using popmotion on module cards
-const { spring } = window.popmotion;
-
-document.querySelectorAll('.module-card').forEach(card => {
-    // Optional: Using popmotion for complex spring physics on hover if GSAP isn't enough
-    // For now GSAP basic hover in CSS handles the scale, but we can do a magnetic effect
-    
-    card.addEventListener('mousemove', (e) => {
-        const rect = card.getBoundingClientRect();
-        const x = e.clientX - rect.left - rect.width / 2;
-        const y = e.clientY - rect.top - rect.height / 2;
-        
-        gsap.to(card, {
-            x: x * 0.05,
-            y: y * 0.05,
-            rotationY: x * 0.02,
-            rotationX: -y * 0.02,
-            duration: 0.4,
-            ease: "power2.out",
-            transformPerspective: 1000
-        });
+        y: 60,
+        duration: 1,
+        ease: 'power3.out',
+        scrollTrigger: {
+            trigger: '.mvp-section',
+            start: 'top 85%',
+        }
     });
-    
-    card.addEventListener('mouseleave', () => {
-        gsap.to(card, {
-            x: 0,
-            y: 0,
-            rotationY: 0,
-            rotationX: 0,
-            duration: 0.8,
-            ease: "elastic.out(1, 0.3)"
-        });
-    });
-});
+}

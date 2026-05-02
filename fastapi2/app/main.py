@@ -94,8 +94,8 @@ async def lifespan(app: FastAPI):
     # the server can start even if serial ports are unavailable / hanging.
     config = HardwareConfig(
         camera_index=0,
-        radar_port=os.environ.get("RADAR_PORT", "COM7"),
-        esp32_port=os.environ.get("ESP32_PORT", "COM6"),
+        radar_port=os.environ.get("RADAR_PORT", "COM6"),   # physical: radar on COM6
+        esp32_port=os.environ.get("ESP32_PORT", "COM7"),   # physical: thermal on COM7
     )
     _persistence.init_db()
     try:
@@ -819,6 +819,91 @@ async def check_sensor_status():
         "esp32": status["thermal"],  # Keep 'esp32' key for frontend compat
         "radar": status["radar"],
     }
+
+
+@app.get("/api/v1/hardware/calibration-check", tags=["Hardware"])
+async def calibration_check():
+    """
+    Pre-scan calibration: capture one frame from the camera, compute ITA angle,
+    classify Fitzpatrick skin phototype, assess lighting quality, and return
+    the CHROM weight profile that will be used for this session.
+
+    This endpoint transforms sensor limitations into transparent, documented
+    mitigation — compliant with ISO 14155 clinical investigation transparency.
+    """
+    try:
+        from app.core.extraction.skin_tone import SkinToneClassifier
+        import numpy as np
+
+        classifier = SkinToneClassifier()
+
+        # ── Grab a frame safely from HardwareManager's pre-captured buffer ──
+        # _latest_frame_jpeg is updated by the _capture_loop thread and
+        # protected by _frame_lock. Using it avoids racing with the live
+        # video stream and is always the most recent frame.
+        frame = None
+        jpeg_bytes = None
+        with _hw_manager._frame_lock:
+            jpeg_bytes = _hw_manager._latest_frame_jpeg
+
+        if jpeg_bytes:
+            try:
+                import cv2
+                buf = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+                decoded = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+                if decoded is not None and decoded.size > 0:
+                    frame = decoded
+            except Exception as e:
+                logger.warning(f"Calibration: failed to decode JPEG buffer: {e}")
+
+        # Fallback: try opening camera directly only if the buffer is empty
+        if frame is None:
+            try:
+                import cv2
+                cap_tmp = cv2.VideoCapture(0)
+                if cap_tmp.isOpened():
+                    # Discard a few frames to flush the buffer (webcam warm-up)
+                    for _ in range(3):
+                        cap_tmp.read()
+                    ret, frame = cap_tmp.read()
+                    cap_tmp.release()
+                    if not ret:
+                        frame = None
+            except Exception:
+                frame = None
+
+        if frame is None:
+            # Camera unavailable — return a safe "demo mode" result
+            result = classifier._fallback_result(
+                "Camera not available — using ITA-III/IV default (Indian range)"
+            )
+        else:
+            result = await run_in_threadpool(classifier.classify, frame)
+
+        return {
+            "status": "ok",
+            "calibration": result.to_dict(),
+        }
+
+    except Exception as e:
+        logger.error(f"Calibration check failed: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "calibration": {
+                "ita_angle": 0.0,
+                "fitzpatrick_class": "Unknown",
+                "fitzpatrick_number": 3,
+                "confidence_level": "Medium",
+                "compensation_active": True,
+                "lighting_quality": "Unknown",
+                "lighting_score": 0.5,
+                "specular_highlight_pct": 0.0,
+                "chrom_weight_profile": "ITA-III/IV — Default (Indian Optimised)",
+                "indian_range": False,
+                "face_detected": False,
+                "message": "Calibration service error. Standard Indian-range compensation will be applied.",
+            },
+        }
 
 
 @app.get("/api/v1/hardware/video-feed", tags=["Hardware"])

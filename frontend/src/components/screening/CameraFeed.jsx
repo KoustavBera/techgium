@@ -125,7 +125,9 @@ export default function CameraFeed({
     apiBase,
     userWarnings,
     scanState,
-    phase
+    phase,
+    uiHint,
+    phaseIcon,
 }) {
     const [cacheBuster, setCacheBuster] = useState(() => Date.now())
 
@@ -171,10 +173,13 @@ export default function CameraFeed({
     // Show AI spinner overlay during PROCESSING phase
     const showLoaderOverlay = phase === 'PROCESSING'
 
-    // Show the head guide when camera is on and the user needs positioning assistance.
-    // Includes FACE_AND_VITALS so users can still adjust during the active face scan.
-    const guidePhases = ['IDLE', 'INITIALIZING', 'FACE_AND_VITALS']
-    const showHeadGuide = isActive && guidePhases.includes(phase)
+    // Show the head guide during IDLE, INITIALIZING, and the FACE adjust/capture phases
+    const faceGuidePhases = ['IDLE', 'INITIALIZING', 'FACE_ADJUST', 'FACE_ADJUST_EXTENDED', 'FACE_AND_VITALS']
+    const showHeadGuide = isActive && faceGuidePhases.includes(phase)
+
+    // Show body silhouette during body positioning/capture phases (no capture happening yet)
+    const bodyGuidePhases = ['BODY_ADJUST', 'BODY_ADJUST_EXTENDED']
+    const showBodyGuide = isActive && bodyGuidePhases.includes(phase)
 
     return (
         <div style={{
@@ -225,9 +230,101 @@ export default function CameraFeed({
                 }}
             />
 
-            {/* ── Static Head-Position Guide (pre-scan only) ── */}
+            {/* ── Static Head-Position Guide (face phases only) ── */}
             <AnimatePresence>
                 {showHeadGuide && <HeadGuide />}
+            </AnimatePresence>
+
+            {/* ── Body Silhouette Guide (BODY_ADJUST phases only) ── */}
+            <AnimatePresence>
+                {showBodyGuide && (
+                    <motion.div
+                        key="body-guide"
+                        initial={{ opacity: 0, scale: 0.97 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.97 }}
+                        transition={{ duration: 0.4, ease: 'easeOut' }}
+                        style={{
+                            position: 'absolute',
+                            top: 0, left: 0, right: 0, bottom: 0,
+                            zIndex: 25,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            pointerEvents: 'none',
+                        }}
+                    >
+                        {/* Full-body silhouette guide — 40% of container width */}
+                        <svg
+                            viewBox="0 0 200 500"
+                            style={{ width: '40%', maxWidth: 300 }}
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <defs>
+                                <filter id="glow-body" x="-30%" y="-30%" width="160%" height="160%">
+                                    <feGaussianBlur stdDeviation="4" result="blur" />
+                                    <feMerge>
+                                        <feMergeNode in="blur" />
+                                        <feMergeNode in="SourceGraphic" />
+                                    </feMerge>
+                                </filter>
+                            </defs>
+                            {/* Head */}
+                            <ellipse cx="100" cy="42" rx="34" ry="40"
+                                fill="rgba(255,255,255,0.04)"
+                                stroke="rgba(99,210,255,0.85)" strokeWidth="2"
+                                strokeDasharray="10 5" filter="url(#glow-body)">
+                                <animate attributeName="stroke-dashoffset" from="0" to="-30" dur="2.4s" repeatCount="indefinite" />
+                            </ellipse>
+                            {/* Torso */}
+                            <rect x="62" y="96" width="76" height="160" rx="14"
+                                fill="rgba(255,255,255,0.04)"
+                                stroke="rgba(99,210,255,0.7)" strokeWidth="1.8"
+                                strokeDasharray="10 5" />
+                            {/* Left arm */}
+                            <rect x="22" y="100" width="34" height="120" rx="14"
+                                fill="rgba(255,255,255,0.03)"
+                                stroke="rgba(99,210,255,0.5)" strokeWidth="1.5"
+                                strokeDasharray="8 5" />
+                            {/* Right arm */}
+                            <rect x="144" y="100" width="34" height="120" rx="14"
+                                fill="rgba(255,255,255,0.03)"
+                                stroke="rgba(99,210,255,0.5)" strokeWidth="1.5"
+                                strokeDasharray="8 5" />
+                            {/* Left leg */}
+                            <rect x="64" y="262" width="34" height="180" rx="14"
+                                fill="rgba(255,255,255,0.03)"
+                                stroke="rgba(99,210,255,0.55)" strokeWidth="1.5"
+                                strokeDasharray="8 5" />
+                            {/* Right leg */}
+                            <rect x="102" y="262" width="34" height="180" rx="14"
+                                fill="rgba(255,255,255,0.03)"
+                                stroke="rgba(99,210,255,0.55)" strokeWidth="1.5"
+                                strokeDasharray="8 5" />
+                            {/* Corner bracket — top */}
+                            <path d="M 40 20 L 40 6 L 56 6" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                            <path d="M 160 20 L 160 6 L 144 6" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                            {/* Corner bracket — bottom */}
+                            <path d="M 40 480 L 40 494 L 56 494" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                            <path d="M 160 480 L 160 494 L 144 494" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                        </svg>
+                        {/* Label */}
+                        <div style={{
+                            marginTop: 12,
+                            background: 'rgba(0,0,0,0.55)',
+                            backdropFilter: 'blur(8px)',
+                            color: 'rgba(99,210,255,0.95)',
+                            fontSize: 12, fontWeight: 500,
+                            padding: '6px 18px', borderRadius: 999,
+                            border: '1px solid rgba(99,210,255,0.3)',
+                            letterSpacing: '0.5px',
+                            textTransform: 'uppercase',
+                        }}>
+                            Step back — full body in frame
+                        </div>
+                    </motion.div>
+                )}
             </AnimatePresence>
 
             {/* ── Placeholder (When Inactive) ── */}
