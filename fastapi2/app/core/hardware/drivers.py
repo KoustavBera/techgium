@@ -308,11 +308,7 @@ class CameraCapture:
         self.frame_lock = threading.Lock()
         self.thread_running = False
         self.capture_thread = None
-        
-        # Recording state
-        self._recording_active = False
-        self._recording_buffer = []
-        self._recording_lock = threading.Lock()
+
         
         self._init_mediapipe()
     
@@ -381,35 +377,12 @@ class CameraCapture:
             if ret:
                 with self.frame_lock:
                     self.current_frame = frame
-                
-                # Decoupled Recording: Push to buffer immediately at native FPS
-                if self._recording_active:
-                    with self._recording_lock:
-                        # Append copy to avoid mutation by other processes
-                        self._recording_buffer.append({
-                            'frame': frame.copy(),
-                            'timestamp': time.time()
-                        })
+
             else:
                 time.sleep(0.01) # Faster polling for 30fps
         logger.info("Camera capture thread stopped")
 
-    def start_recording(self):
-        """Enable low-level frame recording."""
-        with self._recording_lock:
-            self._recording_buffer = []
-            self._recording_active = True
-        logger.info("Driver-level recording started")
 
-    def stop_recording(self) -> List[Dict[str, Any]]:
-        """Stop recording and return the buffer."""
-        with self._recording_lock:
-            self._recording_active = False
-            buffer = list(self._recording_buffer)
-            self._recording_buffer = []
-        logger.info(f"Driver-level recording stopped. Captured {len(buffer)} frames.")
-        return buffer
-    
     def close(self):
         """Close camera."""
         """Close camera and stop thread."""

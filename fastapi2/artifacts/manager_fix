@@ -1,0 +1,338 @@
+# HardwareManager Scan Pipeline Enhancement Plan
+
+## Background
+
+The current `_run_scan()` pipeline in `manager.py` functions correctly but has architectural weaknesses that
+hurt demo quality and signal fidelity:
+
+1. The **face phase is 30 seconds** — too long for a hackathon demo.
+2. The **body phase still calls `camera.start_recording()` / `stop_recording()`** from the driver layer, bypassing the rolling buffer infrastructure already in place for the face phase.
+3. The **adjustment window captures noisy data** — the user is told to position themselves but frames are still collected during that period.
+4. The **status messages are basic** and don't guide the user through each micro-step.
+5. The **rolling buffer frames are not filtered by quality** before being passed to extractors.
+
+The plan below fixes all of this in **5 sequential phases**, each independently testable.
+
+---
+
+> [!IMPORTANT]
+> **Principle across all phases:** The rolling buffer is always running. The phases only control when we *start slicing* from it and what we do with those slices. We never stop the camera.
+
+---
+
+## Phase 1 — Introduce the `ADJUST` Sub-Phase (User Positioning Window)
+
+### Goal
+Give the user a dedicated, clearly signposted window to position themselves **without any capture happening**. Data collected during this period is explicitly discarded.
+
+### What Needs to Change
+
+#### [MODIFY] [manager.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/hardware/manager.py)
+
+**Inside `_run_scan()`, immediately after the sensor queue clearing (around line 884):**
+
+1. **Add a new `FACE_ADJUST` sub-phase** that runs for a fixed window (5–7 seconds).
+   - Update `_scan_status` with `phase="FACE_ADJUST"` and a rich status message:  
+     `"📍 Position your face in the frame — 5s to get ready..."`
+   - The rolling buffer **must be explicitly paused** (set `_rolling_capture_active = False`) during this window.
+   - Run the countdown normally, displaying the remaining seconds.
+   - After the countdown, clear the rolling buffer completely before activating capture.
+
+2. **Add an `_alignment_event.clear()` + brief detection check** at the start of this sub-phase:
+   - Use the already-running `_last_inference_results` from the capture loop to check face detection + distance warning.
+   - If the user is already correctly positioned by the end of `FACE_ADJUST`, proceed immediately.
+   - If not, extend by up to 5 more seconds with a `FACE_ADJUST_EXTENDED` message (e.g., *"Still adjusting — please look at the camera"*).
+
+3. **Add the same pattern for `BODY_ADJUST`** before the body capture phase:
+   - Phase label: `phase="BODY_ADJUST"`, 5 seconds.
+   - Message: `"🧍 Step back so your full body is visible — 5s to adjust..."`
+   - Same: rolling buffer paused, then cleared before body capture starts.
+
+### Key Data Flows
+```
+rolling_buffer: RUNNING (always fills with frames)
+_rolling_capture_active: FALSE during ADJUST window
+                          TRUE during CAPTURE window
+```
+
+### Acceptance Criteria
+- Status JSON shows `phase = "FACE_ADJUST"` for 5s before any face capture starts.
+- Rolling buffer has zero frames older than the moment `_rolling_capture_active` was set to `True`.
+- User sees countdown in the status message.
+
+---
+
+## Phase 2 — Replace Body `start_recording()` with Rolling Buffer Slice
+
+### Goal
+Remove the last remaining use of `camera.start_recording()` / `camera.stop_recording()`. The body phase must use the same rolling buffer pattern already proven in the face phase.
+
+### What Needs to Change
+
+#### [MODIFY] [manager.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/hardware/manager.py)
+
+**Around lines 999–1023 (body capture block inside `_run_scan()`):**
+
+1. **Remove** the three lines:
+   ```python
+   self.camera.start_recording()                          # line 1003
+   self._countdown(...)                                   # line 1006
+   raw_captures = self.camera.stop_recording()            # line 1009
+   ```
+
+2. **Replace with the rolling-buffer pattern** (same as the face phase):
+   ```
+   a. Clear rolling buffer completely.
+   b. Set _rolling_capture_active = True.
+   c. Run a countdown (8–10 seconds) — this is now BODY_CAPTURE, not a dead wait.
+   d. Set _rolling_capture_active = False.
+   e. Slice raw_captures = list(_rolling_buffer).
+   ```
+
+3. **Change `BODY_CAPTURE` duration** from 10s → **8s** (per the blueprint).
+   - This aligns with the new BODY_ADJUST window: user has already positioned during adjust.
+   - Total body time = 5s adjust + 8s capture = 13s (was 3s countdown + 10s capture = 13s, same).
+
+4. **Remove** the `camera.start_recording()` / `camera.stop_recording()` methods from `drivers.py`.
+   - These methods have no remaining callers after this change.
+   - Remove `_recording_active`, `_recording_buffer`, `_recording_lock` from `CameraCapture.__init__`.
+   - Remove the recording logic in `CameraCapture._update_camera()`.
+   - This simplifies the driver class by ~30 lines and eliminates a parallel buffer that was never synced with the manager's rolling buffer.
+
+> [!WARNING]
+> Also remove `_recording_buffer`, `_recording_active`, `_recording_lock` from `HardwareManager.__init__()` (lines 178–180) and the `_get_calibration_data()` method (lines 723–752) which still uses `_recording_active`. After Phase 2 all capture goes through `_rolling_buffer` exclusively.
+
+### Acceptance Criteria
+- `camera.start_recording()` and `camera.stop_recording()` are never called during a scan.
+- Body frames come from the same `_rolling_buffer` deque as face frames.
+- `drivers.py` `CameraCapture` class no longer has any recording state.
+
+---
+
+## Phase 3 — Cut Capture Durations and Add Quality-Gated Frame Selection
+
+### Goal
+Reduce total scan time from ~50s → ~25s. After pulling from the rolling buffer, filter frames by signal quality before passing them to extractors.
+
+### What Needs to Change
+
+#### [MODIFY] [manager.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app\core\hardware\manager.py)
+
+**In `HardwareConfig` (lines 58–61):**
+
+1. Change `face_capture_seconds: int = 10` ← was implicitly 30 in the hardcoded constant.
+2. Change `body_capture_seconds: int = 8` ← was 10.
+
+**New `FACE_VITALS_DURATION` constant** (line 868):
+- Change from `30` → `12` seconds.
+- Remove the comment `# do NOT reduce; more data = higher confidence` — this is no longer true once we gate on stable frames, because 12s of stable frames outperforms 30s of mixed frames.
+
+**Add a new private method `_filter_stable_frames()`** inside `HardwareManager`:
+
+This method receives the raw rolling buffer slice and returns only frames where:
+- `quality_ok == True` (brightness ≥ 40, Laplacian variance ≥ 5) — already computed per-frame in `_capture_loop` every 15 frames.
+- Face detected (for face phase) OR pose confidence acceptable (for body phase).
+
+The method signature:
+```python
+def _filter_stable_frames(
+    self,
+    raw_captures: List[Dict],
+    phase: str,      # "face" or "body"
+    min_ratio: float = 0.5  # reject extraction if < 50% frames stable
+) -> Tuple[List[Dict], float]:
+    # Returns (filtered_captures, stability_ratio)
+```
+
+**Call this method** after each buffer slice, before post-processing:
+- For the face phase: after line 925 (`raw_captures = list(self._rolling_buffer)`).
+- For the body phase: after the equivalent new slice.
+
+**If `stability_ratio < min_ratio`:**
+- Update status: `"⚠️ Signal unstable — please hold still and retry"`.
+- Do **not** abort the scan — continue with whatever stable frames exist.
+- Log the instability for diagnostics.
+
+**Also: add `quality_ok` tracking to each rolling buffer entry:**
+- In `_capture_loop`, when pushing to `_rolling_buffer`, include `quality_ok` from the scan status:
+  ```python
+  self._rolling_buffer.append({
+      'frame': frame.copy(),
+      'timestamp': time.time(),
+      'quality_ok': quality_ok  # from user_warnings dict
+  })
+  ```
+
+### Timing Summary After Phase 3
+
+| Phase | Old Duration | New Duration |
+|---|---|---|
+| INITIALIZING (calibration) | 2s | 2s (unchanged) |
+| FACE_ADJUST | 0s (no such phase) | 5s |
+| FACE_CAPTURE | 30s | 12s |
+| BODY_ADJUST | ~3s (buried in countdown) | 5s |
+| BODY_CAPTURE | 10s | 8s |
+| PROCESSING | ~5–8s | ~5–8s (unchanged) |
+| **Total** | **~50s** | **~37s** |
+
+> [!NOTE]
+> The processing time stays the same because extractors run in parallel (already implemented with `ThreadPoolExecutor`). The wall-clock saving comes entirely from capture phase reduction.
+
+### Acceptance Criteria
+- Face capture wall-clock time is ≤ 12s.
+- Body capture wall-clock time is ≤ 8s.
+- Frames passed to `_build_screening_request()` are filtered: only `quality_ok == True` frames included.
+- If < 50% stable frames, a warning is logged and emitted in `_scan_status`.
+
+---
+
+## Phase 4 — Rich UX Status Messaging (State-Machine Style Messages)
+
+### Goal
+Make the frontend feel like the AI is *guiding* the user in real-time, not just showing a progress bar. Each sub-phase must have a distinct, human-readable message that can be rendered directly in the UI.
+
+### What Needs to Change
+
+#### [MODIFY] [manager.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/hardware/manager.py)
+
+**Add a `_scan_status["ui_hint"]` field** to the status dict, separate from `message`. The `message` is for logging/dev; `ui_hint` is for the user-facing UI.
+
+Extend `_scan_status` initialization (around line 162):
+```python
+"ui_hint": "",          # Short, user-facing instruction
+"phase_icon": "⏳",    # Emoji/icon for current phase
+"stable_frames_pct": None,  # % stable frames captured so far
+```
+
+**Map each phase to a `ui_hint`:**
+
+| Phase | `ui_hint` | `phase_icon` |
+|---|---|---|
+| `IDLE` | "Ready for screening" | `⚡` |
+| `INITIALIZING` | "Calibrating sensors..." | `🔧` |
+| `FACE_ADJUST` | "Position your face in the frame" | `📍` |
+| `FACE_AND_VITALS` | "Stay still — scanning face" | `🧠` |
+| `BODY_ADJUST` | "Step back — show your full body" | `🧍` |
+| `BODY_ANALYSIS` | "Stay still — scanning posture" | `💪` |
+| `PROCESSING` | "Analyzing your data..." | `🔬` |
+| `COMPLETE` | "Scan complete!" | `✅` |
+| `ERROR` | "Something went wrong — please retry" | `❌` |
+
+**Update `_update_scan_status()` calls throughout `_run_scan()`** to always include both `message` (technical) and `ui_hint` (user-facing).
+
+**Update the `_countdown()` helper** to accept an optional `ui_hint` override per tick, so the countdown can update the time-remaining within the hint:
+```
+ui_hint = f"Stay still — {i}s remaining"
+```
+
+**During the ADJUST phases:**
+- Poll `_last_inference_results` every 0.5s inside the countdown loop.
+- If face/pose detected, update `ui_hint` to `"✅ Face detected — getting ready to capture"`.
+- If not detected, update to `"📍 Can't see your face — look directly at the camera"`.
+
+**Add a `stable_frames_pct` running update during capture:**
+- Every 3 seconds during face and body capture, compute the percentage of frames in the rolling buffer that are `quality_ok == True`.
+- Push this into `_scan_status["stable_frames_pct"]`.
+- Frontend can show a quality bar.
+
+### Acceptance Criteria
+- Every call to `_update_scan_status()` in `_run_scan()` includes both `message` and `ui_hint`.
+- `get_scan_status()` API response includes `ui_hint`, `phase_icon`, and `stable_frames_pct`.
+- During ADJUST phases, the `ui_hint` updates dynamically based on detection state.
+
+---
+
+## Phase 5 — Frontend: Surface Confidence, Quality, and "Not Assessed" States
+
+### Goal
+Make the results page feel medical-grade. Every biomarker must communicate its confidence and assessment status. "Not Assessed" must be visually distinct from "Normal".
+
+### What Needs to Change
+
+> [!NOTE]
+> This phase is **frontend-only**. No changes to `manager.py` or extractors are needed — all the data is already emitted by the backend. This phase is purely about rendering it correctly.
+
+**Key data already available in the API response but not displayed:**
+
+1. **`biomarker.confidence`** — available in every `BiomarkerSet` item via `_transform_biomarker_set()`.
+2. **`biomarker_summary[name]["status"]`** — already returns `"not_assessed"`, `"normal"`, `"low"`, `"high"` from `risk_engine.py`.
+3. **`trust_metadata`** — already injected into `_scan_status` at `phase="COMPLETE"` (line 1188).
+4. **`stable_frames_pct`** — new field added in Phase 4.
+
+**Rendering changes (in the React/Vite frontend):**
+
+#### Biomarker Cards
+- Add a **confidence badge** to each biomarker card (e.g., a small colored dot: green ≥ 0.8, yellow 0.5–0.8, red < 0.5).
+- If `status == "not_assessed"`: render the card with a **gray/muted style** and the label **"NOT ASSESSED"** instead of a risk level.
+- If `confidence < 0.5`: add a subtle disclaimer beneath the value: *"Low confidence — signal quality insufficient"*.
+
+#### System Risk Cards
+- Add a **"trust" indicator** alongside the overall risk level, derived from `trust_adjusted_confidence`.
+- If a system was **rejected** (`was_rejected == true`): show it as a grayed card with label **"Data Rejected — Retake Required"**.
+
+#### Scan Progress (Real-Time)
+- Map `phase_icon` + `ui_hint` from the polling endpoint directly to the progress overlay.
+- Show a **signal quality bar** (0–100%) using `stable_frames_pct` during capture phases.
+- Color the bar: green if ≥ 70%, yellow 50–70%, red < 50%.
+
+#### ADJUST Phase UX
+- During `FACE_ADJUST` and `BODY_ADJUST`, show a **silhouette guide overlay** on the video feed (a semi-transparent human outline showing ideal positioning).
+- Do **not** show any scanning animation or progress indicator during ADJUST — make it visually clear that no data is being captured yet.
+
+### Acceptance Criteria
+- No biomarker card shows "High Risk" without also showing its confidence score.
+- `not_assessed` biomarkers are visually distinct from `normal` biomarkers.
+- The ADJUST phase silhouette overlay is shown on the video feed.
+- `stable_frames_pct` is rendered as a quality bar during capture phases.
+
+---
+
+## Execution Order and Dependencies
+
+```mermaid
+graph TD
+    P1[Phase 1: ADJUST Sub-Phases] --> P2[Phase 2: Replace start_recording]
+    P2 --> P3[Phase 3: Reduce Duration + Quality Gate]
+    P3 --> P4[Phase 4: Rich UX Messaging]
+    P4 --> P5[Phase 5: Frontend Rendering]
+```
+
+Phase 1 and 2 are backend structural changes (no feature behavior change to extractors).  
+Phase 3 is the performance + signal quality improvement.  
+Phase 4 layers on top of Phase 3's new status fields.  
+Phase 5 is purely frontend and can be started in parallel with Phase 4.
+
+---
+
+## Files Changed Per Phase
+
+| Phase | Files Modified |
+|---|---|
+| 1 | `manager.py` only |
+| 2 | `manager.py`, `drivers.py` |
+| 3 | `manager.py` only |
+| 4 | `manager.py` only |
+| 5 | Frontend components (ScreeningPage, BiomarkerCard, ProgressOverlay) |
+
+---
+
+## Verification Plan
+
+### After Phase 1
+- Trigger a scan and observe `phase == "FACE_ADJUST"` in the polling response for 5s with no frames in the rolling buffer.
+
+### After Phase 2
+- Search codebase for `start_recording` and `stop_recording` — zero results in any scan code path.
+- Confirm `CameraCapture` has no `_recording_active` field.
+
+### After Phase 3
+- Time a full scan end-to-end — should be ≤ 37s from `start_scan()` to `phase == "COMPLETE"`.
+- Confirm extractors receive only frames where `quality_ok == True`.
+
+### After Phase 4
+- Poll `GET /hardware/status` during a scan — every response must include `ui_hint` and `phase_icon`.
+- Verify `stable_frames_pct` updates every ~3s during capture.
+
+### After Phase 5
+- Visual review: scan results page shows confidence badges, not_assessed gray cards, and quality bar.
+- End-to-end demo run with a judge — system should feel guided and trustworthy.

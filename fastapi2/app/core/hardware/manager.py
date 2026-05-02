@@ -58,7 +58,7 @@ class HardwareConfig:
     camera_index: int = 0
     camera_fps: int = 30
     face_capture_seconds: int = 10
-    body_capture_seconds: int = 10
+    body_capture_seconds: int = 8
     
     # Serial ports  (matched to physical wiring: radar=COM6, thermal=COM7)
     radar_port: str = "COM6"
@@ -166,6 +166,9 @@ class HardwareManager:
             "progress": 0,
             "screening_id": None,
             "report_id": None,
+            "ui_hint": "Ready for screening",
+            "phase_icon": "⚡",
+            "stable_frames_pct": None,
             "user_warnings": {
                 "distance_warning": None,  # "too_close", "too_far", or None
                 "face_detected": True,
@@ -173,11 +176,7 @@ class HardwareManager:
             },
         }
         self._scan_lock = threading.Lock()
-        
-        # Recording state (Broadcast Model)
-        self._recording_buffer: List[Dict[str, Any]] = []  # Stores {'frame': np.ndarray, 'timestamp': float}
-        self._recording_active = False
-        self._recording_lock = threading.Lock()
+
         
         # Concurrent rolling capture buffer (30s at 30fps)
         # Always fills in background; face+vitals phase pulls from here — no wasted "Get Ready" wait
@@ -502,8 +501,10 @@ class HardwareManager:
                 
                 # ── Push to rolling concurrent capture buffer ──
                 if self._rolling_capture_active:
+                    with self._scan_lock:
+                        quality_ok = self._scan_status.get("user_warnings", {}).get("quality_ok", True)
                     with self._rolling_lock:
-                        self._rolling_buffer.append({'frame': frame.copy(), 'timestamp': time.time()})
+                        self._rolling_buffer.append({'frame': frame.copy(), 'timestamp': time.time(), 'quality_ok': quality_ok})
             else:
                 time.sleep(0.01)  # Brief sleep if no frame
     
@@ -590,10 +591,29 @@ class HardwareManager:
         with self._scan_lock:
             return self._scan_status.copy()
     
-    def _update_scan_status(self, **kwargs):
+    def _update_scan_status(
+        self, 
+        phase: str = None, 
+        message: str = None, 
+        progress: int = None,
+        user_warnings: Dict = None,
+        ui_hint: str = None,
+        phase_icon: str = None,
+        stable_frames_pct: float = None,
+        **kwargs
+    ):
         """Thread-safe status update."""
+        update_dict = kwargs.copy()
+        if phase is not None: update_dict["phase"] = phase
+        if message is not None: update_dict["message"] = message
+        if progress is not None: update_dict["progress"] = progress
+        if user_warnings is not None: update_dict["user_warnings"] = user_warnings
+        if ui_hint is not None: update_dict["ui_hint"] = ui_hint
+        if phase_icon is not None: update_dict["phase_icon"] = phase_icon
+        if stable_frames_pct is not None: update_dict["stable_frames_pct"] = stable_frames_pct
+        
         with self._scan_lock:
-            self._scan_status.update(kwargs)
+            self._scan_status.update(update_dict)
 
     def _wait_for_alignment(self, target_phase: str, timeout: int = None):
         """
@@ -720,37 +740,32 @@ class HardwareManager:
         logger.info("Scan thread launched successfully")
         return True
 
-    def _get_calibration_data(self, duration_seconds: int = 5) -> Tuple[List[Dict[str, Any]], List[np.ndarray]]:
-        """Collect raw data for baseline calibration."""
-        thermal_frames = []
-        rgb_frames = []
-        
-        # Start recording for RGB
-        with self._recording_lock:
-            self._recording_buffer = []
-            self._recording_active = True
-            
-        # Collect for duration
-        start_t = time.time()
-        while time.time() - start_t < duration_seconds:
-            if not self._scan_active: break
-            
-            # Collect thermal
-            if self.thermal:
-                while not self.thermal.data_queue.empty():
-                    try:
-                        thermal_frames.append(self.thermal.data_queue.get_nowait())
-                    except:
-                        break
-            
-            time.sleep(0.1) # 10Hz sampling
-            
-        self._recording_active = False
-        with self._recording_lock:
-            rgb_frames = [item['frame'] for item in self._recording_buffer]
-            
-        return thermal_frames, rgb_frames
+
     
+    def _filter_stable_frames(
+        self,
+        raw_captures: List[Dict],
+        phase: str,      # "face" or "body"
+        min_ratio: float = 0.5
+    ) -> Tuple[List[Dict], float]:
+        """Filter out frames with poor signal quality."""
+        if not raw_captures:
+            return [], 0.0
+            
+        stable_frames = [f for f in raw_captures if f.get("quality_ok", True)]
+        stability_ratio = len(stable_frames) / len(raw_captures)
+        
+        if stability_ratio < min_ratio:
+            logger.warning(f"Low stability during {phase} phase: {stability_ratio*100:.1f}%")
+            self._update_scan_status(
+                message="⚠️ Signal unstable — please hold still and retry",
+                stable_frames_pct=round(stability_ratio * 100, 1)
+            )
+        else:
+            self._update_scan_status(stable_frames_pct=round(stability_ratio * 100, 1))
+            
+        return stable_frames, stability_ratio
+
     def _run_scan(
         self,
         patient_id: str,
@@ -865,24 +880,50 @@ class HardwareManager:
             # Camera, radar, and thermal collect SIMULTANEOUSLY so timestamps align.
             # 30s gives 6-10 full breath cycles for reliable FFT + 30-40 heartbeats for rPPG.
             # ============================================================
-            FACE_VITALS_DURATION = 30  # seconds — do NOT reduce; more data = higher confidence
+            FACE_VITALS_DURATION = 12  # seconds
             
             if self.camera:
+                self._update_scan_status(
+                    phase="FACE_ADJUST",
+                    message="📍 Position your face in the frame...",
+                    progress=8,
+                    ui_hint="Align your face in the center of the camera",
+                    phase_icon="📍"
+                )
+                logger.info("📍 Starting FACE_ADJUST phase")
+                
+                self._rolling_capture_active = False
+                self._alignment_event.clear()
+                
+                self._countdown(5, "📍 Position your face in the frame —", "FACE_ADJUST")
+                
+                warning = self._current_distance_warning
+                with self._scan_lock:
+                    user_warnings = self._scan_status.get("user_warnings", {})
+                
+                aligned = (user_warnings.get("face_detected") and warning is None)
+                if not aligned:
+                    self._update_scan_status(
+                        phase="FACE_ADJUST_EXTENDED",
+                        message="Still adjusting — please look at the camera",
+                        progress=9,
+                        ui_hint="Look directly at the camera and ensure good lighting",
+                        phase_icon="📍"
+                    )
+                    self._wait_for_alignment("FACE_ANALYSIS", timeout=5)
+                    
                 self._update_scan_status(
                     phase="FACE_AND_VITALS",
                     message="Please sit still and look at the camera...",
                     progress=10,
+                    ui_hint="Breathe normally. Avoid talking or sudden movements.",
+                    phase_icon="🎯"
                 )
                 logger.info(f"🎯 Phase 1: Concurrent Face + Vitals ({FACE_VITALS_DURATION}s unified window)")
                 
-                # Wait for user to be correctly positioned before we start the clock
-                self._wait_for_alignment("FACE_ANALYSIS")
-                
-                # Brief 3s alert (replaces the wasted 10s countdown that threw data away)
-                self._countdown(3, "Hold still, capture starts in", "FACE_AND_VITALS")
-                
                 # ── Sync Point: Clear ALL sensor queues simultaneously ──
-                # Everything collected AFTER this moment is temporally aligned with the camera.
+                # User has already been settled during FACE_ADJUST (5s), so we
+                # skip the old 3s pre-capture countdown — it was redundant.
                 logger.info("⏱️  Sync point: clearing all sensor queues simultaneously")
                 for q_reader in [self.radar, self.thermal]:
                     if q_reader:
@@ -898,21 +939,31 @@ class HardwareManager:
                 # ── 30-second concurrent countdown ──
                 # Camera fills rolling buffer; radar + thermal collect from their threads.
                 # Real-time quality gate warns user if they move or light changes.
-                logger.info(f"▶️  Concurrent capture START: {FACE_VITALS_DURATION}s")
+                logger.info(f"▶️  Concurrent capture START: {FACE_VITALS_DURATION}s (early-stop at 6 stable seconds)")
+                stable_seconds = 0
                 for i in range(FACE_VITALS_DURATION, 0, -1):
                     if not self._scan_active:
                         break
                     quality_ok = self._scan_status.get("user_warnings", {}).get("quality_ok", True)
                     brightness = self._scan_status.get("user_warnings", {}).get("brightness", 128)
-                    if not quality_ok:
+                    if quality_ok:
+                        stable_seconds += 1
+                        self._update_scan_status(
+                            message=f"✅ Good signal — {i}s remaining (stable: {stable_seconds}s)",
+                            phase="FACE_AND_VITALS",
+                            ui_hint="Keep holding still. Signal is excellent.",
+                            phase_icon="✅"
+                        )
+                        if stable_seconds >= 6:
+                            logger.info(f"⚡ Early stop: 6 consecutive stable seconds reached at t={FACE_VITALS_DURATION - i + 1}s")
+                            break
+                    else:
+                        stable_seconds = 0  # reset on bad frame
                         self._update_scan_status(
                             message=f"⚠️ Hold still / improve lighting — {i}s remaining (Brightness: {brightness:.0f})",
-                            phase="FACE_AND_VITALS"
-                        )
-                    else:
-                        self._update_scan_status(
-                            message=f"Scanning... {i}s remaining",
-                            phase="FACE_AND_VITALS"
+                            phase="FACE_AND_VITALS",
+                            ui_hint="Motion detected. Please stay still and look at the camera.",
+                            phase_icon="⚠️"
                         )
                     time.sleep(1.0)
                 
@@ -925,6 +976,8 @@ class HardwareManager:
                     raw_captures = list(self._rolling_buffer)
                 
                 logger.info(f"Rolling buffer yielded {len(raw_captures)} frames at sync point")
+                raw_captures, face_stability = self._filter_stable_frames(raw_captures, "face")
+                logger.info(f"Retained {len(raw_captures)} stable frames for face analysis")
                 
                 # Aggregate radar + thermal NOW (perfectly synchronized with camera window)
                 radar_data = self._aggregate_radar()
@@ -981,34 +1034,64 @@ class HardwareManager:
             # ============================================================
             # Phase 2: Body capture
             # ============================================================
-            # ============================================================
-            # Phase 2: Body capture
-            # ============================================================
             if self.camera:
+                self._update_scan_status(
+                    phase="BODY_ADJUST",
+                    message="🧍 Step back so your full body is visible...",
+                    progress=42,
+                    ui_hint="Step back to ensure your entire body from head to toe is in the frame",
+                    phase_icon="🧍"
+                )
+                logger.info("🧍 Starting BODY_ADJUST phase")
+                
+                self._rolling_capture_active = False
+                self._alignment_event.clear()
+                
+                self._countdown(5, "🧍 Step back so your full body is visible —", "BODY_ADJUST")
+                
+                warning = self._current_distance_warning
+                with self._scan_lock:
+                    user_warnings = self._scan_status.get("user_warnings", {})
+                
+                aligned = (warning is None and user_warnings.get("pose_detected"))
+                if not aligned:
+                    self._update_scan_status(
+                        phase="BODY_ADJUST_EXTENDED",
+                        message="Still adjusting — please step back",
+                        progress=44,
+                        ui_hint="Move further back. We need to see your feet and head.",
+                        phase_icon="🧍"
+                    )
+                    self._wait_for_alignment("BODY_ANALYSIS", timeout=5)
+
                 self._update_scan_status(
                     phase="BODY_ANALYSIS",
                     message="Analyzing posture and movement...",
                     progress=45,
+                    ui_hint="Stand naturally. Try not to shift your weight.",
+                    phase_icon="🚶"
                 )
                 
                 logger.info(f"🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
                 
-                # Wait for user to be correctly positioned (max 5 seconds, then proceed)
-                self._wait_for_alignment("BODY_ANALYSIS", timeout=5)
-                
                 # Reduced from 10s to 3s — rolling buffer means we start fast
                 self._countdown(3, "Get Ready...", "BODY_ANALYSIS")
+                # ── Activate rolling capture buffer ──
+                with self._rolling_lock:
+                    self._rolling_buffer.clear()
+                self._rolling_capture_active = True
                 
-                # Start recording (DRIVER LEVEL)
-                self.camera.start_recording()
-                
-                # Capture Timer (10s)
+                # Capture Timer
                 self._countdown(self.config.body_capture_seconds, "Scanning Body...", "BODY_ANALYSIS")
                 
-                # Stop recording (DRIVER LEVEL)
-                raw_captures = self.camera.stop_recording()
+                # Stop capture
+                self._rolling_capture_active = False
+                with self._rolling_lock:
+                    raw_captures = list(self._rolling_buffer)
                 
-                logger.info(f"Captured {len(raw_captures)} body frames from hardware driver")
+                logger.info(f"Captured {len(raw_captures)} body frames from rolling buffer")
+                raw_captures, pose_stability = self._filter_stable_frames(raw_captures, "body")
+                logger.info(f"Retained {len(raw_captures)} stable frames for body analysis")
                 
                 # Post-process ALL frames for pose (no subsampling).
                 # CNS extractor requires min 200 frames for reliable analysis.
@@ -1064,6 +1147,18 @@ class HardwareManager:
                     )
             except Exception as e:
                 logger.warning(f"Motion quality assessment failed (non-critical): {e}")
+
+            # ── Blend capture stability into motion quality score ──────────────────────
+            # face_stability and pose_stability are computed by _filter_stable_frames.
+            # A bad face capture (low face_stability) should suppress confidence globally.
+            if 'face_stability' in dir():  # guard: may be 0.0 if camera skipped
+                combined_stability = (
+                    0.6 * face_stability +
+                    0.4 * (pose_stability if 'pose_stability' in dir() else 1.0)
+                )
+                if combined_stability > 0:
+                    motion_quality_score = min(motion_quality_score, combined_stability)
+                    logger.info(f"Combined motion_quality after stability blend: {motion_quality_score:.2f}")
 
             request_payload = self._build_screening_request(
                 patient_id=patient_id,

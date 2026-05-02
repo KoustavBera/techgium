@@ -18,6 +18,9 @@ export function useScreening() {
         message: 'SYSTEM READY',
         progress: 0,
         userWarnings: null,
+        uiHint: null,
+        phaseIcon: null,
+        stableFramesPct: null,
     })
 
     // Convenience aliases (keep API surface the same for consumers)
@@ -25,6 +28,9 @@ export function useScreening() {
     const message = scanStatus.message
     const progress = scanStatus.progress
     const userWarnings = scanStatus.userWarnings
+    const uiHint = scanStatus.uiHint
+    const phaseIcon = scanStatus.phaseIcon
+    const stableFramesPct = scanStatus.stableFramesPct
     const [trustMetadata, setTrustMetadata] = useState(null)
 
     // Results
@@ -84,6 +90,9 @@ export function useScreening() {
                 message: status.message,
                 progress: status.progress ?? 0,
                 userWarnings: status.user_warnings ?? null,
+                uiHint: status.ui_hint ?? null,
+                phaseIcon: status.phase_icon ?? null,
+                stableFramesPct: status.stable_frames_pct ?? null,
             })
 
             // Terminal States
@@ -190,6 +199,9 @@ export function useScreening() {
         message,
         progress,
         userWarnings,
+        uiHint,
+        phaseIcon,
+        stableFramesPct,
         trustMetadata,
         reportId,
         errorMsg,
