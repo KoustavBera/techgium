@@ -5,8 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   AppTheme._();
 
-  static const Color _seedColor = Color(0xFF00897B);
-  static const Color _secondaryColor = Color(0xFF0288D1);
+  static const Color _seedColor = Color(0xFF0B57D0);
+  static const Color _secondaryColor = Color(0xFF005A99);
 
   // ─── Light Theme ───────────────────────────────────────────────────────────
   static ThemeData get light {
@@ -47,6 +47,7 @@ class AppTheme {
   // ─── Shared Sub-Themes ─────────────────────────────────────────────────────
   static FlexSubThemesData _subThemesData() {
     return const FlexSubThemesData(
+      blendOnColors: false,
       // AppBar
       appBarScrolledUnderElevation: 4.0,
       appBarBackgroundSchemeColor: SchemeColor.surface,

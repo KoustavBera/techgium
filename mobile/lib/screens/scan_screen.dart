@@ -282,7 +282,19 @@ class _ScanScreenState extends State<ScanScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.white,
-        title: const Text('Scan QR Code'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/images/heart_icon.png',
+              height: 24,
+              width: 24,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 8),
+            const Text('Scan QR Code'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: Icon(_torchEnabled ? Icons.flash_on : Icons.flash_off),
