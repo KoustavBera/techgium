@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +8,22 @@ import '../widgets/report_card.dart';
 import '../widgets/delete_confirmation_dialog.dart';
 import 'pdf_viewer_screen.dart';
 
+PageRouteBuilder<T> _sharedAxisRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (_, __, ___) => page,
+    transitionDuration: const Duration(milliseconds: 350),
+    reverseTransitionDuration: const Duration(milliseconds: 300),
+    transitionsBuilder: (_, animation, secondaryAnimation, child) {
+      return SharedAxisTransition(
+        animation: animation,
+        secondaryAnimation: secondaryAnimation,
+        transitionType: SharedAxisTransitionType.scaled,
+        child: child,
+      );
+    },
+  );
+}
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -15,7 +32,19 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       drawer: const _AppDrawer(),
       appBar: AppBar(
-        title: const Text('Chiranjeevi'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/images/heart_icon.png',
+              height: 28,
+              width: 28,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 10),
+            const Text('Chiranjeevi'),
+          ],
+        ),
         centerTitle: false,
         actions: [
           IconButton(
@@ -97,7 +126,20 @@ class _AppDrawer extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.health_and_safety_rounded, size: 48, color: colorScheme.onPrimary),
+              ColorFiltered(
+                colorFilter: const ColorFilter.matrix(<double>[
+                  1, 0, 0, 0, 0,
+                  0, 1, 0, 0, 0,
+                  0, 0, 1, 0, 0,
+                  0, 0, 0, 1, 0,
+                ]),
+                child: Image.asset(
+                  'assets/images/heart_icon.png',
+                  height: 52,
+                  width: 52,
+                  fit: BoxFit.contain,
+                ),
+              ),
               const SizedBox(height: 12),
               Text(
                 'Chiranjeevi',
@@ -138,7 +180,12 @@ class _AppDrawer extends StatelessWidget {
               context: context,
               applicationName: 'Chiranjeevi',
               applicationVersion: '1.0.0',
-              applicationIcon: Icon(Icons.health_and_safety_rounded, color: colorScheme.primary, size: 48),
+              applicationIcon: Image.asset(
+                'assets/images/heart_icon.png',
+                height: 48,
+                width: 48,
+                fit: BoxFit.contain,
+              ),
               applicationLegalese: '© 2026 Techgium',
             );
           },
@@ -191,9 +238,7 @@ class _HomeBody extends StatelessWidget {
                 animationDelay: Duration(milliseconds: entry.key * 80),
                 onView: () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => PdfViewerScreen(report: entry.value),
-                  ),
+                  _sharedAxisRoute(PdfViewerScreen(report: entry.value)),
                 ),
                 onDelete: () => showDialog(
                   context: context,

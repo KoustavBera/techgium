@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/report_provider.dart';
@@ -5,6 +6,22 @@ import '../widgets/empty_state.dart';
 import '../widgets/report_card.dart';
 import '../widgets/delete_confirmation_dialog.dart';
 import 'pdf_viewer_screen.dart';
+
+PageRouteBuilder<T> _sharedAxisRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (_, __, ___) => page,
+    transitionDuration: const Duration(milliseconds: 350),
+    reverseTransitionDuration: const Duration(milliseconds: 300),
+    transitionsBuilder: (_, animation, secondaryAnimation, child) {
+      return SharedAxisTransition(
+        animation: animation,
+        secondaryAnimation: secondaryAnimation,
+        transitionType: SharedAxisTransitionType.scaled,
+        child: child,
+      );
+    },
+  );
+}
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -54,9 +71,7 @@ class HistoryScreen extends StatelessWidget {
                   animationDelay: Duration(milliseconds: index * 80),
                   onView: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => PdfViewerScreen(report: report),
-                    ),
+                    _sharedAxisRoute(PdfViewerScreen(report: report)),
                   ),
                   onDelete: () => showDialog(
                     context: context,

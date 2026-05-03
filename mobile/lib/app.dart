@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
@@ -17,26 +18,18 @@ class ChiranjeeviApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       initialRoute: '/home',
       onGenerateRoute: (settings) {
-        // Spring-physics page transition
         return PageRouteBuilder(
           settings: settings,
-          pageBuilder: (context, animation, secondaryAnimation) {
-            final child = _routeWidgetFor(settings.name);
-            return child;
-          },
-          transitionDuration: const Duration(milliseconds: 400),
-          reverseTransitionDuration: const Duration(milliseconds: 350),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              _routeWidgetFor(settings.name),
+          transitionDuration: const Duration(milliseconds: 350),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final tween = Tween(begin: const Offset(0.0, 0.04), end: Offset.zero)
-                .chain(CurveTween(curve: Curves.easeOutCubic));
-            final fadeTween = Tween<double>(begin: 0.0, end: 1.0)
-                .chain(CurveTween(curve: Curves.easeOut));
-            return FadeTransition(
-              opacity: animation.drive(fadeTween),
-              child: SlideTransition(
-                position: animation.drive(tween),
-                child: child,
-              ),
+            return SharedAxisTransition(
+              animation: animation,
+              secondaryAnimation: secondaryAnimation,
+              transitionType: SharedAxisTransitionType.scaled,
+              child: child,
             );
           },
         );
