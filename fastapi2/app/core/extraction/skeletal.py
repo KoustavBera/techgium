@@ -78,6 +78,9 @@ class SkeletalExtractor(BaseExtractor):
         bs = self._create_biomarker_set()
 
         pose_sequence = data.get("pose_sequence", [])
+        still_sequence = data.get("still_pose_sequence", [])
+        walk_sequence = data.get("walk_pose_sequence", [])
+        
         fps = data.get("fps") or data.get("frame_rate")
         if fps:
             self.sample_rate = float(fps)
@@ -89,20 +92,22 @@ class SkeletalExtractor(BaseExtractor):
             return bs
 
         pose_arr = np.array(pose_sequence, dtype=np.float32)  # (F, 33, 4)
+        still_array = np.array(still_sequence, dtype=np.float32) if still_sequence else pose_arr
+        walk_array = np.array(walk_sequence, dtype=np.float32) if walk_sequence else pose_arr
 
-        is_walking = self._detect_walking(pose_arr)
+        is_walking = self._detect_walking(walk_array)
         mode = "walking" if is_walking else "stationary"
-        logger.info(f"Skeletal: {len(pose_arr)} frames, mode={mode}")
+        logger.info(f"Skeletal: {len(pose_arr)} total frames, mode={mode}")
 
         # Always-run biomarkers (work for any subject)
         self._extract_bilateral_symmetry(pose_arr, bs)
-        self._extract_stance_stability(pose_arr, bs)   # also produces sway_entropy
-        self._extract_joint_kinematics(pose_arr, bs)
-        self._extract_posture_alignment(pose_arr, bs)
+        self._extract_stance_stability(still_array, bs)   # also produces sway_entropy
+        self._extract_joint_kinematics(walk_array, bs)
+        self._extract_posture_alignment(still_array, bs)
 
         # Walking-only biomarkers
         if is_walking:
-            self._extract_gait_step_symmetry(pose_arr, bs)
+            self._extract_gait_step_symmetry(walk_array, bs)
 
         bs.extraction_time_ms = (time.time() - t0) * 1000
         self._extraction_count += 1

@@ -18,6 +18,7 @@ export default function ScreeningPage() {
     const {
         scanState,
         phase,
+        activity,
         message,
         progress,
         userWarnings,
@@ -70,6 +71,7 @@ export default function ScreeningPage() {
                     userWarnings={userWarnings}
                     scanState={scanState}
                     phase={phase}
+                    activity={activity}
                     uiHint={uiHint}
                     phaseIcon={phaseIcon}
                 />

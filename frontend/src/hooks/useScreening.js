@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as API from '../lib/api' // using the standard fetch wrapper
 import { API_BASE } from '../lib/api'
+import beepSound from '../assets/beep.mp3'
 
 const POLL_INTERVAL_MS = 500
 const SESSION_PATIENT_KEY = 'chiranjeevi_patient_id'
@@ -15,6 +16,7 @@ export function useScreening() {
     // Combined poll payload — single setState per tick avoids cascading renders
     const [scanStatus, setScanStatus] = useState({
         phase: 'IDLE',
+        activity: null,
         message: 'SYSTEM READY',
         progress: 0,
         userWarnings: null,
@@ -25,6 +27,7 @@ export function useScreening() {
 
     // Convenience aliases (keep API surface the same for consumers)
     const phase = scanStatus.phase
+    const activity = scanStatus.activity
     const message = scanStatus.message
     const progress = scanStatus.progress
     const userWarnings = scanStatus.userWarnings
@@ -32,6 +35,43 @@ export function useScreening() {
     const phaseIcon = scanStatus.phaseIcon
     const stableFramesPct = scanStatus.stableFramesPct
     const [trustMetadata, setTrustMetadata] = useState(null)
+
+    // Beep on phase transitions
+    const prevPhaseRef = useRef(null)
+    const beepAudioRef = useRef(null)
+
+    useEffect(() => {
+        // Initialise the Audio object once
+        beepAudioRef.current = new Audio(beepSound)
+        beepAudioRef.current.volume = 0.8
+    }, [])
+
+    useEffect(() => {
+        const currentPhase = scanStatus.phase
+        const prevPhase = prevPhaseRef.current
+
+        // Skip the very first render and don't beep on non-scan phases
+        const skipPhases = ['IDLE', 'INITIALIZING', 'ERROR']
+        if (
+            prevPhase !== null &&
+            currentPhase !== prevPhase &&
+            !skipPhases.includes(currentPhase)
+        ) {
+            try {
+                const audio = beepAudioRef.current
+                if (audio) {
+                    audio.currentTime = 0
+                    audio.play().catch(() => {
+                        // Browser may block autoplay before user interaction — silently ignore
+                    })
+                }
+            } catch {
+                // Silently fail if audio isn't available
+            }
+        }
+
+        prevPhaseRef.current = currentPhase
+    }, [scanStatus.phase])
 
     // Results
     const [reportId, setReportId] = useState(null)
@@ -87,6 +127,7 @@ export function useScreening() {
 
             setScanStatus({
                 phase: status.phase,
+                activity: status.activity ?? null,
                 message: status.message,
                 progress: status.progress ?? 0,
                 userWarnings: status.user_warnings ?? null,
@@ -179,7 +220,7 @@ export function useScreening() {
     // 5. Reset
     const resetScreening = useCallback(() => {
         setScanState('idle')
-        setScanStatus({ phase: 'IDLE', message: 'SYSTEM READY', progress: 0, userWarnings: null })
+        setScanStatus({ phase: 'IDLE', activity: null, message: 'SYSTEM READY', progress: 0, userWarnings: null })
     }, [])
 
     // Lifecycle
@@ -196,6 +237,7 @@ export function useScreening() {
     return {
         scanState,
         phase,
+        activity,
         message,
         progress,
         userWarnings,

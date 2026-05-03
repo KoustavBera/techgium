@@ -1724,6 +1724,45 @@ class EnhancedPatientReportGenerator:
             header_group.append(RiskIndicator(risk_level=risk_level, width=200, height=28))
             header_group.append(Spacer(1, 10))
 
+            # ── Assessment Incomplete block ────────────────────────────────────────
+            # Render an informative notice if the system was rejected by the trust
+            # envelope OR if it only has the sentinel 'cns_data_quality' biomarker
+            # (which means CNS was skipped due to insufficient pose data quality).
+            was_rejected = summary.get("was_rejected", False)
+            only_sentinel = (
+                len(biomarkers) == 1 and "cns_data_quality" in biomarkers
+            )
+            if was_rejected or only_sentinel:
+                reason = summary.get("alerts", ["Data quality insufficient for reliable analysis"])[0]
+                if only_sentinel:
+                    quality_val = biomarkers.get("cns_data_quality", {}).get("value", 0)
+                    reason = (
+                        f"Body pose tracking quality was below the required threshold "
+                        f"(score: {quality_val:.2f}/1.00). "
+                        "This prevents false positives in neurological assessment."
+                    )
+                notice_style = ParagraphStyle(
+                    "IncompleteNotice",
+                    parent=self._styles.get("BiomarkerExplanation", self._styles["Normal"]),
+                    fontSize=9,
+                    leading=14,
+                    textColor=HexColor("#92400E"),
+                    backColor=HexColor("#FEF3C7"),
+                    borderPad=8,
+                    leftIndent=6,
+                    rightIndent=6,
+                )
+                header_group.append(Paragraph(
+                    f"<b>Assessment Incomplete</b> — {reason} "
+                    "For a complete CNS assessment, ensure the camera has a clear full-body view "
+                    "with good, even lighting.",
+                    notice_style,
+                ))
+                header_group.append(Spacer(1, 10))
+                story.append(KeepTogether(header_group))
+                story.append(Spacer(1, 25))
+                continue  # Skip biomarker table and explanation table for this system
+
             if biomarkers:
                 table_data = [["What We Measured", "Your Value", "Normal Range", "Status"]]
                 for bm_name, bm_data in biomarkers.items():

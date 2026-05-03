@@ -162,6 +162,7 @@ class HardwareManager:
         self._scan_status: Dict[str, Any] = {
             "state": "idle",
             "phase": "IDLE",
+            "activity": None,
             "message": "Ready for screening",
             "progress": 0,
             "screening_id": None,
@@ -594,6 +595,7 @@ class HardwareManager:
     def _update_scan_status(
         self, 
         phase: str = None, 
+        activity: str = None,
         message: str = None, 
         progress: int = None,
         user_warnings: Dict = None,
@@ -605,6 +607,7 @@ class HardwareManager:
         """Thread-safe status update."""
         update_dict = kwargs.copy()
         if phase is not None: update_dict["phase"] = phase
+        if activity is not None: update_dict["activity"] = activity
         if message is not None: update_dict["message"] = message
         if progress is not None: update_dict["progress"] = progress
         if user_warnings is not None: update_dict["user_warnings"] = user_warnings
@@ -1064,46 +1067,72 @@ class HardwareManager:
                     )
                     self._wait_for_alignment("BODY_ANALYSIS", timeout=5)
 
-                self._update_scan_status(
-                    phase="BODY_ANALYSIS",
-                    message="Analyzing posture and movement...",
-                    progress=45,
-                    ui_hint="Stand naturally. Try not to shift your weight.",
-                    phase_icon="🚶"
-                )
+                logger.info(f"🚶 Phase 2: Body capture")
                 
-                logger.info(f"🚶 Phase 2: Body capture ({self.config.body_capture_seconds}s)")
+                body_protocol = [
+                    {
+                        "activity": "still_standing",
+                        "duration_s": self.config.body_capture_seconds,
+                        "instruction": "Stand still, arms relaxed by your side. Look straight ahead.",
+                        "ui_hint": "Do NOT move. We are measuring your balance and tremor.",
+                        "phase_icon": "🧍"
+                    },
+                    {
+                        "activity": "walk_forward_back",
+                        "duration_s": self.config.body_capture_seconds,
+                        "instruction": "Walk forward 3 steps, then walk back to start. Repeat.",
+                        "ui_hint": "Walk naturally. We are measuring your gait.",
+                        "phase_icon": "🚶"
+                    }
+                ]
                 
-                # Reduced from 10s to 3s — rolling buffer means we start fast
-                self._countdown(3, "Get Ready...", "BODY_ANALYSIS")
-                # ── Activate rolling capture buffer ──
-                with self._rolling_lock:
-                    self._rolling_buffer.clear()
-                self._rolling_capture_active = True
-                
-                # Capture Timer
-                self._countdown(self.config.body_capture_seconds, "Scanning Body...", "BODY_ANALYSIS")
-                
-                # Stop capture
-                self._rolling_capture_active = False
-                with self._rolling_lock:
-                    raw_captures = list(self._rolling_buffer)
-                
-                logger.info(f"Captured {len(raw_captures)} body frames from rolling buffer")
-                raw_captures, pose_stability = self._filter_stable_frames(raw_captures, "body")
-                logger.info(f"Retained {len(raw_captures)} stable frames for body analysis")
-                
-                # Post-process ALL frames for pose (no subsampling).
-                # CNS extractor requires min 200 frames for reliable analysis.
-                # At 30fps × 10s = 300 frames; subsampling to 150 starved the
-                # CNS and skeletal extractors below their minimums.
                 pose_sequence = []
-                for item in raw_captures:
-                    pose = self.camera.extract_pose_from_frame(item['frame'])
-                    if pose is not None:
-                        pose_sequence.append(pose)
-
-                logger.info(f"Extracted {len(pose_sequence)} pose frames from {len(raw_captures)} body captures")
+                still_pose_sequence = []
+                walk_pose_sequence = []
+                pose_stability_list = []
+                
+                for p in body_protocol:
+                    self._update_scan_status(
+                        phase="BODY_ANALYSIS",
+                        activity=p["activity"],
+                        message=p["instruction"],
+                        progress=45,
+                        ui_hint=p["ui_hint"],
+                        phase_icon=p["phase_icon"]
+                    )
+                    
+                    self._countdown(3, "Get Ready...", "BODY_ANALYSIS")
+                    
+                    with self._rolling_lock:
+                        self._rolling_buffer.clear()
+                    self._rolling_capture_active = True
+                    
+                    self._countdown(p["duration_s"], f"Scanning ({p['activity']})...", "BODY_ANALYSIS")
+                    
+                    self._rolling_capture_active = False
+                    with self._rolling_lock:
+                        raw_captures = list(self._rolling_buffer)
+                    
+                    logger.info(f"Captured {len(raw_captures)} frames for {p['activity']}")
+                    raw_captures, p_stability = self._filter_stable_frames(raw_captures, f"body_{p['activity']}")
+                    pose_stability_list.append(p_stability)
+                    
+                    current_pose_sequence = []
+                    for item in raw_captures:
+                        pose = self.camera.extract_pose_from_frame(item['frame'])
+                        if pose is not None:
+                            current_pose_sequence.append(pose)
+                            pose_sequence.append(pose)
+                            
+                    if p["activity"] == "still_standing":
+                        still_pose_sequence = current_pose_sequence
+                    elif p["activity"] == "walk_forward_back":
+                        walk_pose_sequence = current_pose_sequence
+                        
+                    logger.info(f"Extracted {len(current_pose_sequence)} pose frames for {p['activity']}")
+                
+                # Average stability across both sub-phases
+                pose_stability = sum(pose_stability_list) / len(pose_stability_list) if pose_stability_list else 0.0
             
             self._update_scan_status(progress=70)
             
@@ -1148,17 +1177,14 @@ class HardwareManager:
             except Exception as e:
                 logger.warning(f"Motion quality assessment failed (non-critical): {e}")
 
-            # ── Blend capture stability into motion quality score ──────────────────────
-            # face_stability and pose_stability are computed by _filter_stable_frames.
-            # A bad face capture (low face_stability) should suppress confidence globally.
-            if 'face_stability' in dir():  # guard: may be 0.0 if camera skipped
-                combined_stability = (
-                    0.6 * face_stability +
-                    0.4 * (pose_stability if 'pose_stability' in dir() else 1.0)
-                )
-                if combined_stability > 0:
-                    motion_quality_score = min(motion_quality_score, combined_stability)
-                    logger.info(f"Combined motion_quality after stability blend: {motion_quality_score:.2f}")
+            # ── Blend pose (body) capture stability into motion quality score ───────────
+            # Only pose_stability is relevant to CNS/body analysis.
+            # face_stability has been deliberately removed from this blend — a bad face
+            # capture (poor lighting, looking away) must not silently kill CNS analysis.
+            if 'pose_stability' in dir():  # guard: only set if body phase ran
+                if pose_stability > 0:
+                    motion_quality_score = min(motion_quality_score, pose_stability)
+                    logger.info(f"motion_quality after pose_stability blend: {motion_quality_score:.2f}")
 
             request_payload = self._build_screening_request(
                 patient_id=patient_id,
@@ -1166,6 +1192,8 @@ class HardwareManager:
                 esp32_data=esp32_data,
                 face_frames=face_frames if face_frames else None,
                 pose_sequence=pose_sequence if pose_sequence else None,
+                still_pose_sequence=still_pose_sequence if 'still_pose_sequence' in locals() and still_pose_sequence else None,
+                walk_pose_sequence=walk_pose_sequence if 'walk_pose_sequence' in locals() and walk_pose_sequence else None,
                 face_landmarks_sequence=face_landmarks_sequence if face_landmarks_sequence else None,
                 fps=self.config.camera_fps,
                 session_baseline=session_baseline,
@@ -1503,6 +1531,8 @@ class HardwareManager:
         esp32_data: Optional[Dict] = None,
         face_frames: Optional[List[np.ndarray]] = None,
         pose_sequence: Optional[List[np.ndarray]] = None,
+        still_pose_sequence: Optional[List[np.ndarray]] = None,
+        walk_pose_sequence: Optional[List[np.ndarray]] = None,
         face_landmarks_sequence: Optional[List[np.ndarray]] = None,
         fps: float = 30.0,
         session_baseline: Optional[Any] = None,
@@ -1612,6 +1642,10 @@ class HardwareManager:
             raw_data_context["raw_face_frames"] = face_frames
         if pose_sequence:
             raw_data_context["pose_sequence"] = pose_sequence
+        if still_pose_sequence:
+            raw_data_context["still_pose_sequence"] = still_pose_sequence
+        if walk_pose_sequence:
+            raw_data_context["walk_pose_sequence"] = walk_pose_sequence
         
         if session_baseline: # NEW
             raw_data_context["session_baseline"] = session_baseline

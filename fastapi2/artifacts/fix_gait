@@ -1,0 +1,271 @@
+# 5-Phase Plan: Guided Activity Protocol for CNS & Gait Analysis
+
+## Background
+
+The current system collects body pose data with a single generic instruction
+("Stand naturally. Try not to shift your weight.") while running the SAME scan
+for ALL biomarker systems simultaneously. This is fundamentally broken for CNS
+and Skeletal because different biomarkers need the patient to do different things:
+
+| Biomarker | Needs subject to… |
+|---|---|
+| Postural Entropy / Sway | Stand **perfectly still**, arms relaxed |
+| Tremor (Welch PSD) | Hold arms slightly extended, **don't move** |
+| Gait Variability (Zeni) | **Walk forward and back** (not in place) |
+| Step Length Symmetry | Walk a few steps |
+| Joint ROM | Slowly bend/extend arms and legs |
+| Posture Alignment | Stand tall, look straight ahead |
+
+Walking in place creates a periodic, predictable signal that is mathematically
+identical to the "overly rigid posture" pattern of Parkinson's disease.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Core Design Decision**: Should we run the body capture as **two sequential sub-phases** (still phase + walking phase), or should we **pick one and stick to it for the hackathon**?
+>
+> Option A (Full): Two sub-phases — ~8s still + ~8s walking. Richer data. More complex to implement.
+>
+> Option B (Simplified): One sub-phase (standing still). CNS and Skeletal both work stationary. Walking gait is "not assessed". Fastest to ship.
+>
+> **Recommendation: Option A** — but Phase 1 of this plan can be shipped independently without Phase 3.
+
+> [!WARNING]
+> The existing `body_capture_seconds = 8` config in `HardwareConfig` will need to be extended (to ~16s total) for the two sub-phase approach. This will increase total scan time.
+
+---
+
+## Phase 1 — Define the Activity Protocol in the Backend
+
+**Goal:** Create a machine-readable scan protocol that assigns each second of body capture to a specific patient activity.
+
+### What changes
+
+#### [MODIFY] [manager.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/hardware/manager.py)
+
+Split `BODY_ANALYSIS` into two sequential timed sub-phases with explicit activity names:
+
+```python
+# NEW protocol structure inside _run_scan()
+body_protocol = [
+    {
+        "activity": "still_standing",
+        "duration_s": 8,
+        "instruction": "Stand still, arms relaxed by your side. Look straight ahead.",
+        "ui_hint": "Do NOT move. We are measuring your balance and tremor.",
+        "phase_icon": "🧍",
+        "collects": ["posture_entropy", "tremor", "sway", "posture_alignment"]
+    },
+    {
+        "activity": "walk_forward_back",
+        "duration_s": 8,
+        "instruction": "Walk forward 3 steps, then walk back to start. Repeat.",
+        "ui_hint": "Walk naturally. We are measuring your gait.",
+        "phase_icon": "🚶",
+        "collects": ["gait_variability", "step_length_symmetry", "joint_rom"]
+    }
+]
+```
+
+During each sub-phase:
+1. Update `_scan_status` with `activity=` field (new key, consumed by frontend)
+2. Collect pose frames into separate buffers: `still_pose_sequence`, `walk_pose_sequence`
+3. At the end, merge both into one `pose_sequence` but also pass them separately as `data["still_pose_sequence"]` and `data["walk_pose_sequence"]` to the extractors
+
+#### [MODIFY] `_update_scan_status` — add `activity` key
+
+The status dict sent to the frontend needs a new `activity` field alongside `phase`.
+
+---
+
+## Phase 2 — Route Separate Buffers to Extractors
+
+**Goal:** The CNS and Skeletal extractors must receive only the frames that match their expected activity mode.
+
+### What changes
+
+#### [MODIFY] [manager.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/hardware/manager.py) — `_build_screening_request`
+
+Pass both buffers into the CNS and Skeletal data dicts:
+
+```python
+cns_data = {
+    "pose_sequence": still_pose_sequence,   # ← STILL frames only
+    "walk_pose_sequence": walk_pose_sequence, # ← WALK frames for gait
+    "motion_quality": motion_quality_score,
+    "fps": self.config.camera_fps,
+}
+```
+
+#### [MODIFY] [cns.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/extraction/cns.py)
+
+```python
+def extract(self, data):
+    pose_sequence = data.get("pose_sequence", [])       # STILL frames
+    walk_sequence = data.get("walk_pose_sequence", [])  # WALK frames
+
+    # Postural entropy + tremor → use still_pose_sequence
+    posture_entropy = self._calculate_posture_entropy(pose_array_still)
+    tremor_scores   = self._analyze_tremor(pose_array_still)
+
+    # Gait variability → use walk_pose_sequence (not still!)
+    if walk_sequence:
+        gait_var, heel_strikes = self._calculate_gait_variability(pose_array_walk)
+    else:
+        gait_var, heel_strikes = 0.045, np.array([])  # "Not Assessed"
+```
+
+This eliminates the core false-positive bug: sway/tremor no longer sees walking frames.
+
+#### [MODIFY] [skeletal.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/extraction/skeletal.py)
+
+Same pattern — use still frames for `_extract_stance_stability`, use walk frames for `_extract_gait_step_symmetry`.
+
+---
+
+## Phase 3 — Frontend: Activity-Aware Instruction Panel
+
+**Goal:** The camera feed should show the patient exactly what to do, matched to the current activity in real time.
+
+### What changes
+
+#### [MODIFY] [useScreening.js](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/frontend/src/hooks/useScreening.js)
+
+The polling response already includes all `_scan_status` fields. Add `activity` to the destructured state:
+
+```js
+const [activity, setActivity] = useState(null)
+// in polling effect:
+setActivity(data.activity ?? null)
+```
+
+#### [MODIFY] [CameraFeed.jsx](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/frontend/src/components/screening/CameraFeed.jsx)
+
+Add an **Activity Instruction Banner** overlaid on the camera feed:
+
+```jsx
+const ACTIVITY_STYLES = {
+    still_standing: {
+        icon: "🧍",
+        title: "Stand Still",
+        detail: "Arms relaxed. Look straight ahead. Don't move.",
+        color: "#10B981",  // green
+    },
+    walk_forward_back: {
+        icon: "🚶",
+        title: "Walk Forward & Back",
+        detail: "Walk 3 steps forward, then 3 steps back. Repeat.",
+        color: "#3B82F6",  // blue
+    }
+}
+```
+
+This banner should be a large, high-contrast overlay at the bottom of the camera feed, visible from ~1.5m away (kiosk distance).
+
+#### [MODIFY] [ScanProgress.jsx](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/frontend/src/components/screening/ScanProgress.jsx)
+
+Show which activity sub-phase is active and a countdown timer for it:
+
+```jsx
+{activity && (
+    <ActivityGuide activity={activity} timeRemaining={subPhaseTimeRemaining} />
+)}
+```
+
+---
+
+## Phase 4 — Activity Validator (False Positive Prevention)
+
+**Goal:** The extractors should detect if the patient violated the protocol (e.g., walked during the still phase) and invalidate affected biomarkers rather than compute false values.
+
+### What changes
+
+#### [MODIFY] [cns.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/extraction/cns.py) — `_calculate_posture_entropy`
+
+Add an **activity protocol validator** before computing sway entropy:
+
+```python
+def _validate_still_protocol(self, pose_array: np.ndarray) -> tuple[bool, str]:
+    """
+    Returns (is_valid, reason).
+    If the patient was walking/moving during a supposed 'still' phase,
+    the sway/tremor biomarkers are invalid.
+    """
+    hip_center = (pose_array[:, 23, :2] + pose_array[:, 24, :2]) / 2
+    velocities = np.linalg.norm(np.diff(hip_center, axis=0), axis=1)
+    mean_vel = np.mean(velocities)
+    
+    # Walking in place: mean_vel > 0.008 (tuned for MediaPipe normalized coords)
+    if mean_vel > 0.008:
+        return False, f"Excessive motion detected (v={mean_vel:.4f}). Protocol violation."
+    
+    return True, "ok"
+```
+
+If `is_valid=False`:
+- Return `normal_range=None` for posture_entropy (shows "Not Assessed — Patient Moving")
+- Log the violation clearly
+- Do NOT compute a false entropy value
+
+#### [MODIFY] [cns.py](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/fastapi2/app/core/extraction/cns.py) — `_calculate_gait_variability`
+
+Add the inverse validator for walk frames — if the patient was NOT walking, don't fake a gait score:
+
+```python
+def _validate_walk_protocol(self, pose_array) -> bool:
+    """Returns True only if genuine walking was detected (not in-place marching)."""
+    # Must have forward displacement (hip center moving across the frame over time)
+    hip_center = (pose_array[:, 23, :2] + pose_array[:, 24, :2]) / 2
+    total_displacement = np.linalg.norm(hip_center[-1] - hip_center[0])
+    return total_displacement > 0.05  # 5% of frame width of actual movement
+```
+
+---
+
+## Phase 5 — Silhouette Positioning Guide on Camera Feed
+
+**Goal:** Show a body silhouette outline on the camera feed that the patient steps into, ensuring correct framing and distance from the camera.
+
+### What changes
+
+#### [NEW] `SilhouetteOverlay.jsx` in `frontend/src/components/screening/`
+
+A React component that renders a translucent SVG body outline centered in the camera feed. Changes shape and color based on current activity:
+
+- **Face phase:** Head+shoulder oval, green when face aligns
+- **Still standing phase:** Full body upright silhouette, arms at sides
+- **Walking phase:** Full body silhouette with animated walking legs
+
+```jsx
+const SILHOUETTES = {
+    face: `<svg><!-- head oval --></svg>`,
+    still_standing: `<svg><!-- standing full body --></svg>`,
+    walk_forward_back: `<svg><!-- walking figure --></svg>`,
+}
+```
+
+The overlay fades out once the MediaPipe pose landmarks confirm the patient's keypoints align with the silhouette.
+
+#### [MODIFY] [CameraFeed.jsx](file:///c:/Users/Swetanjana%20Maity/Desktop/kblndt/techgium/frontend/src/components/screening/CameraFeed.jsx)
+
+Mount `SilhouetteOverlay` inside the camera feed div, z-indexed above the video stream.
+
+---
+
+## Verification Plan
+
+### Backend
+- Run a test scan with a person standing perfectly still → `posture_entropy` should be in the 0.5–2.5 range (Normal)
+- Run a test scan with a person walking in place → `posture_entropy` should show "Not Assessed — Motion Detected"
+- Run a test scan with a person walking forward and back → `gait_variability` should produce a valid CV reading
+
+### Frontend
+- At `BODY_ANALYSIS / activity=still_standing`: Large "Stand Still" banner visible in camera overlay
+- At `BODY_ANALYSIS / activity=walk_forward_back`: Banner changes to "Walk Forward & Back"
+- Silhouette is visible and aligns with a real person standing at ~1.5m from camera
+
+### Order of Implementation
+Phase 1 → Phase 2 → Phase 4 (these three alone eliminate the false positive and are purely backend)
+Phase 3 → Phase 5 (frontend polish, can be done in parallel with backend phases)

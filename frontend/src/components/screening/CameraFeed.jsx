@@ -13,112 +13,27 @@ import WarningRoundedIcon from '@mui/icons-material/WarningRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import LightbulbRoundedIcon from '@mui/icons-material/LightbulbRounded'
 import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded'
+import SilhouetteOverlay from './SilhouetteOverlay'
 
-// ── Helper: static SVG head-guide overlay ────────────────────────────────────
-
-function HeadGuide() {
-    return (
-        <motion.div
-            key="head-guide"
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
-            style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                zIndex: 25,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'none',
-            }}
-        >
-            {/* Realistic-scale head + shoulder guide — 65% of container width */}
-            <svg
-                viewBox="0 0 300 420"
-                style={{ width: '65%', maxWidth: 420 }}
-                xmlns="http://www.w3.org/2000/svg"
-            >
-                <defs>
-                    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-                        <feGaussianBlur stdDeviation="5" result="blur" />
-                        <feMerge>
-                            <feMergeNode in="blur" />
-                            <feMergeNode in="SourceGraphic" />
-                        </feMerge>
-                    </filter>
-                </defs>
-
-                {/* Shoulder silhouette */}
-                <path
-                    d="M 0 420 Q 0 375 70 360 Q 150 340 230 360 Q 300 375 300 420 Z"
-                    fill="rgba(255,255,255,0.05)"
-                    stroke="rgba(255,255,255,0.22)"
-                    strokeWidth="2"
-                    strokeDasharray="8 5"
-                />
-
-                {/* Neck */}
-                <rect
-                    x="127" y="337" width="46" height="38"
-                    rx="8"
-                    fill="rgba(255,255,255,0.05)"
-                    stroke="rgba(255,255,255,0.18)"
-                    strokeWidth="1.5"
-                />
-
-                {/* Head oval — main guide ring */}
-                <ellipse
-                    cx="150" cy="210" rx="118" ry="138"
-                    fill="rgba(255,255,255,0.03)"
-                    stroke="rgba(99,210,255,0.85)"
-                    strokeWidth="2.5"
-                    strokeDasharray="14 7"
-                    filter="url(#glow)"
-                >
-                    <animate
-                        attributeName="stroke-dashoffset"
-                        from="0" to="-42"
-                        dur="2.4s"
-                        repeatCount="indefinite"
-                    />
-                </ellipse>
-
-                {/* Corner bracket ticks */}
-                {/* top-left */}
-                <path d="M 40 125 L 40 107 L 58 107" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                {/* top-right */}
-                <path d="M 260 125 L 260 107 L 242 107" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                {/* bottom-left */}
-                <path d="M 40 303 L 40 321 L 58 321" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                {/* bottom-right */}
-                <path d="M 260 303 L 260 321 L 242 321" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-            </svg>
-
-            {/* Label */}
-            <div style={{
-                marginTop: 10,
-                background: 'rgba(0,0,0,0.55)',
-                backdropFilter: 'blur(8px)',
-                color: 'rgba(99,210,255,0.95)',
-                fontSize: 12,
-                fontWeight: 500,
-                padding: '6px 18px',
-                borderRadius: 999,
-                border: '1px solid rgba(99,210,255,0.3)',
-                letterSpacing: '0.5px',
-                textTransform: 'uppercase',
-            }}>
-                Position your face here
-            </div>
-        </motion.div>
-    )
-}
+// (HeadGuide and inline body SVG have been replaced by <SilhouetteOverlay />)
 
 
 // ── Main component ────────────────────────────────────────────────────────────
+
+const ACTIVITY_STYLES = {
+    still_standing: {
+        icon: "🧍",
+        title: "Phase 1: Stand Still",
+        detail: "Arms relaxed. Look straight ahead. Don't move.",
+        color: "#10B981",  // green
+    },
+    walk_forward_back: {
+        icon: "🚶",
+        title: "Phase 2: Walk Forward & Back",
+        detail: "Walk 3 steps forward, then 3 steps back. Repeat.",
+        color: "#3B82F6",  // blue
+    }
+}
 
 export default function CameraFeed({
     isActive,
@@ -126,6 +41,7 @@ export default function CameraFeed({
     userWarnings,
     scanState,
     phase,
+    activity,
     uiHint,
     phaseIcon,
 }) {
@@ -170,16 +86,28 @@ export default function CameraFeed({
         }
     }
 
+    // ── Silhouette overlay mode ───────────────────────────────────────────────
+    const facePhases = ['IDLE', 'INITIALIZING', 'FACE_ADJUST', 'FACE_ADJUST_EXTENDED', 'FACE_AND_VITALS']
+    const bodyAdjustPhases = ['BODY_ADJUST', 'BODY_ADJUST_EXTENDED']
+
+    let overlayMode = null
+    let isAligned = false
+
+    if (isActive) {
+        if (facePhases.includes(phase)) {
+            overlayMode = 'face'
+            isAligned = !!(userWarnings?.face_detected)
+        } else if (bodyAdjustPhases.includes(phase)) {
+            overlayMode = 'still'
+            isAligned = !!(userWarnings?.pose_detected)
+        } else if (phase === 'BODY_ANALYSIS') {
+            overlayMode = activity === 'walk_forward_back' ? 'walk' : 'still'
+            isAligned = !!(userWarnings?.pose_detected)
+        }
+    }
+
     // Show AI spinner overlay during PROCESSING phase
     const showLoaderOverlay = phase === 'PROCESSING'
-
-    // Show the head guide during IDLE, INITIALIZING, and the FACE adjust/capture phases
-    const faceGuidePhases = ['IDLE', 'INITIALIZING', 'FACE_ADJUST', 'FACE_ADJUST_EXTENDED', 'FACE_AND_VITALS']
-    const showHeadGuide = isActive && faceGuidePhases.includes(phase)
-
-    // Show body silhouette during body positioning/capture phases (no capture happening yet)
-    const bodyGuidePhases = ['BODY_ADJUST', 'BODY_ADJUST_EXTENDED']
-    const showBodyGuide = isActive && bodyGuidePhases.includes(phase)
 
     return (
         <div style={{
@@ -230,102 +158,8 @@ export default function CameraFeed({
                 }}
             />
 
-            {/* ── Static Head-Position Guide (face phases only) ── */}
-            <AnimatePresence>
-                {showHeadGuide && <HeadGuide />}
-            </AnimatePresence>
-
-            {/* ── Body Silhouette Guide (BODY_ADJUST phases only) ── */}
-            <AnimatePresence>
-                {showBodyGuide && (
-                    <motion.div
-                        key="body-guide"
-                        initial={{ opacity: 0, scale: 0.97 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.97 }}
-                        transition={{ duration: 0.4, ease: 'easeOut' }}
-                        style={{
-                            position: 'absolute',
-                            top: 0, left: 0, right: 0, bottom: 0,
-                            zIndex: 25,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            pointerEvents: 'none',
-                        }}
-                    >
-                        {/* Full-body silhouette guide — 40% of container width */}
-                        <svg
-                            viewBox="0 0 200 500"
-                            style={{ width: '40%', maxWidth: 300 }}
-                            xmlns="http://www.w3.org/2000/svg"
-                        >
-                            <defs>
-                                <filter id="glow-body" x="-30%" y="-30%" width="160%" height="160%">
-                                    <feGaussianBlur stdDeviation="4" result="blur" />
-                                    <feMerge>
-                                        <feMergeNode in="blur" />
-                                        <feMergeNode in="SourceGraphic" />
-                                    </feMerge>
-                                </filter>
-                            </defs>
-                            {/* Head */}
-                            <ellipse cx="100" cy="42" rx="34" ry="40"
-                                fill="rgba(255,255,255,0.04)"
-                                stroke="rgba(99,210,255,0.85)" strokeWidth="2"
-                                strokeDasharray="10 5" filter="url(#glow-body)">
-                                <animate attributeName="stroke-dashoffset" from="0" to="-30" dur="2.4s" repeatCount="indefinite" />
-                            </ellipse>
-                            {/* Torso */}
-                            <rect x="62" y="96" width="76" height="160" rx="14"
-                                fill="rgba(255,255,255,0.04)"
-                                stroke="rgba(99,210,255,0.7)" strokeWidth="1.8"
-                                strokeDasharray="10 5" />
-                            {/* Left arm */}
-                            <rect x="22" y="100" width="34" height="120" rx="14"
-                                fill="rgba(255,255,255,0.03)"
-                                stroke="rgba(99,210,255,0.5)" strokeWidth="1.5"
-                                strokeDasharray="8 5" />
-                            {/* Right arm */}
-                            <rect x="144" y="100" width="34" height="120" rx="14"
-                                fill="rgba(255,255,255,0.03)"
-                                stroke="rgba(99,210,255,0.5)" strokeWidth="1.5"
-                                strokeDasharray="8 5" />
-                            {/* Left leg */}
-                            <rect x="64" y="262" width="34" height="180" rx="14"
-                                fill="rgba(255,255,255,0.03)"
-                                stroke="rgba(99,210,255,0.55)" strokeWidth="1.5"
-                                strokeDasharray="8 5" />
-                            {/* Right leg */}
-                            <rect x="102" y="262" width="34" height="180" rx="14"
-                                fill="rgba(255,255,255,0.03)"
-                                stroke="rgba(99,210,255,0.55)" strokeWidth="1.5"
-                                strokeDasharray="8 5" />
-                            {/* Corner bracket — top */}
-                            <path d="M 40 20 L 40 6 L 56 6" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                            <path d="M 160 20 L 160 6 L 144 6" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                            {/* Corner bracket — bottom */}
-                            <path d="M 40 480 L 40 494 L 56 494" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                            <path d="M 160 480 L 160 494 L 144 494" stroke="rgba(99,210,255,0.9)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                        </svg>
-                        {/* Label */}
-                        <div style={{
-                            marginTop: 12,
-                            background: 'rgba(0,0,0,0.55)',
-                            backdropFilter: 'blur(8px)',
-                            color: 'rgba(99,210,255,0.95)',
-                            fontSize: 12, fontWeight: 500,
-                            padding: '6px 18px', borderRadius: 999,
-                            border: '1px solid rgba(99,210,255,0.3)',
-                            letterSpacing: '0.5px',
-                            textTransform: 'uppercase',
-                        }}>
-                            Step back — full body in frame
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* ── Silhouette Overlay (face, still, walk) ── */}
+            <SilhouetteOverlay mode={overlayMode} isAligned={isAligned} />
 
             {/* ── Placeholder (When Inactive) ── */}
             <AnimatePresence>
@@ -386,6 +220,40 @@ export default function CameraFeed({
                 )}
             </AnimatePresence>
 
+            {/* ── Activity Instruction Banner ── */}
+            <AnimatePresence>
+                {isActive && phase === 'BODY_ANALYSIS' && activity && ACTIVITY_STYLES[activity] && (
+                    <motion.div
+                        key={activity}
+                        initial={{ opacity: 0, y: 50 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 50 }}
+                        style={{
+                            position: 'absolute', bottom: 40, zIndex: 45,
+                            background: 'rgba(20, 20, 20, 0.95)',
+                            border: `2px solid ${ACTIVITY_STYLES[activity].color}`,
+                            padding: '16px 32px', borderRadius: 24,
+                            display: 'flex', alignItems: 'center', gap: 24,
+                            boxShadow: `0 8px 32px ${ACTIVITY_STYLES[activity].color}33`,
+                            backdropFilter: 'blur(12px)'
+                        }}
+                    >
+                        <span style={{ fontSize: 48, lineHeight: 1 }}>{ACTIVITY_STYLES[activity].icon}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ 
+                                color: ACTIVITY_STYLES[activity].color, 
+                                fontSize: 24, fontWeight: 700, fontFamily: "'Google Sans', sans-serif" 
+                            }}>
+                                {ACTIVITY_STYLES[activity].title}
+                            </span>
+                            <span style={{ color: '#fff', fontSize: 16, opacity: 0.9 }}>
+                                {ACTIVITY_STYLES[activity].detail}
+                            </span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* ── Dynamic User Warnings (Distance / Face / Lighting) ── */}
             <AnimatePresence>
                 {warningText && !showLoaderOverlay && (
@@ -394,7 +262,7 @@ export default function CameraFeed({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
                         style={{
-                            position: 'absolute', bottom: 32, zIndex: 40,
+                            position: 'absolute', bottom: (phase === 'BODY_ANALYSIS' && activity) ? 160 : 32, zIndex: 40,
                             background: 'var(--md-error-container)',
                             color: 'var(--md-on-error-container)',
                             padding: '12px 24px', borderRadius: 999,

@@ -81,6 +81,43 @@ class CNSExtractor(BaseExtractor):
             "tremor_power": (0.0, 0.05),            # Normalized PSD
             "stability_score": (75, 100),           # 0-100 scale
         }
+        
+    def _validate_still_protocol(self, pose_array: np.ndarray) -> tuple[bool, str]:
+        """
+        Returns (is_valid, reason).
+        If the patient was walking/moving during a supposed 'still' phase,
+        the sway/tremor biomarkers are invalid.
+        """
+        if len(pose_array) < 10:
+            return False, "Insufficient frames"
+        
+        if pose_array.ndim != 3 or pose_array.shape[1] < 25:
+            return False, "Invalid pose array shape"
+            
+        hip_center = (pose_array[:, 23, :2] + pose_array[:, 24, :2]) / 2
+        velocities = np.linalg.norm(np.diff(hip_center, axis=0), axis=1)
+        mean_vel = np.mean(velocities)
+        
+        # 0.008 is an empirically tested threshold for MediaPipe normalized coords
+        if mean_vel > 0.008:
+            return False, f"Excessive motion detected (v={mean_vel:.4f}). Protocol violation."
+        
+        return True, "ok"
+
+    def _validate_walk_protocol(self, pose_array: np.ndarray) -> bool:
+        """Returns True only if genuine walking was detected (not in-place marching)."""
+        if len(pose_array) < 10:
+            return False
+            
+        hip_center = (pose_array[:, 23, :2] + pose_array[:, 24, :2]) / 2
+        
+        # Calculate max displacement from the starting position
+        # (Since the user walks forward AND back, their start and end positions might be identical.
+        #  Therefore we must check the maximum distance they traveled during the sequence, not net displacement).
+        displacements = np.linalg.norm(hip_center - hip_center[0], axis=1)
+        max_displacement = np.max(displacements)
+        
+        return max_displacement > 0.05  # 5% of frame width
     
     def extract(self, data: Dict[str, Any]) -> BiomarkerSet:
         """
@@ -98,15 +135,25 @@ class CNSExtractor(BaseExtractor):
         
         # Extract and validate pose sequence
         pose_sequence = data.get("pose_sequence", [])
+        still_sequence = data.get("still_pose_sequence", [])
+        walk_sequence = data.get("walk_pose_sequence", [])
 
-        # ── Motion quality gate (NEW) ──────────────────────────────────────────
+        # ── Motion quality gate ────────────────────────────────────────────────
+        # motion_quality now reflects POSE/body quality ONLY — face_stability
+        # has been removed from the blend in manager.py, so this threshold is
+        # now accurate and safe to keep at 0.40.
+        # Only skip CNS if body tracking was genuinely unreliable; individual
+        # sub-analyses (gait, tremor, sway) each have their own internal guards
+        # and return healthy defaults when data is insufficient, preventing
+        # false positives without needing to abort the whole system.
         motion_quality = float(data.get("motion_quality", 1.0))
         if motion_quality < 0.40:
             logger.warning(
-                f"Motion quality score {motion_quality:.2f} too low for CNS analysis. "
-                "Returning empty biomarker set to avoid false positives."
+                f"Pose motion quality score {motion_quality:.2f} too low for CNS analysis. "
+                "Returning 'Assessment Incomplete' to avoid false positives."
             )
             # Add a single "not_assessed" biomarker so the report is informative
+            # and the system appears as 'Assessment Incomplete' rather than silently absent.
             self._add_biomarker(
                 biomarker_set,
                 name="cns_data_quality",
@@ -114,7 +161,7 @@ class CNSExtractor(BaseExtractor):
                 unit="quality_score",
                 confidence=1.0,
                 normal_range=None,  # triggers "Not Assessed" status
-                description="CNS analysis skipped: pose tracking quality insufficient"
+                description="CNS analysis skipped: body pose tracking quality insufficient"
             )
             return biomarker_set
         
@@ -133,6 +180,8 @@ class CNSExtractor(BaseExtractor):
         
         try:
             pose_array = np.array(pose_sequence)
+            still_array = np.array(still_sequence) if still_sequence else pose_array
+            walk_array = np.array(walk_sequence) if walk_sequence else pose_array
             
             # Validate pose array shape (frames, landmarks, coordinates)
             if pose_array.ndim != 3 or pose_array.shape[1] < 29:
@@ -146,11 +195,14 @@ class CNSExtractor(BaseExtractor):
         # =====================================================
         # 1. GAIT VARIABILITY (Zeni heel strike detection)
         # =====================================================
-        gait_var, heel_strikes = self._calculate_gait_variability(pose_array)
-        gait_confidence = min(0.95, 0.5 + len(heel_strikes) / 20)  # More strides = higher confidence
-        
-        # CONTEXT-AWARE: Signal stationary state by setting normal_range=None
-        # This triggers "not_assessed" status instead of misleading "Normal"
+        is_walking = self._validate_walk_protocol(walk_array)
+        if is_walking:
+            gait_var, heel_strikes = self._calculate_gait_variability(walk_array)
+        else:
+            logger.warning("CNS: Protocol violation — No walking detected during walk phase.")
+            gait_var, heel_strikes = 0.0, []
+            
+        gait_confidence = min(0.95, 0.5 + len(heel_strikes) / 20) if is_walking else 0.0
         gait_normal_range = None if len(heel_strikes) == 0 else self.normal_ranges["gait_variability"]
         
         self._add_biomarker(
@@ -160,28 +212,39 @@ class CNSExtractor(BaseExtractor):
             unit="coefficient_of_variation",
             confidence=gait_confidence,
             normal_range=gait_normal_range,
-            description="Stride-to-stride timing variability (Zeni heel strike method)"
+            description="Stride-to-stride timing variability" if is_walking else "Not Assessed — No walking detected"
         )
         
         # =====================================================
+        # PROTOCOL VALIDATION FOR STATIONARY MEASURES
+        # =====================================================
+        is_still, still_reason = self._validate_still_protocol(still_array)
+        if not is_still:
+            logger.warning(f"CNS: Protocol violation in still phase — {still_reason}")
+
+        # =====================================================
         # 2. POSTURE ENTROPY (Sample Entropy - clinical standard)
         # =====================================================
-        posture_entropy = self._calculate_posture_entropy(pose_array)
+        posture_entropy = self._calculate_posture_entropy(still_array) if is_still else 0.0
         
         self._add_biomarker(
             biomarker_set,
             name="posture_entropy",
             value=posture_entropy,
             unit="sample_entropy",
-            confidence=0.85,
-            normal_range=self.normal_ranges["posture_entropy"],
-            description="Postural sway complexity (Sample Entropy - Richman method)"
+            confidence=0.85 if is_still else 0.0,
+            normal_range=self.normal_ranges["posture_entropy"] if is_still else None,
+            description="Postural sway complexity" if is_still else f"Not Assessed — {still_reason}"
         )
         
         # =====================================================
         # 3. TREMOR ANALYSIS (Welch PSD - bilateral)
         # =====================================================
-        tremor_scores = self._analyze_tremor(pose_array)
+        tremor_scores = self._analyze_tremor(still_array) if is_still else {
+            "resting": (0.0, 0.0),
+            "postural": (0.0, 0.0),
+            "intention": (0.0, 0.0)
+        }
         
         for tremor_type, (score, band_confidence) in tremor_scores.items():
             self._add_biomarker(
@@ -189,26 +252,26 @@ class CNSExtractor(BaseExtractor):
                 name=f"tremor_{tremor_type}",
                 value=score,
                 unit="normalized_psd",
-                confidence=band_confidence,
-                normal_range=self.normal_ranges["tremor_power"],
-                description=f"{tremor_type.capitalize()} tremor power ({self.tremor_bands[tremor_type][0]}-{self.tremor_bands[tremor_type][1]} Hz)"
+                confidence=band_confidence if is_still else 0.0,
+                normal_range=self.normal_ranges["tremor_power"] if is_still else None,
+                description=f"{tremor_type.capitalize()} tremor power" if is_still else f"Not Assessed — {still_reason}"
             )
         
         # =====================================================
         # 4. COMPOSITE STABILITY SCORE (Multi-domain)
         # =====================================================
         stability, stability_components = self._calculate_stability_score(
-            pose_array, gait_var, tremor_scores
-        )
+            still_array, gait_var, tremor_scores
+        ) if is_still else (0.0, {"sway_ap": 0.0, "sway_ml": 0.0})
         
         self._add_biomarker(
             biomarker_set,
             name="cns_stability_score",
             value=stability,
             unit="score_0_100",
-            confidence=0.80,
-            normal_range=self.normal_ranges["stability_score"],
-            description="Composite CNS stability (sway + gait + tremor combined)"
+            confidence=0.80 if is_still else 0.0,
+            normal_range=self.normal_ranges["stability_score"] if is_still else None,
+            description="Composite CNS stability" if is_still else f"Not Assessed — {still_reason}"
         )
         
         # Add component scores for detailed analysis
@@ -217,9 +280,9 @@ class CNSExtractor(BaseExtractor):
             name="sway_amplitude_ap",
             value=stability_components["sway_ap"],
             unit="normalized_units",
-            confidence=0.85,
-            normal_range=(0.0, 0.05),
-            description="Anterior-posterior postural sway amplitude"
+            confidence=0.85 if is_still else 0.0,
+            normal_range=(0.0, 0.05) if is_still else None,
+            description="Anterior-posterior postural sway amplitude" if is_still else f"Not Assessed — {still_reason}"
         )
         
         self._add_biomarker(
@@ -227,9 +290,9 @@ class CNSExtractor(BaseExtractor):
             name="sway_amplitude_ml",
             value=stability_components["sway_ml"],
             unit="normalized_units",
-            confidence=0.85,
-            normal_range=(0.0, 0.05),
-            description="Medial-lateral postural sway amplitude"
+            confidence=0.85 if is_still else 0.0,
+            normal_range=(0.0, 0.05) if is_still else None,
+            description="Medial-lateral postural sway amplitude" if is_still else f"Not Assessed — {still_reason}"
         )
         
         biomarker_set.extraction_time_ms = (time.time() - start_time) * 1000
