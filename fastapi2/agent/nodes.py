@@ -236,11 +236,7 @@ def research_node(state: AgentState) -> dict:
 
     # Emit structured sources for the frontend
     if all_sources:
-        # We pass the list directly; the callback wrapper in main.py will handle it
-        # or we might need to serialize it if `_emit_status` expects strict string.
-        # Let's import json and serialize it to be safe, as _emit_status signature says msg: str
-        import json
-        _emit_status("citations", json.dumps(all_sources))
+        _emit_status("citations", all_sources)
 
     # Debug: show what research returned
     for source, data in results.items():

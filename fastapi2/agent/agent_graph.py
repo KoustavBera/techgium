@@ -20,7 +20,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
 
-from agent.config import TEMPERATURE
+from agent.config import TEMPERATURE, MAX_TOKENS
 from agent.state import AgentState
 from agent.nodes import router_node, research_node, answer_node, set_llm
 from agent.clarification import clarification_node, set_llm as set_clarification_llm
@@ -138,7 +138,7 @@ def load_model():
         huggingfacehub_api_token=hf_token,
         task="conversational", 
         temperature=TEMPERATURE,
-        max_new_tokens=512,
+        max_new_tokens=MAX_TOKENS,
         top_p=0.9,
         streaming=True,
         timeout=30,  # Prevent indefinite hang during inference

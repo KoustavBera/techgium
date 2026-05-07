@@ -111,11 +111,14 @@ export function useChatSession() {
                             if (data.stage === 'citations') {
                                 // Citation payload
                                 try {
-                                    const parsed = JSON.parse(data.message)
+                                    const raw = data.message;
+                                    const parsed = Array.isArray(raw) ? raw : JSON.parse(raw);
                                     if (Array.isArray(parsed) && parsed.length > 0) {
-                                        updateMessage(assistantId, { citations: parsed })
+                                        updateMessage(assistantId, { citations: parsed });
                                     }
-                                } catch { /* ignore */ }
+                                } catch (e) {
+                                    console.warn("Failed to parse citations:", e);
+                                }
                             } else {
                                 setTypingState(
                                     STATE_LABELS[data.stage] || data.message || 'Processing…'

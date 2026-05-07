@@ -184,6 +184,7 @@ class RadarReader(BaseSerialReader):
                     # [11:17:05][D][sensor:094]: 'Real-time heart rate': Sending state 87.000000 
                     hr_match = re.search(r"heart rate'.*?sending state\s*([\d.]+)", line.lower())
                     rr_match = re.search(r"respiratory rate'.*?sending state\s*([\d.]+)", line.lower())
+                    illum_match = re.search(r"illuminance=([0-9.]+)", line.lower())
                     
                     # DEBUG: Log what we see
                     if hr_match or rr_match:
@@ -191,7 +192,7 @@ class RadarReader(BaseSerialReader):
                          rr_val = rr_match.group(1) if rr_match else "None"
                          # logger.info(f"Radar DEBUG: HR={hr_val} RR={rr_val}")
                     
-                    if hr_match or rr_match:
+                    if hr_match or rr_match or illum_match:
                         # Ensure we have the base structure
                         if not self.last_data or 'radar' not in self.last_data:
                             self.last_data = {
@@ -229,6 +230,16 @@ class RadarReader(BaseSerialReader):
                             except (ValueError, IndexError):
                                 pass
                         
+                        if illum_match:
+                            try:
+                                lux = float(illum_match.group(1))
+                                if 0 <= lux <= 200000:
+                                    self.last_data['radar']['illuminance_lux'] = lux
+                                    self.last_data['timestamp'] = int(time.time())
+                                    fresh_update = True
+                            except (ValueError, IndexError):
+                                pass
+
                         # ONLY PUSH TO QUEUE IF WE ACTUALLY MATCHED A NEW LINE
                         # This prevents RR updates from flooding the queue with stale HR copies
                         if fresh_update:

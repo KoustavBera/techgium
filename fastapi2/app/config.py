@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     hf_token: Optional[str] = Field(default=None, description="Hugging Face API token")
     gemini_model: str = "gemini-1.5-flash"
     # Medical AI models for validation and reports
-    medical_model_1: str = "Intelligent-Internet/II-Medical-8B-1706:featherless-ai"  # User requested for validation
-    medical_model_2: str = "openai/gpt-oss-120b:groq"  # GPT-OSS-120B via Groq for arbitration
+    medical_model_1: str = "google/medgemma-27b-text-it:featherless-ai"  # MedGemma 27B via Featherless (rc_ key detected)
+    medical_model_2: str = "google/gemma-2-2b-it"  # Using a standard HF model for arbitration
     use_mock_llm: bool = Field(default=True, description="Use mock LLM for testing")
     
     # Data Ingestion

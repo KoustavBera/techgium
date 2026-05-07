@@ -178,6 +178,17 @@ class HardwareManager:
         }
         self._scan_lock = threading.Lock()
 
+        # Environment calibration results (populated during INITIALIZING phase,
+        # before the patient enters the frame). Used to correct thermal readings
+        # for AC room ambient temperature effects.
+        self._env_calibration: Dict[str, Any] = {
+            'room_temp': 25.0,
+            'dynamic_temp_offset': 0.8,
+            'avg_illuminance_lux': None,
+            'avg_webcam_brightness': 128.0,
+            'lighting_ok': True,
+        }
+
         
         # Concurrent rolling capture buffer (30s at 30fps)
         # Always fills in background; face+vitals phase pulls from here — no wasted "Get Ready" wait
@@ -838,42 +849,140 @@ class HardwareManager:
                         break
                 logger.info("Thermal queue cleared.")
 
-            # ── Baseline noise calibration (2 seconds during INITIALIZING) ────────────
-            # Collect still frames before subject starts moving.
-            # This adapts tremor/sway thresholds to this specific webcam.
+            # ════════════════════════════════════════════════════════════════
+            # ENVIRONMENT CALIBRATION (8 seconds during INITIALIZING)
+            # ════════════════════════════════════════════════════════════════
+            # Measures surrounding temperature (thermal camera background)
+            # and lighting (radar illuminance + webcam brightness) BEFORE the
+            # patient enters the frame.
+            # This computes a dynamic temperature correction that compensates
+            # for AC room under-reading of the thermal camera.
+            # ════════════════════════════════════════════════════════════════
             self._update_scan_status(
-                message="Calibrating sensors — please stand still...",
+                message="🌡️ Environment calibration — please step aside momentarily...",
                 phase="INITIALIZING",
-                progress=8
+                progress=5,
+                ui_hint="Stay out of the camera view while sensors are calibrated"
             )
 
-            CALIBRATION_DURATION = 2.0  # seconds
+            ENV_CAL_DURATION = 8.0  # seconds
+            ambient_temps: List[float] = []
+            illuminance_values: List[float] = []
+            brightness_values: List[float] = []
             calibration_poses = []
+
             cal_start = time.time()
+            while time.time() - cal_start < ENV_CAL_DURATION and self._scan_active:
+                elapsed = time.time() - cal_start
+                remaining = int(ENV_CAL_DURATION - elapsed) + 1
+                self._update_scan_status(
+                    message=f"🌡️ Calibrating environment — {remaining}s remaining...",
+                    progress=5 + int(3 * elapsed / ENV_CAL_DURATION)
+                )
 
-            while time.time() - cal_start < CALIBRATION_DURATION and self._scan_active:
-                with self._rolling_lock:
-                    if self._rolling_buffer:
-                        latest_frame = self._rolling_buffer[-1]['frame']
-                    else:
-                        latest_frame = None
-                
-                if latest_frame is not None and self.camera:
-                    results = self.camera.detect_all(latest_frame, ["pose"])
-                    pose_result = results.get("pose")
-                    if pose_result and pose_result.pose_landmarks:
-                        landmarks = pose_result.pose_landmarks.landmark
-                        landmark_array = np.array([
-                            [lm.x, lm.y, lm.z, lm.visibility]
-                            for lm in landmarks
-                        ])
-                        calibration_poses.append(landmark_array)
-                
-                time.sleep(1/15)  # 15 Hz calibration sampling
+                # 1. Background room temperature from the thermal camera itself.
+                #    The firmware does NOT send a separate ambient_temp field.
+                #    Instead, when no person is in frame, the thermal camera reads
+                #    the background (wall/floor/equipment) — which IS the room temp.
+                #    GATE: stability (canthus_range) < 1.0 confirms no person present.
+                #    (Empty room = 0.5–0.7, person in frame = 3–4)
+                if self.thermal:
+                    t_data = self.thermal.get_latest_data()
+                    if t_data:
+                        th = t_data.get('thermal', {})
+                        stability  = th.get('stability_metrics', {}).get('canthus_range', 99.0)
+                        face_max_bg = th.get('core_regions', {}).get('face_max')
+                        canthus_bg  = th.get('core_regions', {}).get('canthus_mean')
+                        if stability < 1.0 and face_max_bg is not None and 10.0 < face_max_bg < 40.0:
+                            # Low stability + valid range → empty room → this IS room temperature
+                            ambient_temps.append(float(face_max_bg))
+                            logger.debug(
+                                f"Env cal bg sample: face_max={face_max_bg:.1f}°C "
+                                f"canthus={canthus_bg:.1f}°C stability={stability:.2f}"
+                            )
+                        elif stability >= 1.0 and face_max_bg is not None:
+                            logger.warning(
+                                f"Env cal: person in frame (stability={stability:.2f}) — "
+                                f"skipping thermal sample. Please step aside."
+                            )
 
+                # 2. Illuminance from radar ESPHome light sensor (COM6)
+                if self.radar:
+                    r_data = self.radar.get_latest_data()
+                    if r_data:
+                        lux = r_data.get('radar', {}).get('illuminance_lux')
+                        if lux is not None and lux >= 0:
+                            illuminance_values.append(float(lux))
+
+                # 3. Webcam brightness (secondary lighting check)
+                if self.camera:
+                    frame = self.camera.read_frame()
+                    if frame is not None:
+                        brightness_values.append(float(np.mean(frame)))
+
+                        # 4. CNS noise floor calibration (collect still poses)
+                        pose_res = self.camera.detect_all(frame, ["pose"])
+                        pr = pose_res.get("pose")
+                        if pr and pr.pose_landmarks:
+                            lm_arr = np.array([
+                                [lm.x, lm.y, lm.z, lm.visibility]
+                                for lm in pr.pose_landmarks.landmark
+                            ])
+                            calibration_poses.append(lm_arr)
+
+                time.sleep(0.25)  # 4 Hz sampling
+
+            # ── Compute dynamic temperature correction ──────────────────────
+            # room_temp = median face_max of empty-room thermal samples.
+            # face_max of an empty room ≈ actual room temperature (walls/floor).
+            # This is MORE reliable than any firmware ambient_temp field.
+            room_temp = float(np.median(ambient_temps)) if ambient_temps else 25.0
+            # Each 1°C the room is below 25°C adds ~0.15°C extra correction.
+            # (Accounts for cold AC background under-correcting the MLX90640.)
+            dynamic_temp_offset = 0.8 + max(0.0, (25.0 - room_temp) * 0.15)
+
+            # ── Lighting assessment ─────────────────────────────────────────
+            avg_lux = float(np.median(illuminance_values)) if illuminance_values else None
+            avg_brightness = float(np.median(brightness_values)) if brightness_values else 128.0
+            lighting_ok = True
+
+            if avg_lux is not None and avg_lux < 100.0:
+                lighting_ok = False
+                logger.warning(f"⚠️ Low illuminance: {avg_lux:.1f} lux (threshold: 100 lux)")
+            elif avg_brightness < 60.0:
+                lighting_ok = False
+                logger.warning(f"⚠️ Low webcam brightness: {avg_brightness:.0f} (threshold: 60)")
+
+            if not lighting_ok:
+                self._update_scan_status(
+                    message="⚠️ Low lighting detected — scan quality may be affected. Improve lighting if possible.",
+                    phase="INITIALIZING"
+                )
+                time.sleep(2.0)  # Show warning briefly
+
+            # ── Store calibration for downstream thermal extraction ──────────
+            self._env_calibration = {
+                'room_temp': room_temp,
+                'dynamic_temp_offset': dynamic_temp_offset,
+                'avg_illuminance_lux': avg_lux,
+                'avg_webcam_brightness': avg_brightness,
+                'lighting_ok': lighting_ok,
+            }
+            logger.info(
+                f"✅ Environment calibrated: room={room_temp:.1f}°C, "
+                f"offset={dynamic_temp_offset:.2f}°C, "
+                f"lux={avg_lux}, brightness={avg_brightness:.0f}, "
+                f"lighting_ok={lighting_ok}, "
+                f"samples: ambient={len(ambient_temps)}, lux={len(illuminance_values)}, "
+                f"cns_poses={len(calibration_poses)}"
+            )
+
+            # ── Apply CNS noise floor ───────────────────────────────────────
             if calibration_poses and self.cns_extractor:
                 estimated_floor = self.cns_extractor.calibrate_noise_floor(calibration_poses)
-                logger.info(f"CNS noise floor calibrated to: {estimated_floor:.5f}")
+                logger.info(f"CNS noise floor calibrated: {estimated_floor:.5f} ({len(calibration_poses)} poses)")
+            else:
+                logger.info("CNS calibration: no patient in frame during env cal — OK")
 
             # ============================================================
             # Phase 1: UNIFIED Concurrent Face + Vitals + Calibration
@@ -1609,6 +1718,8 @@ class HardwareManager:
                     'forehead_temp': None,
                     # Homography guidance: RGB canthus coords for guided temperature extraction
                     'rgb_canthus_pixels': _canthus_pixels,
+                    # AC-room correction: ambient room temperature measured before scan
+                    'room_temp_calibration': self._env_calibration.get('room_temp', 25.0),
                 }
             else:
                 raw_data_context['thermal_data'] = {
@@ -1625,6 +1736,8 @@ class HardwareManager:
                     'stress_gradient': thermal.get('autonomic', {}).get('stress_gradient'),
                     'nose_temp': thermal.get('autonomic', {}).get('nose_temp'),
                     'forehead_temp': thermal.get('autonomic', {}).get('forehead_temp'),
+                    # AC-room correction
+                    'room_temp_calibration': self._env_calibration.get('room_temp', 25.0),
                 }
             
             raw_data_context['esp32_data'] = esp32_data

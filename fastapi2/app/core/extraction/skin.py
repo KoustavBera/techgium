@@ -572,27 +572,34 @@ class SkinExtractor(BaseExtractor):
         logger.info(f"Skin: Capturing session baseline from {len(thermal_frames)} thermal and {len(rgb_frames)} RGB frames")
         
         # 1. Thermal Baseline
-        facial_temps = []
-        canthus_temps = [] # NEW
+        facial_temps_raw = []
+        canthus_temps_raw = []
         background_temps = []
-        CALIBRATION_OFFSET = 0.8
-        
+
         for data in thermal_frames:
             face_max = data.get('fever_face_max')
             if face_max is not None:
-                facial_temps.append(face_max + CALIBRATION_OFFSET)
-            
-            canthus = data.get('fever_canthus_temp') # NEW
+                facial_temps_raw.append(float(face_max))
+
+            canthus = data.get('fever_canthus_temp')
             if canthus is not None:
-                canthus_temps.append(canthus + CALIBRATION_OFFSET)
-            
+                canthus_temps_raw.append(float(canthus))
+
             bg_temp = data.get('background_temp')
             if bg_temp is not None:
-                background_temps.append(bg_temp)
-                
-        baseline_temp = np.median(facial_temps) if facial_temps else 36.0
-        baseline_canthus = np.median(canthus_temps) if canthus_temps else baseline_temp - 0.5 # NEW
-        ambient_temp = np.median(background_temps) if background_temps else 25.0
+                background_temps.append(float(bg_temp))
+
+        # Dynamic AC-room correction: each 1°C below 25°C adds ~0.15°C more offset.
+        # background_temp is the room ambient from the thermal camera (no patient in frame).
+        ambient_temp = float(np.median(background_temps)) if background_temps else 25.0
+        CALIBRATION_OFFSET = 0.8 + max(0.0, (25.0 - ambient_temp) * 0.15)
+        logger.info(f"Skin baseline: dynamic offset={CALIBRATION_OFFSET:.2f}°C (room={ambient_temp:.1f}°C)")
+
+        facial_temps = [t + CALIBRATION_OFFSET for t in facial_temps_raw]
+        canthus_temps = [t + CALIBRATION_OFFSET for t in canthus_temps_raw]
+
+        baseline_temp = float(np.median(facial_temps)) if facial_temps else 36.0
+        baseline_canthus = float(np.median(canthus_temps)) if canthus_temps else baseline_temp - 0.5
         
         # 2. RGB Baseline
         redness_values = []
@@ -726,9 +733,13 @@ class SkinExtractor(BaseExtractor):
         pose_landmarks: Optional[List[Any]] = None
     ) -> None:
         """Extract skin metrics from flattened thermal data (NEW FORMAT v2)."""
-        # THERMAL CALIBRATION: Hardware consistently reads ~0.8°C lower than actual
-        # Applying offset to bring readings into clinical range
-        CALIBRATION_OFFSET = 0.8
+        # THERMAL CALIBRATION: Dynamic AC-room correction.
+        # Base offset 0.8°C + 0.15°C for each 1°C the room is below 25°C.
+        # room_temp_calibration is injected by manager._build_screening_request()
+        # from the environment calibration phase (measured BEFORE patient enters frame).
+        ambient_room_temp = thermal_data.get('room_temp_calibration', 25.0)
+        CALIBRATION_OFFSET = 0.8 + max(0.0, (25.0 - ambient_room_temp) * 0.15)
+        logger.info(f"Thermal v2: dynamic offset={CALIBRATION_OFFSET:.2f}°C (room={ambient_room_temp:.1f}°C)")
         
         # MOTION GATING: Check for head movement before trusting thermal data
         # Rapid movement causes "Inflammation" artifacts (hot pixel smearing)

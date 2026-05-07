@@ -28,9 +28,8 @@ except ImportError:
 
 class HFModel(str, Enum):
     """Available Hugging Face models for medical validation."""
-    # Primary medical models
-    GPT_OSS_120B = "openai/gpt-oss-120b:groq"  # GPT-OSS-120B via Groq
-    II_MEDICAL_8B = "Intelligent-Internet/II-Medical-8B-1706:featherless-ai"  # II-Medical-8B via Featherless
+    GPT_OSS_120B = "google/gemma-2-2b-it"  # Fallback to a standard HF model
+    II_MEDICAL_8B = "Intelligent-Internet/II-Medical-8B-1706"  # Clean ID
     
     # Legacy models (kept for compatibility)
     MEDGEMMA_4B = "google/medgemma-4b-it"
@@ -88,16 +87,26 @@ class HuggingFaceClient:
         self._request_count = 0
         self._last_request_time: Optional[float] = None
         
+        # Detect if this is a direct provider key (e.g. rc_... for Featherless)
+        self._is_direct_key = self.config.api_key is not None and (
+            self.config.api_key.startswith("rc_") or 
+            self.config.api_key.startswith("sk_")
+        )
+        
         # Check availability
         self._available = HF_AVAILABLE and self.config.api_key is not None
         
         if self._available:
-            # Initialize InferenceClient
-            self._client = InferenceClient(api_key=self.config.api_key)
-            logger.info("HuggingFaceClient initialized with InferenceClient")
+            # If it's a direct key, we might need a custom base URL or provider
+            kwargs = {"api_key": self.config.api_key}
+            if self.config.api_key.startswith("rc_"):
+                 kwargs["provider"] = "featherless-ai"
+                 
+            self._client = InferenceClient(**kwargs)
+            logger.info(f"HuggingFaceClient initialized (Direct Provider: {self._is_direct_key})")
         else:
             self._client = None
-            logger.info("HuggingFaceClient in mock mode (no API key or InferenceClient unavailable)")
+            logger.info("HuggingFaceClient in mock mode")
     
     @property
     def is_available(self) -> bool:
@@ -123,8 +132,23 @@ class HuggingFaceClient:
         """
         model_id = model.value if isinstance(model, HFModel) else model
         
+        # ── Handle Provider-Specific Client ──
+        # If a provider is specified (e.g. :featherless-ai), we must use a provider-aware client
+        active_client = self._client
+        provider = None
+        
+        if ":" in model_id:
+            model_id, provider = model_id.split(":", 1)
+            # Initialize a temporary client for this provider
+            if self.is_available:
+                from huggingface_hub import InferenceClient as HFInferenceClient
+                active_client = HFInferenceClient(
+                    api_key=self.config.api_key,
+                    provider=provider
+                )
+        
         if not self.is_available:
-            return self._mock_response(prompt, model_id)
+            return self._mock_response(prompt, f"{model_id}:{provider}" if provider else model_id)
         
         start_time = time.time()
         
@@ -137,7 +161,8 @@ class HuggingFaceClient:
         # Make request with retries
         for attempt in range(self.config.max_retries):
             try:
-                completion = self._client.chat.completions.create(
+                # Use the active client (either standard or provider-specific)
+                completion = active_client.chat.completions.create(
                     model=model_id,
                     messages=messages,
                     max_tokens=self.config.max_tokens,
@@ -154,7 +179,7 @@ class HuggingFaceClient:
                 
                 return HFResponse(
                     text=text,
-                    model=model_id,
+                    model=f"{model_id}:{provider}" if provider else model_id,
                     is_mock=False,
                     latency_ms=latency
                 )
