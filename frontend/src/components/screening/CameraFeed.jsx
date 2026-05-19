@@ -211,7 +211,7 @@ export default function CameraFeed({
                             }}
                         />
                         <h2 style={{ fontFamily: "'Google Sans', sans-serif", fontSize: 24, margin: '0 0 8px 0', fontWeight: 500 }}>
-                            AI Analysis In Progress
+                            Analysis In Progress
                         </h2>
                         <p style={{ opacity: 0.9, fontSize: 14, margin: 0 }}>
                             Generating comprehensive health report...
@@ -240,9 +240,9 @@ export default function CameraFeed({
                     >
                         <span style={{ fontSize: 48, lineHeight: 1 }}>{ACTIVITY_STYLES[activity].icon}</span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ 
-                                color: ACTIVITY_STYLES[activity].color, 
-                                fontSize: 24, fontWeight: 700, fontFamily: "'Google Sans', sans-serif" 
+                            <span style={{
+                                color: ACTIVITY_STYLES[activity].color,
+                                fontSize: 24, fontWeight: 700, fontFamily: "'Google Sans', sans-serif"
                             }}>
                                 {ACTIVITY_STYLES[activity].title}
                             </span>

@@ -178,15 +178,30 @@ class HardwareManager:
         }
         self._scan_lock = threading.Lock()
 
-        # Environment calibration results (populated during INITIALIZING phase,
-        # before the patient enters the frame). Used to correct thermal readings
-        # for AC room ambient temperature effects.
+        # Environment calibration results — populated either by the standalone
+        # "Calibrate Room" button (run_environment_calibration) or, as a fallback,
+        # by the scan's own INITIALIZING phase on first run.
+        # 'calibrated_at' is None until a successful calibration completes.
         self._env_calibration: Dict[str, Any] = {
             'room_temp': 25.0,
             'dynamic_temp_offset': 0.8,
             'avg_illuminance_lux': None,
             'avg_webcam_brightness': 128.0,
             'lighting_ok': True,
+            'dht11_used': False,
+            'calibrated_at': None,   # None = defaults in use; ISO string = calibrated
+        }
+
+        # Standalone calibration state (separate from scan state)
+        self._cal_active: bool = False
+        self._cal_thread: Optional[threading.Thread] = None
+        self._cal_lock = threading.Lock()
+        self._cal_status: Dict[str, Any] = {
+            "state": "idle",
+            "phase": "IDLE",
+            "message": "Not yet calibrated — default offsets in use (room=25°C, offset=0.8°C)",
+            "progress": 0,
+            "calibrated_at": None,
         }
 
         
@@ -729,6 +744,10 @@ class HardwareManager:
             logger.warning("Scan already in progress")
             return False
 
+        if self._cal_active:
+            logger.warning("Cannot start scan — environment calibration is running. Wait for it to complete.")
+            return False
+
         logger.info(f"Initiating scan for patient: {patient_id}")
         self._scan_active = True
         self._update_scan_status(
@@ -756,6 +775,257 @@ class HardwareManager:
 
 
     
+
+    def start_calibration(self) -> bool:
+        """
+        Launch standalone environment calibration in a background thread.
+
+        The calibration runs for ~8 seconds, measuring:
+          - Ambient temperature (DHT11 v2 firmware or background-pixel v1)
+          - Room illuminance (radar lux sensor + webcam brightness)
+          - CNS motion noise floor (pose landmarks for tremor baseline)
+
+        Results are stored in self._env_calibration and persist until the
+        next manual calibration — no need to recalibrate on every scan.
+
+        Returns:
+            True if calibration started, False if already running or a scan is active.
+        """
+        if self._cal_active:
+            logger.warning("Calibration already in progress")
+            return False
+
+        if self._scan_active:
+            logger.warning("Cannot calibrate during an active scan — finish scan first")
+            return False
+
+        logger.info("Launching standalone environment calibration...")
+        self._cal_active = True
+        self._update_cal_status(
+            state="running",
+            phase="CALIBRATING",
+            message="🌡️ Calibrating environment — please step aside from the camera...",
+            progress=0,
+        )
+
+        self._cal_thread = threading.Thread(
+            target=self._run_environment_calibration,
+            daemon=True,
+            name="hw-calibration",
+        )
+        self._cal_thread.start()
+        logger.info(f"Calibration thread started: {self._cal_thread.is_alive()}")
+        return True
+
+    def get_calibration_status(self) -> Dict[str, Any]:
+        """
+        Return current calibration status for frontend polling.
+        Includes the active env_calibration values for display.
+        """
+        with self._cal_lock:
+            status = self._cal_status.copy()
+
+        # Augment with current calibration values so the UI can display them
+        status["env_calibration"] = {
+            "room_temp":          self._env_calibration.get("room_temp", 25.0),
+            "dynamic_temp_offset": self._env_calibration.get("dynamic_temp_offset", 0.8),
+            "lighting_ok":        self._env_calibration.get("lighting_ok", True),
+            "dht11_used":         self._env_calibration.get("dht11_used", False),
+            "calibrated_at":      self._env_calibration.get("calibrated_at"),
+        }
+        return status
+
+    def _update_cal_status(
+        self,
+        state: str = None,
+        phase: str = None,
+        message: str = None,
+        progress: int = None,
+        calibrated_at: str = None,
+        **kwargs,
+    ):
+        """Thread-safe calibration status update (mirrors _update_scan_status)."""
+        update = kwargs.copy()
+        if state         is not None: update["state"]         = state
+        if phase         is not None: update["phase"]         = phase
+        if message       is not None: update["message"]       = message
+        if progress      is not None: update["progress"]      = progress
+        if calibrated_at is not None: update["calibrated_at"] = calibrated_at
+        with self._cal_lock:
+            self._cal_status.update(update)
+
+    def _run_environment_calibration(self) -> bool:
+        """
+        Standalone environment calibration — runs in the hw-calibration thread.
+
+        Extracts the logic previously embedded in _run_scan's INITIALIZING phase
+        so it can be triggered independently via the frontend "Calibrate Room" button.
+
+        Populates self._env_calibration with:
+          - room_temp / dynamic_temp_offset (thermal accuracy)
+          - avg_illuminance_lux / avg_webcam_brightness / lighting_ok (scan quality)
+          - dht11_used (accuracy grade flag)
+          - calibrated_at (ISO timestamp of completion)
+
+        Also applies the CNS noise floor to the CNSExtractor.
+        Returns True on success, False on error.
+        """
+        try:
+            ENV_CAL_DURATION = 8.0  # seconds
+            ambient_temps: List[float] = []
+            illuminance_values: List[float] = []
+            brightness_values: List[float] = []
+            calibration_poses = []
+
+            cal_start = time.time()
+            while time.time() - cal_start < ENV_CAL_DURATION and self._cal_active:
+                elapsed = time.time() - cal_start
+                remaining = int(ENV_CAL_DURATION - elapsed) + 1
+                self._update_cal_status(
+                    message=f"🌡️ Calibrating environment — {remaining}s remaining...",
+                    progress=int(100 * elapsed / ENV_CAL_DURATION),
+                )
+
+                # 1. Ambient temperature — DHT11 (v2 firmware) or background-pixel (v1)
+                if self.thermal:
+                    t_data = self.thermal.get_latest_data()
+                    if t_data:
+                        env_block = t_data.get("environment", {})
+                        dht11_val = env_block.get("ambient_temp")
+                        if dht11_val is not None and 15.0 <= dht11_val <= 45.0:
+                            ambient_temps.append(float(dht11_val))
+                            logger.debug(f"Cal DHT11 sample: {dht11_val:.1f}°C")
+                        else:
+                            # v1: background-pixel proxy (empty room only)
+                            th = t_data.get("thermal", {})
+                            stability = (
+                                th.get("stability_metrics", {}).get("canthus_range")
+                                or th.get("stability", {}).get("canthus_range", 99.0)
+                            )
+                            face_max_bg = th.get("core_regions", {}).get("face_max")
+                            canthus_bg  = th.get("core_regions", {}).get("canthus_mean")
+                            if stability < 1.0 and face_max_bg is not None and 10.0 < face_max_bg < 40.0:
+                                ambient_temps.append(float(face_max_bg))
+                                logger.debug(
+                                    f"Cal bg-pixel sample: face_max={face_max_bg:.1f}°C "
+                                    f"canthus={canthus_bg:.1f}°C stability={stability:.2f}"
+                                )
+                            elif stability >= 1.0 and face_max_bg is not None:
+                                logger.warning(
+                                    f"Cal: person detected in frame (stability={stability:.2f}) — "
+                                    f"step aside for accurate calibration."
+                                )
+
+                # 2. Illuminance from radar light sensor
+                if self.radar:
+                    r_data = self.radar.get_latest_data()
+                    if r_data:
+                        lux = r_data.get("radar", {}).get("illuminance_lux")
+                        if lux is not None and lux >= 0:
+                            illuminance_values.append(float(lux))
+
+                # 3. Webcam brightness + CNS noise floor (pose landmarks)
+                if self.camera:
+                    frame = self.camera.read_frame()
+                    if frame is not None:
+                        brightness_values.append(float(np.mean(frame)))
+                        pose_res = self.camera.detect_all(frame, ["pose"])
+                        pr = pose_res.get("pose")
+                        if pr and pr.pose_landmarks:
+                            lm_arr = np.array([
+                                [lm.x, lm.y, lm.z, lm.visibility]
+                                for lm in pr.pose_landmarks.landmark
+                            ])
+                            calibration_poses.append(lm_arr)
+
+                time.sleep(0.25)  # 4 Hz sampling
+
+            # ── Compute temperature correction ──────────────────────────────
+            room_temp = float(np.median(ambient_temps)) if ambient_temps else 25.0
+            dynamic_temp_offset = 0.8 + max(0.0, (25.0 - room_temp) * 0.15)
+
+            # Detect DHT11 vs background-pixel source
+            dht11_used = False
+            if self.thermal:
+                last = self.thermal.get_latest_data()
+                if last and last.get("environment", {}).get("ambient_temp") is not None:
+                    dht11_used = True
+
+            # ── Lighting assessment ──────────────────────────────────────────
+            avg_lux = float(np.median(illuminance_values)) if illuminance_values else None
+            avg_brightness = float(np.median(brightness_values)) if brightness_values else 128.0
+            lighting_ok = True
+
+            if avg_lux is not None and avg_lux < 100.0:
+                lighting_ok = False
+                logger.warning(f"⚠️ Cal: low illuminance {avg_lux:.1f} lux (threshold: 100)")
+            elif avg_brightness < 60.0:
+                lighting_ok = False
+                logger.warning(f"⚠️ Cal: low webcam brightness {avg_brightness:.0f} (threshold: 60)")
+
+            # ── Store calibration ────────────────────────────────────────────
+            calibrated_at = datetime.now().isoformat()
+            cal_source = "DHT11 sensor" if dht11_used else "thermal background proxy"
+
+            self._env_calibration = {
+                "room_temp":            room_temp,
+                "dynamic_temp_offset":  dynamic_temp_offset,
+                "avg_illuminance_lux":  avg_lux,
+                "avg_webcam_brightness": avg_brightness,
+                "lighting_ok":          lighting_ok,
+                "dht11_used":           dht11_used,
+                "calibrated_at":        calibrated_at,
+            }
+
+            logger.info(
+                f"✅ Environment calibrated ({cal_source}): "
+                f"room={room_temp:.1f}°C, offset={dynamic_temp_offset:.2f}°C, "
+                f"lux={avg_lux}, brightness={avg_brightness:.0f}, "
+                f"lighting_ok={lighting_ok}, "
+                f"ambient_samples={len(ambient_temps)}, lux_samples={len(illuminance_values)}, "
+                f"cns_poses={len(calibration_poses)}"
+            )
+
+            # ── CNS noise floor ──────────────────────────────────────────────
+            if calibration_poses and self.cns_extractor:
+                estimated_floor = self.cns_extractor.calibrate_noise_floor(calibration_poses)
+                logger.info(
+                    f"CNS noise floor calibrated: {estimated_floor:.5f} "
+                    f"({len(calibration_poses)} poses)"
+                )
+            else:
+                logger.info("CNS calibration: no pose data collected — noise floor unchanged")
+
+            # ── Final status ─────────────────────────────────────────────────
+            result_msg = (
+                f"✅ Calibrated: room={room_temp:.1f}°C ({cal_source}), "
+                f"offset=+{dynamic_temp_offset:.2f}°C"
+            )
+            if not lighting_ok:
+                result_msg += " — ⚠️ Low lighting detected"
+
+            self._update_cal_status(
+                state="complete",
+                phase="IDLE",
+                message=result_msg,
+                progress=100,
+                calibrated_at=calibrated_at,
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Environment calibration failed: {e}", exc_info=True)
+            self._update_cal_status(
+                state="error",
+                phase="ERROR",
+                message=f"Calibration error: {e}",
+                progress=0,
+            )
+            return False
+
+        finally:
+            self._cal_active = False
+
     def _filter_stable_frames(
         self,
         raw_captures: List[Dict],
@@ -850,139 +1120,43 @@ class HardwareManager:
                 logger.info("Thermal queue cleared.")
 
             # ════════════════════════════════════════════════════════════════
-            # ENVIRONMENT CALIBRATION (8 seconds during INITIALIZING)
+            # ENVIRONMENT CALIBRATION — NOW A STANDALONE OPERATION
             # ════════════════════════════════════════════════════════════════
-            # Measures surrounding temperature (thermal camera background)
-            # and lighting (radar illuminance + webcam brightness) BEFORE the
-            # patient enters the frame.
-            # This computes a dynamic temperature correction that compensates
-            # for AC room under-reading of the thermal camera.
+            # Calibration is triggered once from the frontend "Calibrate Room"
+            # button (POST /api/v1/hardware/calibrate) and the result persists
+            # in self._env_calibration for all subsequent scans.
             # ════════════════════════════════════════════════════════════════
-            self._update_scan_status(
-                message="🌡️ Environment calibration — please step aside momentarily...",
-                phase="INITIALIZING",
-                progress=5,
-                ui_hint="Stay out of the camera view while sensors are calibrated"
-            )
+            calibrated_at = self._env_calibration.get("calibrated_at")
+            room_temp_  = self._env_calibration.get("room_temp", 25.0)
+            cal_offset_ = self._env_calibration.get("dynamic_temp_offset", 0.8)
+            dht11_used_ = self._env_calibration.get("dht11_used", False)
 
-            ENV_CAL_DURATION = 8.0  # seconds
-            ambient_temps: List[float] = []
-            illuminance_values: List[float] = []
-            brightness_values: List[float] = []
-            calibration_poses = []
-
-            cal_start = time.time()
-            while time.time() - cal_start < ENV_CAL_DURATION and self._scan_active:
-                elapsed = time.time() - cal_start
-                remaining = int(ENV_CAL_DURATION - elapsed) + 1
-                self._update_scan_status(
-                    message=f"🌡️ Calibrating environment — {remaining}s remaining...",
-                    progress=5 + int(3 * elapsed / ENV_CAL_DURATION)
+            if calibrated_at:
+                _src = "DHT11" if dht11_used_ else "bg-pixel proxy"
+                logger.info(
+                    f"✅ Using calibration from {calibrated_at}: "
+                    f"room={room_temp_:.1f}°C, offset=+{cal_offset_:.2f}°C ({_src})"
                 )
-
-                # 1. Background room temperature from the thermal camera itself.
-                #    The firmware does NOT send a separate ambient_temp field.
-                #    Instead, when no person is in frame, the thermal camera reads
-                #    the background (wall/floor/equipment) — which IS the room temp.
-                #    GATE: stability (canthus_range) < 1.0 confirms no person present.
-                #    (Empty room = 0.5–0.7, person in frame = 3–4)
-                if self.thermal:
-                    t_data = self.thermal.get_latest_data()
-                    if t_data:
-                        th = t_data.get('thermal', {})
-                        stability  = th.get('stability_metrics', {}).get('canthus_range', 99.0)
-                        face_max_bg = th.get('core_regions', {}).get('face_max')
-                        canthus_bg  = th.get('core_regions', {}).get('canthus_mean')
-                        if stability < 1.0 and face_max_bg is not None and 10.0 < face_max_bg < 40.0:
-                            # Low stability + valid range → empty room → this IS room temperature
-                            ambient_temps.append(float(face_max_bg))
-                            logger.debug(
-                                f"Env cal bg sample: face_max={face_max_bg:.1f}°C "
-                                f"canthus={canthus_bg:.1f}°C stability={stability:.2f}"
-                            )
-                        elif stability >= 1.0 and face_max_bg is not None:
-                            logger.warning(
-                                f"Env cal: person in frame (stability={stability:.2f}) — "
-                                f"skipping thermal sample. Please step aside."
-                            )
-
-                # 2. Illuminance from radar ESPHome light sensor (COM6)
-                if self.radar:
-                    r_data = self.radar.get_latest_data()
-                    if r_data:
-                        lux = r_data.get('radar', {}).get('illuminance_lux')
-                        if lux is not None and lux >= 0:
-                            illuminance_values.append(float(lux))
-
-                # 3. Webcam brightness (secondary lighting check)
-                if self.camera:
-                    frame = self.camera.read_frame()
-                    if frame is not None:
-                        brightness_values.append(float(np.mean(frame)))
-
-                        # 4. CNS noise floor calibration (collect still poses)
-                        pose_res = self.camera.detect_all(frame, ["pose"])
-                        pr = pose_res.get("pose")
-                        if pr and pr.pose_landmarks:
-                            lm_arr = np.array([
-                                [lm.x, lm.y, lm.z, lm.visibility]
-                                for lm in pr.pose_landmarks.landmark
-                            ])
-                            calibration_poses.append(lm_arr)
-
-                time.sleep(0.25)  # 4 Hz sampling
-
-            # ── Compute dynamic temperature correction ──────────────────────
-            # room_temp = median face_max of empty-room thermal samples.
-            # face_max of an empty room ≈ actual room temperature (walls/floor).
-            # This is MORE reliable than any firmware ambient_temp field.
-            room_temp = float(np.median(ambient_temps)) if ambient_temps else 25.0
-            # Each 1°C the room is below 25°C adds ~0.15°C extra correction.
-            # (Accounts for cold AC background under-correcting the MLX90640.)
-            dynamic_temp_offset = 0.8 + max(0.0, (25.0 - room_temp) * 0.15)
-
-            # ── Lighting assessment ─────────────────────────────────────────
-            avg_lux = float(np.median(illuminance_values)) if illuminance_values else None
-            avg_brightness = float(np.median(brightness_values)) if brightness_values else 128.0
-            lighting_ok = True
-
-            if avg_lux is not None and avg_lux < 100.0:
-                lighting_ok = False
-                logger.warning(f"⚠️ Low illuminance: {avg_lux:.1f} lux (threshold: 100 lux)")
-            elif avg_brightness < 60.0:
-                lighting_ok = False
-                logger.warning(f"⚠️ Low webcam brightness: {avg_brightness:.0f} (threshold: 60)")
-
-            if not lighting_ok:
                 self._update_scan_status(
-                    message="⚠️ Low lighting detected — scan quality may be affected. Improve lighting if possible.",
-                    phase="INITIALIZING"
+                    message=f"✅ Using calibration: room {room_temp_:.1f}°C, offset +{cal_offset_:.2f}°C",
+                    phase="INITIALIZING",
+                    progress=7,
+                    ui_hint="Calibration loaded — step into the camera frame",
                 )
-                time.sleep(2.0)  # Show warning briefly
-
-            # ── Store calibration for downstream thermal extraction ──────────
-            self._env_calibration = {
-                'room_temp': room_temp,
-                'dynamic_temp_offset': dynamic_temp_offset,
-                'avg_illuminance_lux': avg_lux,
-                'avg_webcam_brightness': avg_brightness,
-                'lighting_ok': lighting_ok,
-            }
-            logger.info(
-                f"✅ Environment calibrated: room={room_temp:.1f}°C, "
-                f"offset={dynamic_temp_offset:.2f}°C, "
-                f"lux={avg_lux}, brightness={avg_brightness:.0f}, "
-                f"lighting_ok={lighting_ok}, "
-                f"samples: ambient={len(ambient_temps)}, lux={len(illuminance_values)}, "
-                f"cns_poses={len(calibration_poses)}"
-            )
-
-            # ── Apply CNS noise floor ───────────────────────────────────────
-            if calibration_poses and self.cns_extractor:
-                estimated_floor = self.cns_extractor.calibrate_noise_floor(calibration_poses)
-                logger.info(f"CNS noise floor calibrated: {estimated_floor:.5f} ({len(calibration_poses)} poses)")
+                time.sleep(1.5)
             else:
-                logger.info("CNS calibration: no patient in frame during env cal — OK")
+                logger.warning(
+                    "⚠️ No manual calibration found — proceeding with defaults "
+                    "(room=25.0°C, offset=+0.8°C). Press 'Calibrate Room' for accuracy."
+                )
+                self._update_scan_status(
+                    message="⚠️ Room not calibrated — using defaults. "
+                            "Press 'Calibrate Room' before scanning for best accuracy.",
+                    phase="INITIALIZING",
+                    progress=7,
+                    ui_hint="Tip: calibrate the room first for accurate temperature readings",
+                )
+                time.sleep(2.0)
 
             # ============================================================
             # Phase 1: UNIFIED Concurrent Face + Vitals + Calibration
@@ -1516,40 +1690,120 @@ class HardwareManager:
             return item.get('thermal', {}).get(category, {}).get(field_name, default)
         
         if is_firmware:
-            canthus_valid = [get_val(i, 'core_regions', 'canthus_mean') for i in items 
+            # ── Firmware version detection ──────────────────────────────────
+            # v2 (DHT11): has top-level 'environment' key and 'canthus_top5' in core_regions
+            is_new_fw = (
+                'environment' in items[0]
+                or 'canthus_top5' in items[0].get('thermal', {}).get('core_regions', {})
+            )
+            # v2 uses 'stability'; v1 uses 'stability_metrics'
+            stability_key = 'stability' if is_new_fw else 'stability_metrics'
+            # v2 uses 'forehead_nose'; v1 uses 'forehead_nose_gradient'
+            gradient_field = 'forehead_nose' if is_new_fw else 'forehead_nose_gradient'
+
+            # ── Core temperatures ───────────────────────────────────────────
+            canthus_valid = [get_val(i, 'core_regions', 'canthus_mean') for i in items
                            if get_val(i, 'core_regions', 'canthus_mean') > 25.0]
-            neck_valid = [get_val(i, 'core_regions', 'neck_mean') for i in items 
+            neck_valid = [get_val(i, 'core_regions', 'neck_mean') for i in items
                          if get_val(i, 'core_regions', 'neck_mean') > 25.0]
-            face_max_valid = [get_val(i, 'core_regions', 'face_max') for i in items 
+            face_max_valid = [get_val(i, 'core_regions', 'face_max') for i in items
                            if get_val(i, 'core_regions', 'face_max') > 25.0]
-            stability_vals = [get_val(i, 'stability_metrics', 'canthus_range') for i in items]
+
+            # v2 new fields
+            top5_valid = [get_val(i, 'core_regions', 'canthus_top5') for i in items
+                          if get_val(i, 'core_regions', 'canthus_top5') > 25.0]
+            cheek_L_valid = [get_val(i, 'core_regions', 'cheek_L') for i in items
+                             if get_val(i, 'core_regions', 'cheek_L') > 25.0]
+            cheek_R_valid = [get_val(i, 'core_regions', 'cheek_R') for i in items
+                             if get_val(i, 'core_regions', 'cheek_R') > 25.0]
+            forehead_valid = [get_val(i, 'core_regions', 'forehead_mean') for i in items
+                              if get_val(i, 'core_regions', 'forehead_mean') > 25.0]
+            nose_valid = [get_val(i, 'core_regions', 'nose_mean') for i in items
+                          if get_val(i, 'core_regions', 'nose_mean') > 25.0]
+
+            # ── Stability / symmetry / gradients ────────────────────────────
+            stability_vals = [get_val(i, stability_key, 'canthus_range') for i in items]
             asymmetry_vals = [get_val(i, 'symmetry', 'cheek_asymmetry') for i in items]
-            gradient_vals = [get_val(i, 'gradients', 'forehead_nose_gradient') for i in items]
-            
-            # Use median for core temperatures and metrics (more robust to noise)
+            gradient_vals = [get_val(i, 'gradients', gradient_field) for i in items]
+
+            # rolling mean: use last value (it IS the rolling mean — no need to re-average)
+            rolling_vals = [get_val(i, stability_key, 'rolling_canthus_mean') for i in items
+                            if get_val(i, stability_key, 'rolling_canthus_mean') > 25.0]
+
+            # ── DHT11 environment (v2 only) ──────────────────────────────────
+            dht11_temps = [i.get('environment', {}).get('ambient_temp') for i in items]
+            dht11_temps = [v for v in dht11_temps if v is not None and 15.0 <= v <= 45.0]
+            humidity_vals = [i.get('environment', {}).get('humidity') for i in items]
+            humidity_vals = [v for v in humidity_vals if v is not None and 0.0 <= v <= 100.0]
+
+            # ── Flags (v2 only) ──────────────────────────────────────────────
+            confidence_vals = [i.get('confidence') for i in items]
+            confidence_vals = [v for v in confidence_vals if v is not None]
+            glasses_votes = [i.get('flags', {}).get('glasses_detected', False) for i in items]
+
+            # ── Aggregate ────────────────────────────────────────────────────
             avg_canthus = round(float(np.median(canthus_valid)), 2) if canthus_valid else 0.0
             avg_neck = round(float(np.median(neck_valid)), 2) if neck_valid else 0.0
             avg_face_max = round(float(np.median(face_max_valid)), 2) if face_max_valid else 0.0
             avg_stability = round(float(np.median(stability_vals)), 2) if stability_vals else 0.0
             avg_asymmetry = round(float(np.median(asymmetry_vals)), 3) if asymmetry_vals else 0.0
             avg_gradient = round(float(np.median(gradient_vals)), 2) if gradient_vals else 0.0
-            
+
+            avg_canthus_top5 = round(float(np.median(top5_valid)), 2) if top5_valid else None
+            avg_cheek_L = round(float(np.median(cheek_L_valid)), 2) if cheek_L_valid else None
+            avg_cheek_R = round(float(np.median(cheek_R_valid)), 2) if cheek_R_valid else None
+            avg_forehead = round(float(np.median(forehead_valid)), 2) if forehead_valid else None
+            avg_nose = round(float(np.median(nose_valid)), 2) if nose_valid else None
+            # Use the last rolling_canthus value (most recent window, already smoothed)
+            rolling_canthus = round(float(rolling_vals[-1]), 2) if rolling_vals else None
+
+            avg_dht11_temp = round(float(np.median(dht11_temps)), 2) if dht11_temps else None
+            avg_humidity = round(float(np.median(humidity_vals)), 1) if humidity_vals else None
+            avg_confidence = round(float(np.median(confidence_vals)), 3) if confidence_vals else 1.0
+            # Majority vote for glasses detection
+            glasses_detected = (sum(glasses_votes) > len(glasses_votes) / 2) if glasses_votes else False
+
             result = {
                 'timestamp': items[-1].get('timestamp', 0),
                 'thermal': {
                     'core_regions': {
-                        'canthus_mean': avg_canthus, 
+                        'canthus_mean': avg_canthus,
+                        'canthus_top5': avg_canthus_top5,       # v2: 5-hottest-pixel mean
                         'neck_mean': avg_neck,
-                        'face_max': avg_face_max
+                        'face_max': avg_face_max,
+                        'cheek_L': avg_cheek_L,                 # v2: left cheek
+                        'cheek_R': avg_cheek_R,                 # v2: right cheek
+                        'forehead_mean': avg_forehead,          # v2: forehead region
+                        'nose_mean': avg_nose,                  # v2: nasal region
                     },
-                    'stability_metrics': {'canthus_range': avg_stability},
+                    # Dual keys for backward compatibility: old code reads stability_metrics
+                    'stability_metrics': {
+                        'canthus_range': avg_stability,
+                        'rolling_canthus_mean': rolling_canthus,
+                    },
+                    'stability': {
+                        'canthus_range': avg_stability,
+                        'rolling_canthus_mean': rolling_canthus,
+                    },
                     'symmetry': {'cheek_asymmetry': avg_asymmetry},
-                    'gradients': {'forehead_nose_gradient': avg_gradient}
+                    # Dual gradient keys for backward compatibility
+                    'gradients': {
+                        'forehead_nose_gradient': avg_gradient,
+                        'forehead_nose': avg_gradient,
+                    },
+                    # v2 environment / flags (None for v1 firmware)
+                    'dht11_ambient_temp': avg_dht11_temp,
+                    'dht11_humidity': avg_humidity,
+                    'glasses_detected': glasses_detected,
+                    'esp32_confidence': avg_confidence,
                 }
             }
             logger.info(
-                f"Aggregated thermal (firmware - Median). Canthus: {avg_canthus}°C, "
-                f"Neck: {avg_neck}°C, Stability: {avg_stability}"
+                f"Aggregated thermal (fw{'v2' if is_new_fw else 'v1'} - Median). "
+                f"Canthus: {avg_canthus}°C, Top5: {avg_canthus_top5}°C, "
+                f"Neck: {avg_neck}°C, Stability: {avg_stability}, "
+                f"DHT11: {avg_dht11_temp}°C, Glasses: {glasses_detected}, "
+                f"Confidence: {avg_confidence:.2f}"
             )
             return result
         else:
@@ -1709,17 +1963,32 @@ class HardwareManager:
                     'inflammation_pct': inflammation_pct,
                     'face_mean_temp': face_mean_temp,
                     'thermal_asymmetry': symmetry.get('cheek_asymmetry'),
-                    'left_cheek_temp': None,
-                    'right_cheek_temp': None,
+                    # Cheek temps: now populated from v2 firmware cheek_L/R regions
+                    'left_cheek_temp': core.get('cheek_L'),
+                    'right_cheek_temp': core.get('cheek_R'),
                     'diabetes_canthus_temp': canthus_mean,
                     'diabetes_risk_flag': (canthus_mean is not None and canthus_mean < 35.5),
-                    'stress_gradient': abs(gradients.get('forehead_nose_gradient', 0)) if gradients.get('forehead_nose_gradient') is not None else None,
-                    'nose_temp': None,
-                    'forehead_temp': None,
+                    # Stress gradient: support both v1 and v2 field names
+                    'stress_gradient': (
+                        abs(gradients.get('forehead_nose', gradients.get('forehead_nose_gradient', 0)))
+                        if (gradients.get('forehead_nose') is not None
+                            or gradients.get('forehead_nose_gradient') is not None)
+                        else None
+                    ),
+                    # Forehead / nose: now populated from v2 firmware regions
+                    'nose_temp': core.get('nose_mean'),
+                    'forehead_temp': core.get('forehead_mean'),
                     # Homography guidance: RGB canthus coords for guided temperature extraction
                     'rgb_canthus_pixels': _canthus_pixels,
                     # AC-room correction: ambient room temperature measured before scan
                     'room_temp_calibration': self._env_calibration.get('room_temp', 25.0),
+                    # ── v2 firmware extras (None when using v1 firmware) ──────
+                    'canthus_top5': core.get('canthus_top5'),             # 5-hottest-pixel mean
+                    'rolling_canthus_mean': stability.get('rolling_canthus_mean'),  # firmware rolling avg
+                    'dht11_ambient_temp': thermal.get('dht11_ambient_temp'),        # co-located DHT11
+                    'dht11_humidity': thermal.get('dht11_humidity'),
+                    'glasses_detected': thermal.get('glasses_detected', False),
+                    'esp32_confidence': thermal.get('esp32_confidence', 1.0),
                 }
             else:
                 raw_data_context['thermal_data'] = {

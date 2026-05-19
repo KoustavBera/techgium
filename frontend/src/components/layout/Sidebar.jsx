@@ -1,4 +1,4 @@
-import { useLocation, NavLink } from 'react-router-dom'
+import { useLocation, NavLink, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded'
@@ -123,15 +123,23 @@ export default function Sidebar() {
             }}
         >
             {/* ── Logo ── */}
-            <motion.div
-                className="flex items-center gap-2 px-3 mb-6 flex-shrink-0"
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ ...sidebarSpring, delay: 0.08 }}
+            <a 
+                href="https://akchiranjeevi.netlify.app/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{ 
+                    textDecoration: 'none', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '12px',
+                    padding: '0 12px',
+                    marginBottom: '24px',
+                    cursor: 'pointer'
+                }}
             >
                 <motion.div
-                    whileHover={{ rotate: [0, -8, 8, 0] }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 10 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                 >
                     <img
                         src={heartIcon}
@@ -154,7 +162,7 @@ export default function Sidebar() {
                 >
                     Chiranjeevi
                 </span>
-            </motion.div>
+            </a>
 
             {/* ── Nav Menu ── */}
             <nav

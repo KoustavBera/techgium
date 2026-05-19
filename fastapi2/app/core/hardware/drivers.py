@@ -129,21 +129,45 @@ class ESP32Reader(BaseSerialReader):
                     # Validate required structure
                     if 'thermal' not in data:
                         continue
-                    
-                    thermal = data['thermal']
-                    
-                    # Validate metadata (face detection quality check)
-                    if 'metadata' in thermal:
-                        valid_rois = thermal['metadata'].get('valid_rois', 0)
-                        if valid_rois < 5:
-                            logger.debug(f"Low quality frame: only {valid_rois} valid ROIs")
-                            continue
-                    
-                    # Store complete data
+
+                    # Always store last_data immediately — the calibration phase
+                    # reads this via get_latest_data() to obtain DHT11 ambient_temp
+                    # even from frames where no face is present (empty room).
                     data['received_at'] = time.time()
                     self.last_data = data
-                    
-                    # Queue management
+
+                    # ── Quality gates before queuing ──────────────────────────
+                    # Firmware v2 (DHT11 schema): identified by top-level 'environment' key
+                    is_v2 = 'environment' in data
+                    if is_v2:
+                        # Gate 1: face must be detected by ESP32 for thermal measurements
+                        if not data.get('face_present', True):
+                            logger.debug(
+                                "ESP32 v2: face_present=False — stored to last_data "
+                                "but not queued (ambient-only frame)"
+                            )
+                            continue
+                        # Gate 2: aggregate confidence must meet minimum threshold
+                        esp32_confidence = data.get('confidence', 1.0)
+                        if esp32_confidence < 0.4:
+                            logger.debug(
+                                f"ESP32 v2: low confidence ({esp32_confidence:.2f}) "
+                                f"— not queued"
+                            )
+                            continue
+                    else:
+                        # Firmware v1: validate metadata.valid_rois
+                        thermal_inner = data['thermal']
+                        if 'metadata' in thermal_inner:
+                            valid_rois = thermal_inner['metadata'].get('valid_rois', 0)
+                            if valid_rois < 5:
+                                logger.debug(
+                                    f"ESP32 v1: low quality frame "
+                                    f"({valid_rois} valid ROIs) — not queued"
+                                )
+                                continue
+
+                    # Queue management (only face-valid, high-confidence frames reach here)
                     if self.data_queue.full():
                         self.data_queue.get()
                     self.data_queue.put(data)

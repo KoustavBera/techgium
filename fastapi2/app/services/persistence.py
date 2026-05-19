@@ -10,6 +10,7 @@ import json
 import logging
 import sqlite3
 import threading
+from contextlib import contextmanager
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -40,15 +41,21 @@ def _normalize_json(value: Any) -> Any:
 
 
 class PersistenceService:
-    """Small SQLite repository for durable screening/report storage."""
+    """Repository for durable screening/report storage (supports SQLite & Postgres)."""
 
     def __init__(self, database_url: str):
-        self.db_path = self._resolve_db_path(database_url)
+        self.database_url = database_url
+        self.is_postgres = database_url.startswith("postgresql")
         self._lock = threading.Lock()
+        
+        if not self.is_postgres:
+            self.db_path = self._resolve_db_path(database_url)
+        else:
+            self.db_path = None
 
     def _resolve_db_path(self, database_url: str) -> Path:
         if not database_url.startswith("sqlite:///"):
-            raise ValueError(f"Unsupported database_url for PersistenceService: {database_url}")
+            return Path("health_screening.db") # fallback
 
         raw_path = database_url[len("sqlite:///"):]
         path = Path(raw_path)
@@ -56,18 +63,64 @@ class PersistenceService:
             path = Path.cwd() / path
         return path.resolve()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _connect(self) -> Any:
+        if self.is_postgres:
+            import psycopg2
+            from urllib.parse import urlparse, unquote
+            # Parse the URL properly so %-encoded chars (like %40 for @) in
+            # the password are decoded before being passed to psycopg2.
+            parsed = urlparse(self.database_url)
+            conn = psycopg2.connect(
+                host=parsed.hostname,
+                port=parsed.port or 5432,
+                user=unquote(parsed.username or ""),
+                password=unquote(parsed.password or ""),
+                dbname=parsed.path.lstrip("/"),
+                sslmode="require",  # Supabase requires SSL
+            )
+            conn.autocommit = True
+            return conn
+        else:
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            return conn
+
+    @contextmanager
+    def _get_conn(self):
+        """
+        Context manager that yields an open connection and guarantees cleanup.
+
+        psycopg2 connections don't support `with conn:` as a plain context
+        manager for connection lifecycle — only for transaction management.
+        This wrapper handles both DB types uniformly.
+        """
+        conn = self._connect()
+        try:
+            yield conn
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def _execute(self, conn: Any, sql: str, params: tuple = ()) -> Any:
+        """Execute SQL with correct placeholder and cursor for the database type."""
+        if self.is_postgres:
+            # Convert SQLite '?' placeholders to Postgres '%s'
+            sql = sql.replace("?", "%s")
+            import psycopg2.extras
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(sql, params)
+            return cur
+        else:
+            return conn.execute(sql, params)
 
     def init_db(self) -> None:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock, self._connect() as conn:
-            conn.executescript(
-                """
-                PRAGMA foreign_keys = ON;
-
+        if not self.is_postgres:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            
+        with self._get_conn() as conn:
+            schema = """
                 CREATE TABLE IF NOT EXISTS patients (
                     patient_id TEXT PRIMARY KEY,
                     created_at TEXT NOT NULL,
@@ -98,22 +151,26 @@ class PersistenceService:
                     FOREIGN KEY (screening_id) REFERENCES screenings(screening_id),
                     FOREIGN KEY (patient_id) REFERENCES patients(patient_id)
                 );
+            """
+            
+            if self.is_postgres:
+                cur = conn.cursor()
+                cur.execute(schema)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_screenings_patient_screened_at ON screenings(patient_id, screened_at DESC);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_reports_patient_generated_at ON reports(patient_id, generated_at DESC);")
+            else:
+                conn.executescript("PRAGMA foreign_keys = ON;" + schema)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_screenings_patient_screened_at ON screenings(patient_id, screened_at DESC);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_reports_patient_generated_at ON reports(patient_id, generated_at DESC);")
+                conn.commit()
 
-                CREATE INDEX IF NOT EXISTS idx_screenings_patient_screened_at
-                    ON screenings(patient_id, screened_at DESC);
-
-                CREATE INDEX IF NOT EXISTS idx_reports_patient_generated_at
-                    ON reports(patient_id, generated_at DESC);
-                """
-            )
-            conn.commit()
-
-        logger.info(f"SQLite persistence ready at {self.db_path}")
+        logger.info(f"Persistence service ready ({'PostgreSQL' if self.is_postgres else 'SQLite'})")
 
     def create_or_get_patient(self, patient_id: str) -> None:
         now = datetime.now().isoformat()
-        with self._lock, self._connect() as conn:
-            conn.execute(
+        with self._lock, self._get_conn() as conn:
+            self._execute(
+                conn,
                 """
                 INSERT INTO patients (patient_id, created_at, updated_at)
                 VALUES (?, ?, ?)
@@ -121,7 +178,8 @@ class PersistenceService:
                 """,
                 (patient_id, now, now),
             )
-            conn.commit()
+            if not self.is_postgres:
+                conn.commit()
 
     def save_screening(self, result: Dict[str, Any], extra_payload: Optional[Dict[str, Any]] = None) -> None:
         self.create_or_get_patient(result["patient_id"])
@@ -149,8 +207,9 @@ class PersistenceService:
         timestamp = result["timestamp"].isoformat()
         created_at = datetime.now().isoformat()
 
-        with self._lock, self._connect() as conn:
-            conn.execute(
+        with self._lock, self._get_conn() as conn:
+            self._execute(
+                conn,
                 """
                 INSERT INTO screenings (
                     screening_id,
@@ -185,11 +244,13 @@ class PersistenceService:
                     created_at,
                 ),
             )
-            conn.commit()
+            if not self.is_postgres:
+                conn.commit()
 
     def get_screening_by_id(self, screening_id: str) -> Optional[Dict[str, Any]]:
-        with self._connect() as conn:
-            row = conn.execute(
+        with self._get_conn() as conn:
+            row = self._execute(
+                conn,
                 """
                 SELECT screening_id, patient_id, screened_at, screening_payload_json
                 FROM screenings
@@ -222,8 +283,9 @@ class PersistenceService:
         }
 
     def get_latest_screening_by_patient(self, patient_id: str) -> Optional[Dict[str, Any]]:
-        with self._connect() as conn:
-            row = conn.execute(
+        with self._get_conn() as conn:
+            row = self._execute(
+                conn,
                 """
                 SELECT screening_id
                 FROM screenings
@@ -250,8 +312,9 @@ class PersistenceService:
         self.create_or_get_patient(patient_id)
         created_at = datetime.now().isoformat()
 
-        with self._lock, self._connect() as conn:
-            conn.execute(
+        with self._lock, self._get_conn() as conn:
+            self._execute(
+                conn,
                 """
                 INSERT INTO reports (
                     report_id,
@@ -280,11 +343,13 @@ class PersistenceService:
                     created_at,
                 ),
             )
-            conn.commit()
+            if not self.is_postgres:
+                conn.commit()
 
     def get_report_by_id(self, report_id: str) -> Optional[Dict[str, Any]]:
-        with self._connect() as conn:
-            row = conn.execute(
+        with self._get_conn() as conn:
+            row = self._execute(
+                conn,
                 """
                 SELECT report_id, screening_id, patient_id, pdf_path, report_summary_text, generated_at
                 FROM reports
@@ -306,8 +371,9 @@ class PersistenceService:
         }
 
     def get_latest_report_by_patient(self, patient_id: str) -> Optional[Dict[str, Any]]:
-        with self._connect() as conn:
-            row = conn.execute(
+        with self._get_conn() as conn:
+            row = self._execute(
+                conn,
                 """
                 SELECT r.report_id, r.screening_id, r.patient_id, r.pdf_path, r.report_summary_text, r.generated_at
                 FROM reports r

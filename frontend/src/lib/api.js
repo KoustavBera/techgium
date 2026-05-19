@@ -118,3 +118,17 @@ export const getVideoFeedUrl = () =>
 export const getCalibrationCheck = () =>
     apiFetch('/api/v1/hardware/calibration-check');
 
+/**
+ * Trigger the standalone 8-second room environment calibration.
+ * (Temperature, lighting, CNS noise floor.)
+ * @returns {Promise<{status: string, message: string}>}
+ */
+export const startRoomCalibration = () =>
+    apiFetch('/api/v1/hardware/calibrate', { method: 'POST' });
+
+/**
+ * Poll the current room calibration status.
+ * @returns {Promise<{state: string, phase: string, message: string, progress: number, calibrated_at: string|null, env_calibration: object}>}
+ */
+export const getRoomCalibrationStatus = () =>
+    apiFetch('/api/v1/hardware/calibrate/status');

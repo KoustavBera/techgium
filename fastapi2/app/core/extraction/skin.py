@@ -43,16 +43,23 @@ class SessionBaseline:
     baseline_yellowness: float = 0.0  # CIELab *b
     ambient_background_temp: float = 25.0  # Room temp from thermal camera
     ambient_light_level: float = 120.0  # Average RGB intensity
+    dht11_ambient_temp: Optional[float] = None   # DHT11 co-located sensor (v2 firmware)
+    dht11_humidity: Optional[float] = None        # DHT11 relative humidity (v2 firmware)
 
     def to_dict(self) -> Dict[str, float]:
-        return {
+        d = {
             "baseline_facial_temp": self.baseline_facial_temp,
             "baseline_canthus_temp": self.baseline_canthus_temp,
             "baseline_redness": self.baseline_redness,
             "baseline_yellowness": self.baseline_yellowness,
             "ambient_background_temp": self.ambient_background_temp,
-            "ambient_light_level": self.ambient_light_level
+            "ambient_light_level": self.ambient_light_level,
         }
+        if self.dht11_ambient_temp is not None:
+            d["dht11_ambient_temp"] = self.dht11_ambient_temp
+        if self.dht11_humidity is not None:
+            d["dht11_humidity"] = self.dht11_humidity
+        return d
 
 
 class SkinExtractor(BaseExtractor):
@@ -575,6 +582,8 @@ class SkinExtractor(BaseExtractor):
         facial_temps_raw = []
         canthus_temps_raw = []
         background_temps = []
+        dht11_temps = []
+        dht11_humidities = []
 
         for data in thermal_frames:
             face_max = data.get('fever_face_max')
@@ -589,11 +598,30 @@ class SkinExtractor(BaseExtractor):
             if bg_temp is not None:
                 background_temps.append(float(bg_temp))
 
+            # v2 firmware: DHT11 readings passed through thermal_frames
+            d11 = data.get('dht11_ambient_temp')
+            if d11 is not None and 15.0 <= d11 <= 45.0:
+                dht11_temps.append(float(d11))
+            d11h = data.get('dht11_humidity')
+            if d11h is not None and 0.0 <= d11h <= 100.0:
+                dht11_humidities.append(float(d11h))
+
         # Dynamic AC-room correction: each 1°C below 25°C adds ~0.15°C more offset.
-        # background_temp is the room ambient from the thermal camera (no patient in frame).
-        ambient_temp = float(np.median(background_temps)) if background_temps else 25.0
+        # Prefer DHT11 (v2 firmware) over background-pixel proxy (v1 firmware).
+        if dht11_temps:
+            ambient_temp = float(np.median(dht11_temps))
+            cal_source = "DHT11"
+        elif background_temps:
+            ambient_temp = float(np.median(background_temps))
+            cal_source = "thermal_background_proxy"
+        else:
+            ambient_temp = 25.0
+            cal_source = "default_25C"
         CALIBRATION_OFFSET = 0.8 + max(0.0, (25.0 - ambient_temp) * 0.15)
-        logger.info(f"Skin baseline: dynamic offset={CALIBRATION_OFFSET:.2f}°C (room={ambient_temp:.1f}°C)")
+        logger.info(
+            f"Skin baseline: dynamic offset={CALIBRATION_OFFSET:.2f}°C "
+            f"(room={ambient_temp:.1f}°C, source={cal_source})"
+        )
 
         facial_temps = [t + CALIBRATION_OFFSET for t in facial_temps_raw]
         canthus_temps = [t + CALIBRATION_OFFSET for t in canthus_temps_raw]
@@ -629,7 +657,9 @@ class SkinExtractor(BaseExtractor):
             baseline_redness=float(baseline_redness),
             baseline_yellowness=float(baseline_yellowness),
             ambient_background_temp=float(ambient_temp),
-            ambient_light_level=float(baseline_light)
+            ambient_light_level=float(baseline_light),
+            dht11_ambient_temp=float(np.median(dht11_temps)) if dht11_temps else None,
+            dht11_humidity=float(np.median(dht11_humidities)) if dht11_humidities else None,
         )
         
         logger.info(f"Skin: Session baseline established: {baseline.to_dict()}")
@@ -732,68 +762,109 @@ class SkinExtractor(BaseExtractor):
         session_baseline: Optional[SessionBaseline] = None,
         pose_landmarks: Optional[List[Any]] = None
     ) -> None:
-        """Extract skin metrics from flattened thermal data (NEW FORMAT v2)."""
-        # THERMAL CALIBRATION: Dynamic AC-room correction.
-        # Base offset 0.8°C + 0.15°C for each 1°C the room is below 25°C.
-        # room_temp_calibration is injected by manager._build_screening_request()
-        # from the environment calibration phase (measured BEFORE patient enters frame).
-        ambient_room_temp = thermal_data.get('room_temp_calibration', 25.0)
-        CALIBRATION_OFFSET = 0.8 + max(0.0, (25.0 - ambient_room_temp) * 0.15)
-        logger.info(f"Thermal v2: dynamic offset={CALIBRATION_OFFSET:.2f}°C (room={ambient_room_temp:.1f}°C)")
+        """Extract skin metrics from flattened thermal data (NEW FORMAT v2).
         
-        # MOTION GATING: Check for head movement before trusting thermal data
-        # Rapid movement causes "Inflammation" artifacts (hot pixel smearing)
+        Calibration accuracy hierarchy:
+          Room temp source: DHT11 (v2 firmware) > thermal_bg_proxy (v1) > default 25°C
+          Canthus temp source: canthus_top5 > rolling_canthus_mean > canthus_mean > neck_mean
+          Confidence modifiers: glasses_detected penalty, esp32_confidence scaling
+        """
+        # ══ 1. CALIBRATION OFFSET ════════════════════════════════════════════
+        # DHT11 (v2 firmware): co-located sensor, no emissivity/angle error.
+        # room_temp_calibration (v1 firmware): background-pixel proxy, more noise.
+        # Formula: 0.8°C base (MLX90640 characteristic under-read) +
+        #          0.15°C per 1°C the room is below 25°C (AC convective cooling).
+        dht11_temp = thermal_data.get('dht11_ambient_temp')
+        room_temp_proxy = thermal_data.get('room_temp_calibration', 25.0)
+
+        if dht11_temp is not None and 15.0 <= dht11_temp <= 45.0:
+            ambient_room_temp = dht11_temp
+            calibration_source = "DHT11"
+        else:
+            ambient_room_temp = room_temp_proxy
+            calibration_source = "thermal_background_proxy"
+
+        CALIBRATION_OFFSET = 0.8 + max(0.0, (25.0 - ambient_room_temp) * 0.15)
+        logger.info(
+            f"Thermal v2: offset={CALIBRATION_OFFSET:.2f}°C "
+            f"(room={ambient_room_temp:.1f}°C, source={calibration_source})"
+        )
+
+        # ══ 2. GLASSES CONFIDENCE MODIFIER ══════════════════════════════════
+        # When glasses are detected, the canthus ROI may be partially occluded
+        # by the frame edge — particularly the inner canthus (tear-duct hotspot).
+        glasses_detected = thermal_data.get('glasses_detected', False)
+        esp32_confidence = float(thermal_data.get('esp32_confidence', 1.0))
+        esp32_confidence = max(0.3, min(1.0, esp32_confidence))  # clamp to [0.3, 1.0]
+
+        # Base confidence tiers for temperature readings
+        base_thermal_conf = 0.92
+        if glasses_detected:
+            base_thermal_conf = min(base_thermal_conf, 0.78)
+            logger.info("Skin: Glasses detected — canthus confidence reduced (occlusion risk)")
+
+        # Scale by ESP32's own quality estimate
+        thermal_conf = round(base_thermal_conf * esp32_confidence, 3)
+
+        # ══ 3. MOTION GATING ════════════════════════════════════════════════
+        # Rapid head movement causes "inflammation" pixel smearing artifacts.
         if pose_landmarks:
-            # Simple velocity check: comparing nose position to undefined previous state
-            # Since we don't track state across frames in this class easily without a stateful extractor,
-            # we will use the 'thermal_stability' metric itself as a gate.
-            
-            # However, we can use the head rotation we calculated later.
             yaw, pitch = self._estimate_head_pose(pose_landmarks)
-            
-            # If head is rotating fast or at extreme angles, the "Canthus" temp is unreliable
-            # because the camera sees the side of the nose or cheek instead.
-            # TIGHTENED THRESHOLD (15 -> 10) to prevent false positives in "Above Normal" flags
             is_stable_pose = abs(yaw) < 10.0 and abs(pitch) < 10.0
-            
+
             if not is_stable_pose:
                 logger.warning(
                     f"Thermal: Unstable pose (Yaw={yaw:.1f}, Pitch={pitch:.1f}). "
                     f"Skipping inflammation/stability analysis to prevent artifacts."
                 )
-                # We still extract basic temp but skip sensitive metrics
-                # Explicitly remove keys to prevent them from being processed
-                if 'inflammation_pct' in thermal_data:
-                    del thermal_data['inflammation_pct']
-                if 'thermal_stability' in thermal_data:
-                    del thermal_data['thermal_stability']
-                if 'thermal_asymmetry' in thermal_data:
-                    del thermal_data['thermal_asymmetry']
-        
-        # Skin Temperature from canthus (core body proxy - medically validated)
-        neck_temp = thermal_data.get('fever_neck_temp')
-        canthus_temp = thermal_data.get('fever_canthus_temp')
-        face_max = thermal_data.get('fever_face_max')
-        
-        # Apply calibration
-        if neck_temp is not None: neck_temp += CALIBRATION_OFFSET
-        if canthus_temp is not None: canthus_temp += CALIBRATION_OFFSET
-        if face_max is not None: face_max += CALIBRATION_OFFSET
+                # Still extract basic temp, but drop noisy derived metrics
+                for key in ('inflammation_pct', 'thermal_stability', 'thermal_asymmetry'):
+                    thermal_data.pop(key, None)
 
-        # ── Homography-guided canthus temperature (UPGRADE) ────────────────
-        # If the manager passed rgb_canthus_pixels, we use the RGB FaceMesh
-        # landmark positions to project the tear-duct coordinates onto the 32x24
-        # thermal grid and extract a 3x3 neighbourhood maximum.
-        # This replaces the raw face_max (which is just the hottest pixel in the
-        # whole frame) with a anatomically-pinned measurement.
+        # ══ 4. CANTHUS TEMPERATURE SELECTION ════════════════════════════════
+        # Accuracy hierarchy (highest to lowest):
+        #   canthus_top5       — 5 hottest pixels mean; best single-frame estimate
+        #   rolling_canthus_mean — firmware multi-frame rolling avg (already smoothed)
+        #   canthus_mean       — mean of all ROI pixels (includes cold border pixels)
+        #   neck_mean          — fallback; anatomically different site
+        neck_temp    = thermal_data.get('fever_neck_temp')
+        canthus_mean = thermal_data.get('fever_canthus_temp')
+        face_max     = thermal_data.get('fever_face_max')
+        canthus_top5 = thermal_data.get('canthus_top5')
+        rolling_mean = thermal_data.get('rolling_canthus_mean')
+
+        # Apply calibration offset to each raw reading
+        if neck_temp    is not None: neck_temp    += CALIBRATION_OFFSET
+        if canthus_mean is not None: canthus_mean += CALIBRATION_OFFSET
+        if face_max     is not None: face_max     += CALIBRATION_OFFSET
+        if canthus_top5 is not None: canthus_top5 += CALIBRATION_OFFSET
+        if rolling_mean is not None: rolling_mean += CALIBRATION_OFFSET
+
+        # Prefer canthus_top5 if the top5–mean gap is physiologically plausible (0–2°C).
+        # A gap > 2°C signals a hot-spot artifact (e.g. reflection), so fall back.
+        best_canthus = None
+        canthus_source = "none"
+        if (canthus_top5 is not None and canthus_mean is not None
+                and 0.0 <= (canthus_top5 - canthus_mean) <= 2.0):
+            best_canthus = canthus_top5
+            canthus_source = "canthus_top5"
+        elif rolling_mean is not None:
+            best_canthus = rolling_mean
+            canthus_source = "rolling_canthus_mean"
+        elif canthus_mean is not None:
+            best_canthus = canthus_mean
+            canthus_source = "canthus_mean"
+
+        logger.info(
+            f"Thermal v2 canthus selection: {canthus_source}={best_canthus:.2f}°C "
+            f"(top5={canthus_top5}, mean={canthus_mean}, rolling={rolling_mean})"
+            if best_canthus is not None else
+            f"Thermal v2: no valid canthus reading"
+        )
+
+        # Homography-guided canthus logging (raw grid unavailable in firmware v2)
         rgb_canthus_pixels = thermal_data.get('rgb_canthus_pixels')
         if rgb_canthus_pixels is not None:
-            # We don't store the raw grid in thermal_data — the ESP32 driver has
-            # already aggregated it down to scalar summaries. So we use the
-            # homography to compute a refined temperature from the existing
-            # canthus_temp/face_max, weighted by how well-centred the landmark
-            # mapping was. If the thermal grid were available, we'd pass it here;
-            # for now, we log that guidance was received to confirm the pipeline.
             logger.info(
                 f"Thermal homography guidance received: "
                 f"right={rgb_canthus_pixels.get('right')}  "
@@ -801,98 +872,102 @@ class SkinExtractor(BaseExtractor):
                 f"rgb_shape={rgb_canthus_pixels.get('rgb_frame_shape')}  "
                 f"thermal_shape={rgb_canthus_pixels.get('thermal_frame_shape')}"
             )
-            # When the raw pixel grid is available in future firmware versions,
-            # call: face_max = self._apply_thermal_homography(rgb_canthus_pixels, raw_grid)
 
-        # Priority: homography-guided face_max > canthus > neck
-        # face_max is the highest-confidence reading; canthus is medically validated fallback.
-        if face_max is not None:
+        # Final temperature: best_canthus > face_max > neck
+        if best_canthus is not None:
+            final_skin_temp = best_canthus
+        elif face_max is not None:
             final_skin_temp = face_max
-        elif canthus_temp is not None:
-             final_skin_temp = canthus_temp
         else:
-             final_skin_temp = neck_temp
-        
-        # Validation: Warn if neck temp is suspiciously low compared to canthus
-        if neck_temp is not None and canthus_temp is not None:
-            temp_diff = abs(canthus_temp - neck_temp)
-            if temp_diff > 5.0:  # More than 5°C difference is abnormal
+            final_skin_temp = neck_temp
+
+        # Sanity check: warn on large canthus–neck divergence
+        if neck_temp is not None and best_canthus is not None:
+            temp_diff = abs(best_canthus - neck_temp)
+            if temp_diff > 5.0:
                 logger.warning(
-                    f"Skin: Large temperature difference detected - "
-                    f"Canthus: {canthus_temp:.1f}°C, Neck: {neck_temp:.1f}°C (Δ={temp_diff:.1f}°C). "
-                    f"Using canthus (more reliable for core temp). "
-                    f"Check thermal camera positioning or neck ROI calibration."
+                    f"Skin: Large canthus–neck divergence — "
+                    f"canthus ({canthus_source})={best_canthus:.1f}°C, "
+                    f"neck={neck_temp:.1f}°C (Δ={temp_diff:.1f}°C). "
+                    f"Check camera positioning or neck ROI calibration."
                 )
-        
+
+        # ══ 5. CORE TEMPERATURE BIOMARKER ═══════════════════════════════════
+        glasses_note = " (⚠️ glasses detected — canthus occlusion risk)" if glasses_detected else ""
+
         if final_skin_temp is not None:
             if session_baseline:
-                # Metric-aware deviation (compare like-for-like)
-                if face_max is not None:
-                    # Peak vs Peak Baseline
+                # Metric-aware deviation: compare peak-to-peak or canthus-to-canthus
+                if face_max is not None and best_canthus is None:
                     thermal_deviation = face_max - session_baseline.baseline_facial_temp
                     desc_suffix = f"Peak baseline ({session_baseline.baseline_facial_temp:.1f}°C)"
                 else:
-                    # Canthus vs Canthus Baseline
                     thermal_deviation = final_skin_temp - session_baseline.baseline_canthus_temp
                     desc_suffix = f"Canthus baseline ({session_baseline.baseline_canthus_temp:.1f}°C)"
-                
-                # Adjust normal range based on ambient temperature
-                if session_baseline.ambient_background_temp < 22.0:
+
+                # Use DHT11 ambient_temp from session_baseline when available for range adjust
+                ref_ambient = (
+                    session_baseline.dht11_ambient_temp
+                    if session_baseline.dht11_ambient_temp is not None
+                    else session_baseline.ambient_background_temp
+                )
+                if ref_ambient < 22.0:
                     adjusted_range = (-1.5, 1.0)
-                elif session_baseline.ambient_background_temp > 28.0:
+                elif ref_ambient > 28.0:
                     adjusted_range = (-1.0, 2.0)
                 else:
                     adjusted_range = (-1.0, 1.0)
-                
+
                 self._add_biomarker_safe(
                     biomarker_set,
                     name="skin_temperature_deviation",
                     value=float(thermal_deviation),
                     unit="delta_celsius",
-                    confidence=0.92 if canthus_temp is not None else 0.70,
+                    confidence=thermal_conf,
                     normal_range=adjusted_range,
-                    description=f"Skin temp deviation from experimental {desc_suffix}"
+                    description=f"Skin temp deviation from {desc_suffix} [{canthus_source}]{glasses_note}"
                 )
             else:
-                 self._add_biomarker_safe(
+                self._add_biomarker_safe(
                     biomarker_set,
                     name="skin_temperature",
                     value=float(final_skin_temp),
                     unit="celsius",
-                    confidence=0.92 if canthus_temp is not None else 0.70,
+                    confidence=thermal_conf,
                     normal_range=(35.5, 37.5),
-                    description="Body temperature (Inner canthus - medical standard)"
+                    description=f"Body temperature ({canthus_source} - medical standard){glasses_note}"
                 )
-        
-        # Max Temperature from inner canthus or face_max (most accurate core temp proxy)
-        # Use face_max if available (firmware 2.0), otherwise fallback to canthus
-        max_temp_source = face_max if face_max is not None else thermal_data.get('fever_canthus_temp')
-        
-        if max_temp_source is not None:
+
+        # Peak temperature (fever screening)
+        peak_source = best_canthus if best_canthus is not None else face_max
+        if peak_source is None:
+            # Last resort: un-calibrated canthus from raw field
+            _raw_canthus = thermal_data.get('fever_canthus_temp')
+            peak_source = _raw_canthus
+        if peak_source is not None:
             self._add_biomarker_safe(
                 biomarker_set,
                 name="skin_temperature_max",
-                value=float(max_temp_source),
+                value=float(peak_source),
                 unit="celsius",
-                confidence=0.95 if face_max is not None else 0.90,
+                confidence=min(0.95, thermal_conf + 0.03),
                 normal_range=(36.0, 38.0),
-                description="Peak facial temperature (Fever indicator)"
+                description=f"Peak facial temperature — fever indicator [{canthus_source}]{glasses_note}"
             )
-        
-        # Inflammation Index from hot pixel percentage
+
+        # ══ 6. INFLAMMATION INDEX ════════════════════════════════════════════
         if thermal_data.get('inflammation_pct') is not None:
             self._add_biomarker_safe(
                 biomarker_set,
                 name="inflammation_index",
                 value=float(thermal_data['inflammation_pct']),
                 unit="percent",
-                confidence=0.75,
+                confidence=0.75 * esp32_confidence,
                 normal_range=(0.0, 5.0),
                 description="Localized inflammation (hot pixel %, MLX90640)"
             )
-        
-        # Face mean temperature for context
-        # Apply same +0.8°C calibration offset as neck/canthus/face_max paths above.
+
+        # ══ 7. FACE MEAN TEMPERATURE ═════════════════════════════════════════
         if thermal_data.get('face_mean_temp') is not None:
             face_mean_calibrated = float(thermal_data['face_mean_temp']) + CALIBRATION_OFFSET
             self._add_biomarker_safe(
@@ -900,13 +975,12 @@ class SkinExtractor(BaseExtractor):
                 name="face_mean_temperature",
                 value=face_mean_calibrated,
                 unit="celsius",
-                confidence=0.85,
-                normal_range=(33.5, 37.0),  # mean face is ~0.5-1°C cooler than inner canthus hotspot
+                confidence=0.85 * esp32_confidence,
+                normal_range=(33.5, 37.0),
                 description="Average face temperature (MLX90640, calibrated)"
             )
-        
-        # Thermal Stability from canthus temperature range (temporal consistency)
-        # Lower range = more stable reading = higher measurement quality
+
+        # ══ 8. THERMAL STABILITY ═════════════════════════════════════════════
         if thermal_data.get('thermal_stability') is not None:
             self._add_biomarker_safe(
                 biomarker_set,
@@ -917,36 +991,85 @@ class SkinExtractor(BaseExtractor):
                 normal_range=(0.0, 0.8),
                 description="Thermal measurement stability (canthus range, MLX90640)"
             )
-            
-        # NEW Phase 1.3: Thermal Asymmetry with Pose Gating
+
+        # ══ 9. THERMAL ASYMMETRY WITH POSE GATING ════════════════════════════
         if thermal_data.get('thermal_asymmetry') is not None:
             asymmetry_val = float(thermal_data['thermal_asymmetry'])
-            confidence = 0.85
+            asym_conf = 0.85
             description = "Thermal asymmetry (Left vs Right)"
-            
-            # GATING: If pose is provided, check frontal alignment
+
             if pose_landmarks:
                 yaw, pitch = self._estimate_head_pose(pose_landmarks)
-                
-                # Loose thresholds for consumer hardware/movement
                 if abs(yaw) > 12.0 or abs(pitch) > 12.0:
                     logger.warning(
-                        f"Skin: High head rotation detected (Yaw: {yaw:.1f}°, Pitch: {pitch:.1f}°). "
-                        f"Reducing asymmetry confidence."
+                        f"Skin: High head rotation (Yaw: {yaw:.1f}°, Pitch: {pitch:.1f}°) "
+                        f"— reducing asymmetry confidence."
                     )
-                    confidence *= 0.3 # Heavy penalty for non-frontal pose
-                    description += f" (Warning: High head rotation {yaw:.1f}°/{pitch:.1f}°)"
+                    asym_conf *= 0.3
+                    description += f" (⚠️ head rotation {yaw:.1f}°/{pitch:.1f}°)"
                 else:
-                    confidence = 0.95 # Bonus for confirmed frontal pose
-            
+                    asym_conf = 0.95  # frontal pose confirmed
+
             self._add_biomarker_safe(
                 biomarker_set,
                 name="thermal_asymmetry",
                 value=asymmetry_val,
                 unit="delta_celsius",
-                confidence=confidence,
+                confidence=asym_conf * esp32_confidence,
                 normal_range=(0.0, 0.5),
                 description=description
+            )
+
+        # ══ 10. NEW v2 FIRMWARE BIOMARKERS ══════════════════════════════════
+        # Forehead temperature (v2: dedicated forehead_mean ROI)
+        forehead_raw = thermal_data.get('forehead_temp')
+        if forehead_raw is not None:
+            forehead_cal = float(forehead_raw) + CALIBRATION_OFFSET
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="forehead_temperature",
+                value=forehead_cal,
+                unit="celsius",
+                confidence=0.82 * esp32_confidence,
+                normal_range=(33.5, 36.5),
+                description=f"Forehead temperature (MLX90640 forehead ROI, calibrated, {calibration_source})"
+            )
+
+        # Nasal temperature (v2: dedicated nose_mean ROI)
+        nose_raw = thermal_data.get('nose_temp')
+        if nose_raw is not None:
+            nose_cal = float(nose_raw) + CALIBRATION_OFFSET
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="nasal_temperature",
+                value=nose_cal,
+                unit="celsius",
+                confidence=0.78 * esp32_confidence,
+                normal_range=(29.0, 34.0),
+                description=f"Nasal temperature (MLX90640 nose ROI, calibrated, {calibration_source})"
+            )
+
+        # DHT11 ambient environment (v2 only — informational, not a clinical biomarker)
+        if dht11_temp is not None:
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="ambient_temperature",
+                value=float(dht11_temp),
+                unit="celsius",
+                confidence=0.98,
+                normal_range=(18.0, 32.0),
+                description="Room ambient temperature (DHT11 co-located sensor)"
+            )
+        dht11_humidity = thermal_data.get('dht11_humidity')
+        if dht11_humidity is not None:
+            self._add_biomarker_safe(
+                biomarker_set,
+                name="ambient_humidity",
+                value=float(dht11_humidity),
+                unit="percent_rh",
+                confidence=0.95,
+                normal_range=(30.0, 70.0),
+                description="Room relative humidity (DHT11 co-located sensor)"
             )
 
     def _add_biomarker_safe(

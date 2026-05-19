@@ -10,6 +10,7 @@ import CellTowerRoundedIcon from '@mui/icons-material/CellTowerRounded'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import HighlightOffRoundedIcon from '@mui/icons-material/HighlightOffRounded'
 import CalibrationPanel from './CalibrationPanel'
+import RoomCalibrationButton from './RoomCalibrationButton'
 
 const cardStyle = {
     background: '#F3F4F4',
@@ -133,6 +134,9 @@ export default function ScreeningControls({
                 >
                     {isCameraActive ? '⏹ Hide Camera' : '▶ Show Camera'}
                 </motion.button>
+
+                {/* ── Room Calibration ── */}
+                <RoomCalibrationButton disabled={isBusy} />
 
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <SensorStatus icon={<PhotoCameraRoundedIcon />} name="RGB" status={sensorStatus?.camera?.status} />

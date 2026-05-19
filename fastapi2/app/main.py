@@ -621,6 +621,66 @@ async def get_scan_status():
     return _hw_manager.get_scan_status()
 
 
+@app.post("/api/v1/hardware/calibrate", tags=["Hardware"])
+async def start_room_calibration():
+    """
+    Trigger a standalone 8-second environment calibration.
+
+    The calibration measures:
+    - Ambient temperature (DHT11 sensor if v2 firmware, otherwise thermal background pixels)
+    - Room illuminance (radar lux sensor + webcam brightness)
+    - CNS motion noise floor (for tremor baseline)
+
+    Results persist in the HardwareManager until the next manual calibration.
+    All subsequent scans use these values without re-running the 8-second phase.
+
+    **Usage:** Call once when setting up the kiosk or when the room environment changes
+    (e.g. AC turned on/off, significant temperature shift).
+    Ask the patient to step aside before pressing this button.
+
+    Poll /api/v1/hardware/calibrate/status for progress (state: running → complete/error).
+    """
+    started = _hw_manager.start_calibration()
+    if not started:
+        status = _hw_manager.get_calibration_status()
+        if status.get("state") == "running":
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "status": "already_running",
+                    "message": "Calibration already in progress. Poll /calibrate/status for progress.",
+                }
+            )
+        return JSONResponse(
+            status_code=409,
+            content={
+                "status": "blocked",
+                "message": "Cannot calibrate while a scan is active. Wait for scan to complete.",
+            }
+        )
+
+    return {
+        "status": "started",
+        "message": "Calibration started. Ensure the camera view is clear. "
+                   "Poll /api/v1/hardware/calibrate/status for progress (~8 seconds).",
+    }
+
+
+@app.get("/api/v1/hardware/calibrate/status", tags=["Hardware"])
+async def get_calibration_status():
+    """
+    Poll calibration progress and view current calibration values.
+
+    States: idle | running | complete | error
+
+    Response includes:
+    - state / phase / message / progress (0–100)
+    - calibrated_at (ISO timestamp of last successful calibration, or null)
+    - env_calibration: room_temp, dynamic_temp_offset, lighting_ok, dht11_used
+    """
+    return _hw_manager.get_calibration_status()
+
+
 # ---- Doctor Chat Agent Endpoint ----
 
 @app.post("/api/v1/doctor/chat", tags=["Doctor"])
