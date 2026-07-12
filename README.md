@@ -24,12 +24,31 @@
 - [Running the Backend](#running-the-backend)
 - [API Overview](#api-overview)
 - [Supported Physiological Systems](#supported-physiological-systems)
-- [Privacy & Data Handling](#privacy--data-handling)
+- [Privacy & Data Handling](#privacy-data-handling)
 - [Disclaimer](#disclaimer)
 - [Internal Architecture](#internal-architecture)
+- [Hardware Architecture](#hardware-architecture)
+- [Physiological Screening Pipeline](#physiological-screening-pipeline)
+- [Clinical Validation Layer](#clinical-validation-layer)
+- [Adaptive Multi-LLM Interpretation](#adaptive-multi-llm-interpretation-2)
+- [LangGraph Medical AI Agent](#langgraph-medical-ai-agent)
+- [Report Generation](#report-generation)
+- [Persistence Layer](#persistence-layer)
+- [Performance Optimizations (Architecture)](#performance-optimizations-1)
+- [Privacy & Security](#privacy-security)
+- [External Integrations](#external-integrations)
+- [Performance Optimizations (Backend)](#performance-optimizations-2)
+- [Scientific Foundation](#scientific-foundation)
+- [References](#references)
+- [Contributing](#contributing)
+- [Roadmap](#roadmap)
+- [Frequently Asked Questions](#faq)
+- [License](#license)
+- [Vision](#vision)
 
 ---
 
+<a id="overview"></a>
 # 📖 Overview
 
 **Chiranjeevi** is an AI-powered multimodal physiological screening platform designed to assist preventive healthcare through passive sensing and intelligent medical interpretation.
@@ -55,6 +74,7 @@ The repository contains the complete backend responsible for:
 
 ---
 
+<a id="why-chiranjeevi"></a>
 # 💡 Why Chiranjeevi?
 
 Healthcare today is largely reactive—patients typically seek medical attention only after symptoms become noticeable.
