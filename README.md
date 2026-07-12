@@ -12,20 +12,21 @@
 
 # 📖 Table of Contents
 
-- [Overview](#-overview)
-- [Why Chiranjeevi?](#-why-chiranjeevi)
-- [Features](#-features)
-- [System Architecture](#-system-architecture)
-- [Adaptive AI Interpretation](#-adaptive-ai-interpretation)
-- [Technology Stack](#-technology-stack)
-- [Project Structure](#-project-structure)
-- [Getting Started](#-getting-started)
-- [Environment Variables](#-environment-variables)
-- [Running the Backend](#-running-the-backend)
-- [API Overview](#-api-overview)
-- [Supported Physiological Systems](#-supported-physiological-systems)
-- [Privacy & Data Handling](#-privacy--data-handling)
-- [Disclaimer](#-disclaimer)
+- [Overview](#overview)
+- [Why Chiranjeevi?](#why-chiranjeevi)
+- [Features](#features)
+- [System Architecture](#system-architecture)
+- [Adaptive AI Interpretation](#adaptive-ai-interpretation)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Running the Backend](#running-the-backend)
+- [API Overview](#api-overview)
+- [Supported Physiological Systems](#supported-physiological-systems)
+- [Privacy & Data Handling](#privacy--data-handling)
+- [Disclaimer](#disclaimer)
+- [Internal Architecture](#internal-architecture)
 
 ---
 
