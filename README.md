@@ -1,445 +1,1233 @@
-# 🏥 Chiranjeevi: Autonomous Multimodal Physiological Telemetry & Diagnostic OS
+# 🏥 Chiranjeevi
+### Autonomous Multimodal Physiological Screening & AI Medical Assistant
 
-[![Venture Backed](https://img.shields.io/badge/Status-Stealth--Alpha-blueviolet?style=for-the-badge)](https://ycombinator.com)
-[![Engine](https://img.shields.io/badge/Neural--Engine-Titan--V2.0-red?style=for-the-badge)](https://github.com/chiranjeevi)
-[![Architecture](https://img.shields.io/badge/Architecture-Sequential--Quality--Pipeline-gold?style=for-the-badge)](https://github.com/chiranjeevi)
-[![Inference](https://img.shields.io/badge/Inference-GPT--OSS--120B-blue?style=for-the-badge)](https://github.com/chiranjeevi)
+[![Status](https://img.shields.io/badge/Status-Alpha-blueviolet?style=for-the-badge)]()
+[![Backend](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge)]()
+[![AI](https://img.shields.io/badge/AI-LangGraph%20%7C%20Gemini%20%7C%20HF-orange?style=for-the-badge)]()
+[![License](https://img.shields.io/badge/License-MIT-success?style=for-the-badge)]()
 
-> **"Traditional reactive diagnostics are legacy architecture. Chiranjeevi is the zero-friction, autonomous API for the human biological state."**
-
----
-
-## 📑 Table of Technical Contents
-
-- [🌌 The Vision: Declarative Healthcare](#-the-vision-declarative-healthcare)
-- [🏗️ System Architecture: The Split-USB Fabric](#️-system-architecture-the-split-usb-fabric)
-- [📡 Sensor Fusion & Signal Processing Deep-Dive](#-sensor-fusion--signal-processing-deep-dive)
-  - [mmWave Interferometry (FMCW)](#mmwave-interferometry-fmcw)
-  - [Radiometric LWIR Thermography](#radiometric-lwir-thermography)
-  - [Neural Computer Vision (RGB-D)](#neural-computer-vision-rgb-d)
-- [🧠 The Trust Envelope™ Boundary](#-the-trust-envelope-boundary)
-- [🤖 Multi-LLM Sequential Quality Pipeline](#-multi-llm-sequential-quality-pipeline)
-  - [Phase 1: Gemini Insight Generation](#phase-1-gemini-insight-generation)
-  - [Phase 2: II-Medical Clinical Validation](#phase-2-ii-medical-clinical-validation)
-  - [Phase 3: GPT-OSS Quality Arbitration](#phase-3-gpt-oss-quality-arbitration)
-- [🧬 The Diagnostic Matrix: Biomarker Specification](#-the-diagnostic-matrix-biomarker-specification)
-  - [Detailed System Modules & Specifications](#detailed-system-modules--specifications)
-  - [Mathematical Derivations & Bio-Proxies](#mathematical-derivations--bio-proxies)
-- [🔒 Data Governance & Topological Anonymization](#-data-governance--topological-anonymization)
-- [🚀 Deployment & Orchestration Guide](#-deployment--orchestration-guide)
-- [🛠️ Developer API & CLI Workflows](#️-developer-api--cli-workflows)
-  - [Detailed Endpoint Schemas](#detailed-endpoint-schemas)
-  - [In-Memory Storage Logic](#in-memory-storage-logic)
-- [📋 Hardware Infrastructure & Calibration](#-hardware-infrastructure--calibration)
-- [📈 Performance Benchmarking & Optimization](#-performance-benchmarking--optimization)
-- [ Contribution & Scholarly Collaboration](#-contribution--scholarly-collaboration)
-- [🗺️ Strategic Roadmap](#️-strategic-roadmap)
-- [🧪 Scientific Foundations & Citations](#-scientific-foundations--citations)
-- [📖 Glossary of Sophisticated Terms](#-glossary-of-sophisticated-terms)
-- [⚖️ License](#⚖️-license)
+> **Reimagining preventive healthcare through passive sensing, multimodal physiological analysis, and AI-assisted medical reasoning.**
 
 ---
 
-## 🌌 The Vision: Declarative Healthcare
+# 📖 Table of Contents
 
-Chiranjeevi represents a definitive paradigm shift in medical informatics. We are deprecating the **"Imperative Diagnostic Model"**—the legacy approach where clinicians manually initiate point-in-time measurements—in favor of **Autonomous Passive Telemetry**.
-
-In our world, health data is not something you "provide"; it is a continuous stream of environmental interactions. By leveraging a high-fidelity sensor fabric, we compute a **9-System Physiological State Vector** during a 30-second walkthrough. This is **Metabolic Abstraction**: we hide the complexity of clinical measurement behind the simple act of human motion. We are building the "Check-engine light" for the human body, operating entirely in the background, with zero patient friction.
+- [Overview](#-overview)
+- [Why Chiranjeevi?](#-why-chiranjeevi)
+- [Features](#-features)
+- [System Architecture](#-system-architecture)
+- [Adaptive AI Interpretation](#-adaptive-ai-interpretation)
+- [Technology Stack](#-technology-stack)
+- [Project Structure](#-project-structure)
+- [Getting Started](#-getting-started)
+- [Environment Variables](#-environment-variables)
+- [Running the Backend](#-running-the-backend)
+- [API Overview](#-api-overview)
+- [Supported Physiological Systems](#-supported-physiological-systems)
+- [Privacy & Data Handling](#-privacy--data-handling)
+- [Disclaimer](#-disclaimer)
 
 ---
 
-## 🏗️ System Architecture: The Split-USB Fabric
+# 📖 Overview
 
-Our hardware abstraction layer (HAL) is built on a **High-Concurrency Split-USB Star Topology**. To avoid the "Bus Congestion" typical of standard USB hubs, Chiranjeevi isolates high-bandwidth 4K video streams from low-latency, real-time serial data streams (mmWave Radar and Thermal LWIR).
+**Chiranjeevi** is an AI-powered multimodal physiological screening platform designed to assist preventive healthcare through passive sensing and intelligent medical interpretation.
 
-```mermaid
-graph TD
-    subgraph "Hardware Interface Layer (The Fabric)"
-        R1[60GHz mmWave Radar] -->|Serial/UART| Hub[USB 3.1 Star Hub]
-        T1[MLX90640 Thermal LWIR] -->|I2C Over Bridge| Hub
-        C1[4K RGB-D Depth Node] -->|USB 3.0| Hub
-        A1[Simulated RIS Node] -->|HID Protocol| Hub
-    end
+The platform combines deterministic physiological analysis with modern AI to estimate health indicators using multiple non-invasive sensing modalities including RGB imaging, thermal imaging, and mmWave radar.
 
-    subgraph "Local Computing Node (Edge HAL)"
-        Hub --> Bridge[Bridge.py Data Convergence]
-        Bridge --> Sync[Temporal Sync Layer]
-        
-        subgraph "Deterministic Logic Engine"
-            Sync --> CV[CV Feature Extraction]
-            Sync --> SP[DSP Signal Eng.]
-            CV --> BM[Biomarker Vectorization]
-            SP --> BM
-        end
-    end
+Unlike conventional diagnostic systems that rely entirely on manual measurements, Chiranjeevi automates the workflow from physiological signal acquisition to AI-assisted interpretation and report generation.
 
-    subgraph "Multi-LLM Intelligence Layer"
-        BM --> TE[Trust Envelope Guard]
-        TE -->|Validated| SQP[Sequential Quality Pipeline]
-        SQP -->|Phase 1| G[Gemini 1.5 Flash]
-        SQP -->|Phase 2| II[II-Medical-8B]
-        SQP -->|Phase 3| OSS[GPT-OSS-120B]
-        OSS --> Out[Patient/Doctor PDF Report]
-    end
+The repository contains the complete backend responsible for:
+
+- Multimodal physiological screening
+- Sensor orchestration
+- Biomarker extraction
+- Risk analysis
+- Adaptive AI interpretation
+- PDF report generation
+- LangGraph-powered doctor assistant
+- Hardware management
+- REST APIs
+
+> ⚠️ **Research & Educational Use Only**  
+> Chiranjeevi is intended as an AI-assisted screening platform and **does not replace professional medical diagnosis or treatment.**
+
+---
+
+# 💡 Why Chiranjeevi?
+
+Healthcare today is largely reactive—patients typically seek medical attention only after symptoms become noticeable.
+
+Chiranjeevi explores a different approach by combining passive sensing, deterministic algorithms, and AI-assisted reasoning to help identify potential physiological abnormalities earlier in the screening process.
+
+The platform is built around four guiding principles:
+
+- **Passive, non-invasive physiological screening**
+- **Privacy-first architecture**
+- **Evidence-assisted medical reasoning**
+- **Modular and scalable backend design**
+
+Rather than replacing clinicians, Chiranjeevi aims to provide an intelligent screening layer that assists both patients and healthcare professionals.
+
+---
+
+# ✨ Features
+
+## 🩺 Physiological Screening
+
+- Passive multimodal physiological screening
+- Non-contact health assessment
+- Modular biomarker extraction
+- Risk scoring across multiple body systems
+- Data quality validation before inference
+
+---
+
+## 🤖 AI-Assisted Interpretation
+
+- Adaptive multi-LLM interpretation pipeline
+- LangGraph-based conversational medical assistant
+- Patient-context aware responses
+- Intelligent clarification before answering
+- Optional medical literature retrieval (PubMed + Tavily)
+
+---
+
+## 📡 Hardware Integration
+
+Supports multiple sensing modalities including:
+
+- RGB Camera
+- Thermal Camera (ESP32 + MLX90640)
+- 60GHz mmWave Radar
+
+Hardware is orchestrated through the backend `HardwareManager`, allowing synchronized data collection and processing.
+
+---
+
+## 📄 Report Generation
+
+- Automated patient report generation
+- QR-based report download
+- Structured physiological summaries
+- AI-generated screening interpretation
+
+---
+
+## ⚡ Backend Services
+
+- FastAPI REST APIs
+- Streaming responses
+- SQLite persistence
+- Optional Redis caching
+- Modular service architecture
+
+---
+
+# 🏗️ System Architecture
+
+```text
+                 Patient
+                    │
+                    ▼
+          HardwareManager
+                    │
+                    ▼
+     Signal Acquisition Layer
+(Camera • Thermal • mmWave Radar)
+                    │
+                    ▼
+        Biomarker Extraction
+                    │
+                    ▼
+          Risk Computation
+                    │
+                    ▼
+ Validation Layer
+(Plausibility + Consistency + Trust Envelope)
+                    │
+                    ▼
+ Adaptive AI Interpretation
+      (Gemini → HF Reviewer*)
+                    │
+                    ▼
+      SQLite / Redis Storage
+                    │
+        ┌───────────┴───────────┐
+        ▼                       ▼
+ Patient Report          Doctor Chat API
 ```
 
-### The Synchronization Paradigm
-
-Ingesting asynchronous streams from high-latency sensors (Thermal) and real-time streams (Radar) requires a **Stateful Sliding Window**. Chiranjeevi uses a **Global Unix Epoch (ms)** to anchor all modalities, ensuring that a "Heart Rate" reading from Radar aligns perfectly with the "rPPG" reading from the Camera within a $\pm 15ms$ delta.
+> *The Hugging Face medical reviewer is invoked only when additional validation is required.*
 
 ---
 
-## 📡 Sensor Fusion & Signal Processing Deep-Dive
+# 🧠 Adaptive AI Interpretation
 
-### mmWave Interferometry (FMCW)
+The active screening interpretation pipeline is implemented in:
 
-We utilize **60GHz Frequency Modulated Continuous Wave (FMCW)** radar to detect micro-vibrations with sub-millimeter precision.
+```
+fastapi2/app/core/llm/multi_llm_interpreter.py
+```
 
-- **The Physics of Motion**: The radar transmits a high-frequency chirp and measures the phase shift of the electromagnetic reflection. Even a $0.4mm$ chest wall displacement during a cardiac cycle causes a detectable phase wrap in the IF signal.
-- **Spectral Decomposition**: We employ a **High-Pass Butterworth Filter** to strip DC offsets (static objects), followed by a **Fast Fourier Transform (FFT)** and **Welch PSD** estimation to isolate the 0.8Hz-2.5Hz (Cardiac) and 0.1Hz-0.5Hz (Respiratory) harmonics.
+Instead of always using multiple language models, Chiranjeevi employs an adaptive workflow to balance response quality with inference speed.
 
-### Radiometric LWIR Thermography
+### Phase 1 — Gemini
 
-The system integrates **Long-Wave Infrared (LWIR) sensors** (MLX90640) to map the body's thermodynamic signature.
+Gemini generates the primary structured interpretation of the physiological screening results.
 
-- **Radiometric Heat Mapping**: Unlike simple thermometers, our engine maps 768 distinct thermal sub-pixels across the facial ROI.
-- **The Inner Canthus Proxy**: The medial canthus area of the eye is used as a clinically validated proxy for core body temperature, as it is highly vascularized and lacks the insulating epidermal layer found on the forehead.
-- **Asymmetry Analysis**: Significant $\Delta T$ between left and right carotid regions flags potential vascular insufficiency or localized autonomic dysregulation.
-
----
-
-## 🧬 The Diagnostic Matrix: Biomarker Specification
-
-### Detailed System Modules & Specifications
-
-Chiranjeevi decomposes human physiology into 9 distinct, interconnected vectors. Below is the specification for each core module:
-
-#### 🧠 Central Nervous System (CNS)
-
-- **Biomarker: Gait Variability Index ($GVI$)**
-  - _Mechanism_: Temporal peak isolation on normalized ankle landmarks ($y$-axis).
-  - _Unit_: Dimensionless Coefficient of Variation.
-  - _Clinical Range_: $0.05 - 0.15$ (Normal).
-- **Biomarker: Postural Sway Complexity ($SampEn$)**
-  - _Mechanism_: Sample Entropy analysis of center-of-mass (COM) shift trajectories.
-  - _Utility_: Neuromotor fatigue and adaptive balance screening.
-
-#### ❤️ Cardiovascular
-
-- **Biomarker: Heart Rate Variability ($RMSSD$)**
-  - _Mechanism_: Root Mean Square of Successive Differences of R-R intervals.
-  - _Unit_: Milliseconds ($ms$).
-- **Biomarker: Pulse Wave Velocity ($PWV_{estimated}$)**
-  - _Mechanism_: Phasic temporal derivative between central (Radar) and peripheral (rPPG) pulses.
-
-#### 🫁 Pulmonary
-
-- **Biomarker: Thoracic Excursion Velocity**
-  - _Mechanism_: First derivative of the phase-shift peak detected via Radar.
-- **Biomarker: Nostril Dilation Amplitude ($NDA$)**
-  - _Mechanism_: Sub-pixel landmark tracking of the nasal flare region.
-
-#### 🦴 Skeletal
-
-- **Biomarker: Joint ROM Symmetry**
-  - _Mechanism_: Bilateral 3D Euler coordinate comparison for major joint chains.
-- **Biomarker: Stance Stability Index**
-  - _Mechanism_: RMS deviation of the hip-level musculoskeletal center.
-
-#### 👁️ Ocular
-
-- **Biomarker: Blink Rate Variability (BRV)**
-  - _Mechanism_: Log-normal distribution analysis of EAR (Eye Aspect Ratio) minima.
-- **Biomarker: Saccadic Accuracy**
-  - _Mechanism_: Vector correlation of gaze-fixation paths.
-
-#### 🧪 Renal & GI (Metabolic)
-
-- **Biomarker: Peristaltic Gut Rhythm**
-  - _Mechanism_: Frequency-domain isolation (0.03 - 0.1 Hz) of abdominal micro-motions.
-- **Biomarker: Radio Impedance Fluid Index ($RIFI$)**
-  - _Mechanism_: Simulated body water distribution proxy via RIS sensors.
+For moderate-risk cases with high confidence, this response is used directly.
 
 ---
 
-## � System-by-System Algorithmic Deep-Dive
+### Phase 2 — Medical Reviewer
 
-To achieve clinical-grade telemetry, Chiranjeevi implements specific mathematical models for each of the nine physiological quadrants.
+When confidence is low or the patient's risk profile requires additional verification, a Hugging Face medical model performs an independent review and correction before the final interpretation is returned.
 
-### 1. Central Nervous System (CNS) - Neuromotor Stability
-
-- **The Problem**: Detecting neurological fatigue and vestibular decline through passive motion.
-- **The Solution**: We analyze the **Postural Sway Path**. By isolating the motion of the skeletal center-of-mass (COM), we calculate the **Sway Area** and **Sample Entropy ($SampEn$)**. A healthy CNS exhibits high-complexity, high-entropy sway (adaptive), بينما a fatigued or compromised system shows low-entropy, rigid rhythmic sway patterns.
-- **Metric**: $S_{samp}(m, r, N) = -\ln \frac{A}{B}$.
-
-### 2. Cardiovascular - The Autonomic Signature
-
-- **The Problem**: Remote Pulse tracking without skin-contact electrodes.
-- **The Solution**: Our **rPPG Engine** uses the Chrominance-based ($CHROM$) method. By projecting the RGB signal into a motion-stabilized color space $[X_{skin}, Y_{skin}]$, we isolate the blood-volume pulse from ambient light flicker. This signal is then fused with the **60GHz mmWave BCG** (Ballistocardiogram) which measures the literal physical displacement of the chest wall during aortic ejection.
-- **The Result**: Real-time Beat-to-Beat ($RR$) intervals with $\pm 5ms$ accuracy.
-
-### 3. Pulmonary - Breathing Mechanics
-
-- **The Problem**: Distinguishing between shallow thoracic breathing and deep diaphragmatic cycles.
-- **The Solution**: We utilize **FMCW Radar Interferometry**. The 60GHz wave reflects off the chest wall. We perform a **Phase-Unwrapping** operation on the reflected IQ signal to recover the displacement over time.
-- **Metric**: Breath-by-breath Tidal Volume Proxy ($TV_p$) derived from the peak-to-peak amplitude of the 0.2Hz wave.
-
-### 4. Skeletal - Kinetic Chain Integrity
-
-- **The Problem**: Detecting subtle joint asymmetries that lead to musculoskeletal dysfunction.
-- **The Solution**: We map 33 key skeletal landmarks into a **Global 3D Coordinate Space**. We then derive the **Euler Angles** ($\phi, \theta, \psi$) for every major joint.
-- **The Innovation**: Instead of static ROM, we measure **Dynamic Symmetry** during the 30-second walkthrough, flagging delta-differences between left and right limb trajectories in real-time.
-
-### 5. Ocular - The Neural Lag Gate
-
-- **The Problem**: Cognitive load and neurological "lag" detection.
-- **The Solution**: Using high-resolution facial landmarking, we track the **Eye Aspect Ratio ($EAR$)**. This allows for the extraction of **Blink Rate Variability (BRV)** and **Saccadic Latency**.
-- **Clinical Value**: Increased Saccadic Latency is a clinically validated proxy for cognitive fatigue and early-stage neuro-inflammation.
-
-### 6. Renal & Metabolic - RIS Body Water Modeling
-
-- **The Problem**: Detecting hydration status and localized edema non-invasively.
-- **The Solution**: Chiranjeevi integrates a simulated **Radio Impedance Stream (RIS)**. By analyzing the absorption and reflection of specific low-power RF bands, we model the **Total Body Water ($TBW$)** and extracellular fluid levels.
-- **The Proxy**: We use the thermal flux of the medial canthus (tear duct) as a proxy for micro-vascular volume changes associated with metabolic shifts.
-
-### 7. Gastrointestinal - Peristaltic Rhythm
-
-- **The Problem**: Passive monitoring of metabolic motility.
-- **The Solution**: We employ **Sub-Visual Motion Amplification**. By inflating micro-motions in the 0.05 - 0.1 Hz band across the abdominal ROI, the system can detect the rhythmic mechanical signatures of peristalsis.
-
-### 8. Skin & Integumentary - Radiometric Perfusion
-
-- **The Problem**: Early detection of systemic inflammation and vascular insufficiency.
-- **The Solution**: **Radiometric LWIR Thermography**. We map the thermodynamic distribution across the face. Specifically, we look for **Thermal Asymmetry** (Left vs. Right) and the **Perfusion Gradient** from the central core to the extremities.
-
-### 9. Nasal & Upper Airway - Patency Analysis
-
-- **The Problem**: Screening for upper airway resistance and obstructive patterns.
-- **The Solution**: We track the **Nasal Flare Index ($NFI$)**. By measuring the cross-sectional area changes of the nostrils during the respiratory cycle, we quantify the work of breathing associated with nasal recruitment.
+This adaptive approach minimizes latency while providing additional validation for complex cases.
 
 ---
 
-## �🤖 Multi-LLM Sequential Quality Pipeline
+# 💻 Technology Stack
 
-To bridge the gap between deterministic engineering and probabilistic AI, Chiranjeevi utilizes a **3-Phase Sequential Handoff**.
+## Backend
 
-### Phase 1: Primary Insight Generation (Gemini 1.5 Flash)
-
-- **Role**: Authoritative Reporter.
-- **Action**: Consumes the pre-computed risk vector and generates the primary medical narrative, recommendations, and caveats.
-
-### Phase 2: Clinical Validation (II-Medical-8B)
-
-- **Role**: Clinical Reviewer (Second Opinion).
-- **Action**: A medical-tuned LLM (**II-Medical-8B**) critiques the Phase 1 report for clinical appropriateness and "Tone Matches Risk" criteria.
-
-### Phase 3: Quality Arbitration (GPT-OSS-120B)
-
-- **Role**: Senior Arbiter (Quality Gate).
-- **Action**: A massive **GPT-OSS-120B** model via Groq/HF performs final quality arbitration.
-- **Outcome**: Final "Approve" decision. If fails, system triggers `HUMAN_REVIEW_REQUIRED` state.
+- FastAPI
+- Python 3.11+
+- Pydantic
+- SQLAlchemy
 
 ---
 
-## 🔒 Data Governance & Topological Anonymization
+## AI & Machine Learning
 
-Chiranjeevi operates on a **Local-First, Zero-Knowledge Privacy Protocol**.
-
-1.  **Volatile Memory Processing**: Raw high-resolution video streams are processed in RAM buffers and never written to persistent disk storage.
-2.  **Topological Anonymization**: The system extracts a mathematical skeleton ($X, Y, Z$ coordinates) and discards the pixel data immediately.
-3.  **Local Report Generation**: All PDF generation (WeasyPrint/ReportLab) happens on the local edge node.
+- LangGraph
+- LangChain
+- Google Gemini
+- Hugging Face Inference API
 
 ---
 
-## �️ Developer API & CLI Workflows
+## Computer Vision & Signal Processing
 
-### REST API Reference (FastAPI)
+- OpenCV
+- MediaPipe
+- NumPy
+- SciPy
 
-#### Detailed Endpoint Schemas
+---
 
-- `POST /api/v1/screening`
-  - **Description**: Run health screening on provided biomarker data.
-  - **Input**: `ScreeningRequest` (patient_id, systems_input, include_validation).
-  - **Response**: `ScreeningResponse` (screening_id, overall_risk_score, system_results).
+## Medical Research
 
-- `POST /api/v1/reports/generate`
-  - **Description**: Compiles Patient or Doctor PDF reports.
-  - **Input**: `ReportRequest` (screening_id, report_type).
-  - **Response**: `ReportResponse` (report_id, pdf_path).
+- PubMed
+- Tavily Search
 
-- `GET /api/v1/hardware/scan-status`
-  - **Description**: Poll capture progress (FACE_ANALYSIS → BODY_ANALYSIS → PROCESSING).
+---
 
-### Hardware CLI Utility
+## Reports
+
+- ReportLab
+
+---
+
+## Database & Cache
+
+- SQLite
+- Redis (Optional)
+
+---
+
+## Hardware
+
+- ESP32
+- MLX90640 Thermal Camera
+- 60GHz mmWave Radar
+- RGB Camera
+
+---
+
+# 📂 Project Structure
+
+```text
+techgium/
+│
+├── fastapi2/
+│   ├── app/
+│   │   ├── api/                  # REST API routes
+│   │   ├── core/
+│   │   │   ├── extraction/       # Biomarker extraction
+│   │   │   ├── inference/        # Risk computation
+│   │   │   ├── validation/       # Trust Envelope & quality validation
+│   │   │   ├── llm/              # Adaptive screening interpreter
+│   │   │   ├── reports/          # PDF generation
+│   │   │   ├── hardware/         # Hardware orchestration
+│   │   │   └── agents/
+│   │   │
+│   │   ├── models/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   ├── config.py
+│   │   └── main.py
+│   │
+│   ├── agent/                    # LangGraph Doctor Assistant
+│   ├── tests/
+│   └── requirements.txt
+│
+├── frontend/
+├── mobile/
+└── README.md
+```
+
+The project follows a modular architecture where hardware integration, AI interpretation, report generation, and API services remain independently extensible.
+
+---
+
+# 🚀 Getting Started
+
+## Prerequisites
+
+- Python 3.11+
+- pip
+- Virtual Environment
+
+Optional:
+
+- Redis
+- Camera
+- mmWave Radar
+- ESP32 Thermal Camera
+
+---
+
+## Installation
+
+Clone the repository.
 
 ```bash
-python bridge.py \
-    --camera 0 \
-    --radar-port COM3 \
-    --thermal-port COM4 \
-    --frame-rate 30 \
-    --high-fidelity-mode
+git clone https://github.com/<your-org>/techgium.git
+
+cd techgium/fastapi2
+```
+
+Create a virtual environment.
+
+```bash
+python -m venv .venv
+```
+
+Linux/macOS
+
+```bash
+source .venv/bin/activate
+```
+
+Windows
+
+```powershell
+.venv\Scripts\activate
+```
+
+Install dependencies.
+
+```bash
+pip install -r requirements.txt
 ```
 
 ---
 
-## 📋 Hardware Infrastructure & Calibration
+# 🔑 Environment Variables
 
-Chiranjeevi requires a calibrated sensor fabric to maintain topological integrity.
+Create a `.env` file inside `fastapi2/`.
 
-### Optical-Radar Convergence
+| Variable | Required | Purpose |
+|----------|----------|----------|
+| `HF_TOKEN` | Recommended | Hugging Face medical reviewer |
+| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Recommended | Gemini interpretation |
+| `TAVILY_API_KEY` | Optional | Web research |
+| `NCBI_API_KEY` | Optional | PubMed |
+| `SARVAM_API_KEY` | Optional | Translation & TTS |
+| `REDIS_URL` | Optional | Redis caching |
+| `RADAR_PORT` | Optional | Radar serial port |
+| `ESP32_PORT` | Optional | Thermal sensor serial port |
 
-1.  Mount the mmWave Radar node $1.5m$ from the target walkthrough centerline.
-2.  Align the RGB-D camera FOV to intersect the Radar's 120$^{\circ}$ azimuthal cone.
-3.  Run the **Homography Calibration Suite** to map vision landmarks to radar coordinate space.
-
----
-
-## 📈 Performance Benchmarking
-
-Our inference engine is optimized for high-throughput edge nodes:
-
-| Phase                | Resource Intensity      | Latency (Mean)     |
-| :------------------- | :---------------------- | :----------------- |
-| **Ingestion (HAL)**  | High Memory Bandwidth   | $33.3ms$ per frame |
-| **Extraction (DSP)** | High CPU Vector Load    | $200ms$ per batch  |
-| **Risk Engine**      | Minimal (Scalar Matrix) | $2ms$              |
-| **LLM Validation**   | High External Latency   | $3.5sec$ aggregate |
+> The backend includes mock/fallback behavior for some AI services during development, but production deployments should provide the appropriate API keys.
 
 ---
 
-## 🤝 Contribution & Scholarly Collaboration
+# ▶️ Running the Backend
 
-We welcome contributions from the computational biology and computer vision communities.
+Start the FastAPI server:
 
-1.  **Fork & Branch**: Create a feature branch (e.g., `feature/spectral-denoising`).
-2.  **Governance**: All PRs must pass the `pytest tests/` battery and maintain >80% code coverage.
-3.  **Literate Programming**: Document every mathematical derivation directly in the source code headers.
+```bash
+cd fastapi2
 
----
+uvicorn app.main:app --reload
+```
 
-## 🗺️ Strategic Roadmap
-
-- **Epoch 1 (Standardized Extraction)**: [x] Core HAL and deterministic algorithms.
-- **Epoch 2 (Agentic Fusion)**: [x] Trust Envelope and 3-LLM Sequential Pipeline.
-- **Epoch 3 (Clinical Scale)**: [/] Large-scale clinical validation studies.
-- **Epoch 4 (Global Deployment)**: [ ] Autonomous "Walkthrough" kiosks in enterprise hubs.
-
----
-
-## 🧪 Scientific Foundations & Citations
-
-- **Heart Rate Variability**: Task Force of the European Society of Cardiology (1996).
-- **mmWave Radar Vitals**: Wang et al., IEEE (2017).
-- **Gait Symmetry Modeling**: Zeni et al., Gait & Posture (2010).
-- **rPPG via Chrominance**: De Haan & Jeanne (2013).
-
----
-
-## 📖 Glossary of Sophisticated Terms
-
-- **rPPG**: Remote Photoplethysmography; heartbeat detection via light reflectance.
-- **FMCW**: Frequency Modulated Continuous Wave; high-res radar architecture.
-- **LWIR**: Long-Wave Infrared; thermodynamic band (8-14 microns).
-- **SampEn**: Sample Entropy; complexity metric for time-series physiological data.
-- **Trust Envelope**: A computational boundary that ensures only "sane" data reaches the AI layer.
-- **Sequential Quality Pipeline**: The 3-tier LLM verification flow (**Gemini 1.5** -> **II-Medical** -> **GPT-OSS**).
-
----
-
-> **Investigational Status**: Chiranjeevi is for research and educational purposes. Always consult a physician for clinical diagnoses.
-
-**Join the movement. Redefine the human interface.**
-Designed with 🧬 by the architects of the future.
-Copyright © 2026 Chiranjeevi Alpha Labs. All rights reserved.
-Nodes provided by **Titan Engine v2.0**.
-Pipeline status: **OPTIMIZED**.
-Capture session: **ACTIVE**.
-Data integrity: **VERIFIED**.
-Inference status: **HIGH CONFIDENCE**.
-End of Transmission.
+The backend will be available at:
 
 ```
-# --- Metadata Extension ---
-# For developers seeking deep integration, view the [HARDWARE.md](fastapi2/HARDWARE.md) and [TECHNICAL.md](fastapi2/TECHNICAL.md) files.
-# This system is built for extreme reliability in zero-trust environments.
-# All extraction logic is unit-tested against simulated physiological failure modes.
-# The Trust Envelope™ ensures that medical interpretations are only generated when signal integrity is absolute.
+http://localhost:8000
+```
+
+Swagger Documentation:
+
+```
+http://localhost:8000/docs
 ```
 
 ---
 
-## 🏁 Conclusion: The Chiranjeevi Ethos
+# 🌐 API Overview
 
-Chiranjeevi is more than a technical framework; it is a manifesto for the future of human longevity. By decoupling the diagnostic process from clinical bottlenecks, we are creating a world where health is not an intermittent checkup, but a continuous, high-fidelity stream of self-knowledge.
+## Health
 
-The convergence of **60GHz mmWave sensing**, **Radiometric Thermography**, and **Agentic Multi-LLM Arbitration** allows us to perceive what the human eye and traditional sensors cannot: the subtle, stochastic fluctuations of the biological state that precede clinical symptoms. We are moving from **Reactive Medicine** to **Predictive Biological Orchestration**.
-
----
-
-## 🛠️ Advanced Appendix: Hardware Wiring & Pinouts
-
-For enterprise integrators building custom Chiranjeevi nodes, the following physical layer specifications must be adhered to:
-
-### A. ESP32 Thermal Node (I2C Bridge)
-
-| Component        | ESP32 Pin | Logic Level    | Function      |
-| :--------------- | :-------- | :------------- | :------------ |
-| **MLX90640 VCC** | 3.3V      | DC             | Power Supply  |
-| **MLX90640 GND** | GND       | 0V             | Common Ground |
-| **MLX90640 SDA** | GPIO 21   | 3.3V (Pull-up) | I2C Data      |
-| **MLX90640 SCL** | GPIO 22   | 3.3V (Pull-up) | I2C Clock     |
-
-### B. mmWave Radar (UART Bridge)
-
-| Pin     | Node Connection | Baud Rate | Frame Format    |
-| :------ | :-------------- | :-------- | :-------------- |
-| **TX**  | USB-TTL RX      | 115200    | Hex/JSON Stream |
-| **RX**  | USB-TTL TX      | 115200    | Command Control |
-| **VCC** | USB 5V          | 5V        | Logic Power     |
+```
+GET /
+GET /health
+```
 
 ---
 
-## 🧪 Advanced Methodology: Deep Signal Denoising
+## Screening
 
-Our **Titan Engine v2.0** utilizes a proprietary sub-space filtering pipeline to maintain SNR integrity in non-sterile environments:
-
-1.  **Motion-Compensated rPPG**: By using the 3D depth landmarks as a reference frame, we perform real-time pixel-level affine transformations to stabilize the facial ROI before green-channel extraction.
-2.  **Radar Interferometry Phase Ungrapping**: To detect 0.1mm displacements, we solve the phase-wrapping ambiguity of the 60GHz chirp using a cross-correlation between adjacent chirps.
-3.  **Adaptive Kalman Gating**: The system dynamically scales the $Q$ and $R$ matrices based on the **Signal Quality Index (SQI)** derived from the ambient light and motion sensors.
-
----
-
-## 📜 Ethical Data Mandate
-
-We believe in **Sovereign Health Data**.
-
-- **No Cloud Dependency**: The core extraction and logic engines are designed to run in air-gapped environments.
-- **Verifiable Privacy**: All PII (Personally Identifiable Information) is scrubbed at the HAL layer before entering the Inference Layer.
-- **Open Standards**: We utilize the **FHIR** (Fast Healthcare Interoperability Resources) data format for report export, ensuring that your data belongs to you and your provider—not the platform.
+```
+POST /api/v1/screening
+GET  /api/v1/screening/{screening_id}
+```
 
 ---
 
-## ⚖️ License
+## Reports
 
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for the full text.
-
-- **Permissions**: Commercial use, Modification, Distribution, Private use.
-- **Constraints**: Includes License and copyright notice.
-- **Conditions**: The software is provided "as is", without warranty of any kind.
-
----
-
-> **"He who masters the telemetry of life, masters life itself."**
->
-> _Thank you for participating in the Chiranjeevi Alpha. The future of healthcare is autonomous._
-
-**[ END OF SPECIFICATION ]**
-**Version**: 2.0.4-Build-BETA
-**Session ID**: `AUTH-SYNC-VERIFIED`
-**Node Status**: `STABLE`
+```
+POST /api/v1/reports/generate
+GET  /api/v1/reports/{report_id}/download
+GET  /api/v1/reports/{report_id}/qr
+```
 
 ---
 
-Copyright © 2026 Chiranjeevi. Team _aKAASHVani_
-All systems nominal.
+## Hardware
+
+```
+GET  /api/v1/hardware/status
+POST /api/v1/hardware/start-screening
+GET  /api/v1/hardware/scan-status
+POST /api/v1/hardware/calibrate
+GET  /api/v1/hardware/calibrate/status
+GET  /api/v1/hardware/sensor-status
+GET  /api/v1/hardware/calibration-check
+GET  /api/v1/hardware/video-feed
+```
+
+---
+
+## Doctor Assistant
+
+```
+POST /api/v1/doctor/chat
+```
+
+Supports:
+
+- Streaming responses
+- Patient context injection
+- Optional PubMed + Tavily research
+- Translation and text-to-speech through Sarvam AI
+
+---
+
+# 🩺 Supported Physiological Systems
+
+Current physiological system support includes:
+
+- Central Nervous System
+- Cardiovascular
+- Pulmonary
+- Gastrointestinal
+- Skeletal
+- Skin
+- Eyes
+- Nasal
+- Reproductive
+- Visual Disease
+
+---
+
+# 🔒 Privacy & Data Handling
+
+Chiranjeevi follows a privacy-first design philosophy.
+
+Current implementation includes:
+
+- SQLite persistence for screening metadata
+- Optional Redis caching
+- Exact patient-ID matching for doctor chat context
+- Trust envelope validation before AI interpretation
+- AI-assisted screening rather than autonomous diagnosis
+
+---
+
+# ⚠️ Disclaimer
+
+This software provides AI-assisted physiological screening for research and educational purposes.
+
+It **does not** provide clinical diagnosis, prescribe treatment, or replace consultation with qualified healthcare professionals.
+
+Always consult a licensed medical practitioner for medical decisions.
+
+# 🏗️ Internal Architecture
+
+This section describes the internal design of Chiranjeevi, from hardware acquisition to AI-assisted interpretation. The architecture is modular, allowing each subsystem to evolve independently while maintaining a reliable end-to-end screening pipeline.
+
+---
+
+# 📡 Hardware Architecture
+
+Chiranjeevi communicates with all connected sensors through a centralized **HardwareManager**, which acts as the orchestration layer for device initialization, synchronization, calibration, and data acquisition.
+
+Rather than exposing each sensor directly to the API, the HardwareManager abstracts hardware interactions into a unified interface. This simplifies backend services while ensuring all sensor streams remain synchronized during a screening session.
+
+```mermaid
+flowchart LR
+
+A[HardwareManager]
+
+A --> B[RGB Camera]
+
+A --> C[60GHz mmWave Radar]
+
+A --> D[ESP32 + Thermal Camera]
+
+B --> E[Signal Acquisition]
+
+C --> E
+
+D --> E
+
+E --> F[Parallel Biomarker Extraction]
+
+F --> G[Screening Pipeline]
+```
+
+## Screening Lifecycle
+
+Each screening session follows a structured workflow designed to maximize data quality before medical interpretation begins.
+
+```text
+Initialize Hardware
+
+↓
+
+Room Calibration
+
+↓
+
+Face & Vital Capture
+
+↓
+
+Body & Gait Analysis
+
+↓
+
+Signal Validation
+
+↓
+
+Biomarker Extraction
+
+↓
+
+Risk Assessment
+
+↓
+
+AI Interpretation
+
+↓
+
+Report Generation
+```
+
+The backend continuously evaluates camera alignment, signal quality, and sensor readiness throughout the scan. Only data that satisfies predefined quality thresholds proceeds to the next stage.
+
+---
+
+# 🧬 Physiological Screening Pipeline
+
+The screening engine converts raw multimodal sensor data into validated physiological insights through a deterministic processing pipeline.
+
+```mermaid
+flowchart TD
+
+A[Sensor Data]
+
+A --> B[Quality Assessment]
+
+B --> C[Parallel Feature Extraction]
+
+C --> D[Biomarker Generation]
+
+D --> E[Clinical Risk Engine]
+
+E --> F[Validation Layer]
+
+F --> G[Trust Envelope]
+
+G --> H[Adaptive AI Interpretation]
+
+H --> I[Persistence]
+
+I --> J[Report Generation]
+```
+
+The pipeline combines deterministic biomedical computation with AI-assisted interpretation, ensuring physiological measurements are validated before natural-language explanations are generated.
+
+---
+
+## Stage 1 — Signal Quality Assessment
+
+Before any physiological calculations are performed, incoming sensor data is evaluated for quality.
+
+The quality assessment examines factors such as:
+
+* Camera visibility
+* Image brightness
+* Motion stability
+* Sensor availability
+* Thermal consistency
+
+Screenings that fail minimum quality requirements are rejected before downstream processing, preventing unreliable interpretations.
+
+---
+
+## Stage 2 — Parallel Biomarker Extraction
+
+Validated sensor streams are processed simultaneously by dedicated extraction modules.
+
+Each extractor operates independently, allowing multiple physiological systems to be analyzed in parallel.
+
+Current extraction modules include:
+
+* ❤️ Cardiovascular
+* 🫁 Pulmonary
+* 🧠 Central Nervous System
+* 🦴 Skeletal
+* 👁️ Eyes
+* 🌡️ Skin
+* 👃 Nasal
+* 🧬 Reproductive (Autonomic Proxies)
+
+This parallel architecture significantly reduces total screening time.
+
+---
+
+## Stage 3 — Risk Computation
+
+Extracted biomarkers are transformed into physiological risk indicators using deterministic clinical rules.
+
+Examples include:
+
+* Cardiovascular risk
+* Pulmonary abnormalities
+* Neuromotor stability
+* Skeletal balance
+* Skin abnormalities
+* Ocular indicators
+
+Each physiological system contributes independently before an overall composite assessment is generated.
+
+---
+
+# 🔒 Clinical Validation Layer
+
+Before AI interpretation begins, Chiranjeevi validates every screening using multiple safety mechanisms.
+
+The validation layer ensures the screening data is physiologically reasonable, internally consistent, and reliable enough for interpretation.
+
+```mermaid
+flowchart LR
+
+A[Biomarkers]
+
+A --> B[Plausibility]
+
+B --> C[Cross-System Consistency]
+
+C --> D[Signal Quality]
+
+D --> E[Trust Envelope]
+
+E --> F[AI Interpretation]
+```
+
+---
+
+## Physiological Plausibility
+
+Each biomarker is checked against medically acceptable ranges.
+
+Validation considers patient-specific context whenever available, including factors such as age and known physiological limits.
+
+Measurements that exceed realistic biological boundaries are flagged before risk computation.
+
+---
+
+## Cross-System Consistency
+
+Independent physiological systems should generally support one another.
+
+Examples include:
+
+* Heart rate consistency between radar and camera
+* Respiratory agreement across sensing modalities
+* Skeletal stability compared with CNS balance
+* Autonomic stress compared with cardiovascular activity
+
+Large disagreements reduce confidence in the overall screening.
+
+---
+
+## Signal Quality Validation
+
+Signal quality represents the reliability of the collected sensor data.
+
+Low-quality sensor input may result from:
+
+* Poor lighting
+* Motion blur
+* Subject misalignment
+* Temporary hardware instability
+
+Instead of blindly generating results, Chiranjeevi lowers confidence or rejects unreliable screenings altogether.
+
+---
+
+## Trust Envelope
+
+The Trust Envelope combines all validation metrics into a single reliability score.
+
+It aggregates:
+
+* Data Quality
+* Physiological Plausibility
+* Cross-System Consistency
+
+Only screenings that satisfy the minimum reliability threshold continue to AI interpretation.
+
+This validation-first approach prevents language models from generating confident explanations for unreliable physiological measurements.
+
+---
+
+# 🤖 Adaptive Multi-LLM Interpretation
+
+After deterministic analysis is complete, Chiranjeevi generates a patient-friendly interpretation using an adaptive two-stage AI pipeline.
+
+Unlike traditional multi-model pipelines, the backend dynamically decides whether a second medical review is necessary.
+
+```mermaid
+flowchart TD
+
+A[Validated Risk Assessment]
+
+A --> B[Gemini Interpretation]
+
+B --> C{Confidence & Risk Evaluation}
+
+C -->|Moderate Risk + High Confidence| D[Return Response]
+
+C -->|Low Confidence or High/Low Risk| E[HF Medical Reviewer]
+
+E --> F[Merge Corrections]
+
+F --> G[Final Interpretation]
+```
+
+---
+
+## Phase 1 — Primary Interpretation
+
+Gemini generates the initial structured interpretation based on:
+
+* Composite risk scores
+* Biomarker summaries
+* Validation metrics
+* Trust Envelope
+
+For moderate-risk screenings with sufficient confidence, this interpretation is returned directly.
+
+---
+
+## Phase 2 — Medical Review
+
+If the screening confidence is low or the patient's risk profile requires additional verification, a Hugging Face medical model performs a secondary review.
+
+The reviewer evaluates:
+
+* Clinical appropriateness
+* Tone
+* Safety
+* Suggested corrections
+
+If required, the reviewed interpretation replaces portions of the original response before report generation.
+
+---
+
+## Adaptive Fast Path
+
+Not every screening requires multiple AI models.
+
+When confidence is sufficiently high and risk remains moderate, the backend skips the reviewer entirely.
+
+This adaptive execution strategy reduces latency and inference cost while preserving additional safeguards for more complex screenings.
+
+---
+
+# 🧠 LangGraph Medical AI Agent
+
+Beyond automated screening, Chiranjeevi provides a conversational medical assistant powered by LangGraph.
+
+The agent supports:
+
+* Patient-aware conversations
+* Medical clarification
+* Literature retrieval
+* Streaming responses
+* Research-backed medical explanations
+
+---
+
+## Workflow
+
+```mermaid
+flowchart TD
+
+START
+
+START --> Router
+
+Router -->|Greeting| Answer
+
+Router -->|General| Answer
+
+Router -->|Patient Briefing| Answer
+
+Router -->|Medical| Clarification
+
+Clarification -->|Need More Context| FollowUp[Clarification Questions]
+
+Clarification -->|Enough Context| ResearchDecision
+
+ResearchDecision -->|No Research| Answer
+
+ResearchDecision -->|Research Required| Research
+
+Research --> Answer
+
+Answer --> END
+```
+
+---
+
+## Router
+
+The router classifies every incoming request into one of four categories:
+
+* Greeting
+* General
+* Medical
+* Patient Briefing
+
+Patient briefing provides a proactive summary when recent screening information is available.
+
+---
+
+## Clarification
+
+Instead of immediately answering incomplete medical questions, the agent first evaluates whether sufficient clinical context exists.
+
+Clarification is skipped for:
+
+* Follow-up conversations
+* Known biomarker questions
+* Previously clarified interactions
+
+Otherwise, the assistant requests only the additional information needed to answer safely.
+
+---
+
+## Research Decision
+
+Not every medical question requires external evidence.
+
+The research evaluator determines whether additional literature should be consulted before generating a response.
+
+If existing patient data already answers the question, external retrieval is skipped.
+
+---
+
+## Research Layer
+
+When required, the agent retrieves evidence from:
+
+* PubMed
+* Tavily
+
+Both searches execute concurrently before their findings are incorporated into the final response.
+
+---
+
+## Response Generation
+
+The final response combines:
+
+* Conversation history
+* Patient screening context
+* External medical evidence (optional)
+* System prompts
+* AI reasoning
+
+Responses are streamed to the frontend, allowing users to receive answers progressively rather than waiting for the entire completion.
+
+---
+
+# 📄 Report Generation
+
+Following successful interpretation, Chiranjeevi generates structured medical reports.
+
+Current capabilities include:
+
+* AI-assisted patient reports
+* QR-based report download
+* Structured physiological summaries
+* Confidence indicators
+* Risk categorization
+
+Reports are generated using **ReportLab** and persisted for later retrieval through the API.
+
+---
+
+# 🗄️ Persistence Layer
+
+The backend stores screening information using SQLite with optional Redis caching.
+
+SQLite provides persistent storage for:
+
+* Patients
+* Screenings
+* Reports
+
+Redis is used to accelerate frequently accessed information such as patient context during conversational interactions.
+
+This separation enables reliable long-term storage while maintaining fast response times for the AI assistant.
+
+---
+
+# ⚡ Performance Optimizations
+
+Several architectural decisions reduce latency without compromising safety.
+
+* Parallel biomarker extraction
+* Adaptive Multi-LLM fast path
+* Concurrent PubMed and Tavily retrieval
+* Streaming AI responses
+* Semantic caching for repeated conversations
+* Early-stop screening once sufficient stable data has been collected
+
+These optimizations allow the platform to deliver responsive interactions while maintaining deterministic validation before AI-assisted interpretation.
+
+# 🔐 Privacy & Security
+
+Privacy is a core design principle of Chiranjeevi. The platform is designed to minimize unnecessary data retention while ensuring that AI-assisted screening remains reliable and explainable.
+
+## Privacy Principles
+
+* Local-first physiological processing
+* AI-assisted screening, not autonomous diagnosis
+* Patient context retrieved only through exact patient ID matching
+* Validation before AI interpretation
+* Structured report generation without exposing raw processing pipelines
+
+---
+
+## Data Handling
+
+The backend currently stores:
+
+* Patient records
+* Screening metadata
+* Generated reports
+* AI interpretation summaries
+
+Optional Redis caching accelerates frequently accessed screening contexts for the medical assistant while SQLite serves as the primary persistence layer.
+
+---
+
+## AI Safety
+
+Every screening passes through deterministic validation before reaching any language model.
+
+Safety mechanisms include:
+
+* Signal quality assessment
+* Physiological plausibility validation
+* Cross-system consistency checks
+* Trust Envelope reliability scoring
+
+These safeguards ensure language models interpret validated physiological information rather than raw sensor outputs.
+
+---
+
+# 🔌 External Integrations
+
+Chiranjeevi integrates several external services to extend its capabilities while keeping the core screening pipeline independent.
+
+| Integration                    | Purpose                                        |
+| ------------------------------ | ---------------------------------------------- |
+| **Google Gemini**              | Primary AI interpretation of screening results |
+| **Hugging Face Inference API** | Medical review and LangGraph backend models    |
+| **PubMed (NCBI)**              | Evidence retrieval for medical conversations   |
+| **Tavily Search**              | Current web-based medical information          |
+| **Sarvam AI**                  | Translation and Text-to-Speech                 |
+| **SQLite**                     | Persistent application database                |
+| **Redis**                      | Optional caching layer                         |
+
+Each integration is modular and can be replaced or extended without affecting the rest of the architecture.
+
+---
+
+# ⚙️ Performance Optimizations
+
+The backend includes several optimizations to reduce inference latency while maintaining screening quality.
+
+## Parallel Processing
+
+Independent biomarker extractors execute concurrently, allowing multiple physiological systems to be analyzed simultaneously.
+
+---
+
+## Adaptive AI Execution
+
+Moderate-risk screenings with high confidence bypass the secondary medical review model, reducing response latency without sacrificing reliability.
+
+---
+
+## Concurrent Medical Research
+
+When literature retrieval is required, PubMed and Tavily searches execute in parallel before the final response is generated.
+
+---
+
+## Streaming Responses
+
+The LangGraph medical assistant streams responses incrementally using Server-Sent Events (SSE), allowing users to receive answers as they are generated.
+
+---
+
+## Intelligent Caching
+
+Redis and semantic caching reduce repeated computation and accelerate patient-context retrieval during conversations.
+
+---
+
+# 🧪 Scientific Foundation
+
+Chiranjeevi combines established physiological principles with modern AI systems.
+
+Some of the research areas influencing the project include:
+
+* Remote Photoplethysmography (rPPG)
+* Heart Rate Variability (HRV)
+* mmWave Vital Sign Monitoring
+* Computer Vision-based Pose Estimation
+* Thermal Imaging in Medical Screening
+* Retrieval-Augmented Generation (RAG)
+* Clinical Decision Support Systems
+* Human-Centered Explainable AI
+
+This project should be viewed as an engineering platform inspired by these research domains rather than an implementation of any single publication.
+
+---
+
+# 📚 References
+
+Selected foundational research:
+
+* Task Force of the European Society of Cardiology. *Heart Rate Variability: Standards of Measurement, Physiological Interpretation and Clinical Use* (1996)
+* Wang et al. *Vital Signs Monitoring Using mmWave Radar* (IEEE)
+* de Haan & Jeanne. *Robust Pulse Rate From Chrominance-based rPPG* (2013)
+* Zeni et al. *Two Simple Methods for Determining Gait Events During Treadmill and Overground Walking* (Gait & Posture)
+
+Additional medical evidence used during conversations is retrieved dynamically through PubMed by the LangGraph medical assistant.
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome.
+
+Whether you are interested in healthcare, computer vision, embedded systems, AI, or backend engineering, your contributions are appreciated.
+
+## Development Workflow
+
+1. Fork the repository.
+2. Create a feature branch.
+
+```bash
+git checkout -b feature/my-feature
+```
+
+3. Commit your changes.
+
+```bash
+git commit -m "Add new feature"
+```
+
+4. Push your branch.
+
+```bash
+git push origin feature/my-feature
+```
+
+5. Open a Pull Request.
+
+---
+
+## Contribution Areas
+
+Current areas of development include:
+
+* Physiological biomarker extraction
+* Computer Vision
+* Thermal sensing
+* mmWave radar integration
+* Clinical validation
+* LangGraph medical agent
+* AI interpretation
+* Report generation
+* Frontend dashboard
+* Mobile application
+
+---
+
+# 🛣️ Roadmap
+
+## Phase 1 — Core Platform ✅
+
+* FastAPI backend
+* Hardware orchestration
+* Physiological screening
+* Validation framework
+* Adaptive AI interpretation
+* LangGraph medical assistant
+
+---
+
+## Phase 2 — Enhanced Intelligence 🚧
+
+* Additional physiological biomarkers
+* Improved multimodal fusion
+* Better clinical reasoning
+* Expanded multilingual capabilities
+* Improved hardware compatibility
+
+---
+
+## Phase 3 — Clinical Readiness
+
+* Larger validation datasets
+* Clinical evaluation studies
+* Improved explainability
+* Performance optimization
+* Enterprise deployment
+
+---
+
+## Phase 4 — Future Vision
+
+* Passive continuous health monitoring
+* Expanded wearable integration
+* Federated AI models
+* Edge AI deployments
+* Population-scale screening systems
+
+---
+
+# ❓ Frequently Asked Questions
+
+### Is Chiranjeevi a medical diagnosis system?
+
+No.
+
+Chiranjeevi is an AI-assisted physiological screening platform intended for research and educational purposes. It does not replace licensed medical professionals.
+
+---
+
+### Does the platform require internet access?
+
+Core screening can operate locally.
+
+Certain AI features—including external medical literature retrieval and cloud-hosted language models—require internet connectivity.
+
+---
+
+### Why use multiple AI models?
+
+Different models excel at different tasks.
+
+Chiranjeevi combines deterministic physiological analysis with adaptive AI interpretation, using an additional medical reviewer only when increased validation is required.
+
+---
+
+### Why use LangGraph?
+
+Medical conversations often require clarification, reasoning, retrieval, and contextual memory.
+
+LangGraph enables these behaviors through an explicit workflow rather than a single prompt.
+
+---
+
+### Can additional sensors be integrated?
+
+Yes.
+
+The hardware architecture is modular, allowing new sensing modalities and biomarker extraction modules to be incorporated with minimal changes to the overall pipeline.
+
+---
+
+# 📝 License
+
+This project is licensed under the **MIT License**.
+
+See the `LICENSE` file for the complete license text.
+
+---
+
+# 🌟 Vision
+
+Healthcare should become increasingly proactive rather than reactive.
+
+Chiranjeevi explores how multimodal sensing, deterministic physiological analysis, and AI-assisted reasoning can work together to support earlier health screening while keeping clinicians at the center of medical decision-making.
+
+By combining modern sensing technologies with explainable AI and modular system design, the project aims to provide a foundation for future research in accessible, intelligent healthcare.
+
+---
+
+## ⭐ Support the Project
+
+If you find Chiranjeevi interesting or useful:
+
+* ⭐ Star the repository
+* 🐛 Report bugs
+* 💡 Suggest new ideas
+* 🤝 Contribute improvements
+* 📢 Share the project with others
+
+Every contribution helps move the project forward.
+
+---
+
+> **"The future of healthcare is not replacing clinicians with AI—it is empowering clinicians with better information, faster insights, and safer decision support."**
+
