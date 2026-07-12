@@ -92,6 +92,7 @@ Rather than replacing clinicians, Chiranjeevi aims to provide an intelligent scr
 
 ---
 
+<a id="features"></a>
 # ✨ Features
 
 ## 🩺 Physiological Screening
@@ -145,6 +146,7 @@ Hardware is orchestrated through the backend `HardwareManager`, allowing synchro
 
 ---
 
+<a id="system-architecture"></a>
 # 🏗️ System Architecture
 
 ```text
@@ -183,6 +185,7 @@ Hardware is orchestrated through the backend `HardwareManager`, allowing synchro
 
 ---
 
+<a id="adaptive-ai-interpretation"></a>
 # 🧠 Adaptive AI Interpretation
 
 The active screening interpretation pipeline is implemented in:
@@ -209,6 +212,7 @@ This adaptive approach minimizes latency while providing additional validation f
 
 ---
 
+<a id="technology-stack"></a>
 # 💻 Technology Stack
 
 ## Backend
@@ -267,6 +271,7 @@ This adaptive approach minimizes latency while providing additional validation f
 
 ---
 
+<a id="project-structure"></a>
 # 📂 Project Structure
 
 ```text
@@ -303,6 +308,7 @@ The project follows a modular architecture where hardware integration, AI interp
 
 ---
 
+<a id="getting-started"></a>
 # 🚀 Getting Started
 
 ## Prerequisites
@@ -356,6 +362,7 @@ pip install -r requirements.txt
 
 ---
 
+<a id="environment-variables"></a>
 # 🔑 Environment Variables
 
 Create a `.env` file inside `fastapi2/`.
@@ -375,6 +382,7 @@ Create a `.env` file inside `fastapi2/`.
 
 ---
 
+<a id="running-the-backend"></a>
 # ▶️ Running the Backend
 
 Start the FastAPI server:
@@ -399,6 +407,7 @@ http://localhost:8000/docs
 
 ---
 
+<a id="api-overview"></a>
 # 🌐 API Overview
 
 ## Health
@@ -459,6 +468,7 @@ Supports:
 
 ---
 
+<a id="supported-physiological-systems"></a>
 # 🩺 Supported Physiological Systems
 
 Current physiological system support includes:
@@ -476,6 +486,7 @@ Current physiological system support includes:
 
 ---
 
+<a id="privacy-data-handling"></a>
 # 🔒 Privacy & Data Handling
 
 Chiranjeevi follows a privacy-first design philosophy.
@@ -490,6 +501,7 @@ Current implementation includes:
 
 ---
 
+<a id="disclaimer"></a>
 # ⚠️ Disclaimer
 
 This software provides AI-assisted physiological screening for research and educational purposes.
@@ -498,12 +510,14 @@ It **does not** provide clinical diagnosis, prescribe treatment, or replace cons
 
 Always consult a licensed medical practitioner for medical decisions.
 
+<a id="internal-architecture"></a>
 # 🏗️ Internal Architecture
 
 This section describes the internal design of Chiranjeevi, from hardware acquisition to AI-assisted interpretation. The architecture is modular, allowing each subsystem to evolve independently while maintaining a reliable end-to-end screening pipeline.
 
 ---
 
+<a id="hardware-architecture"></a>
 # 📡 Hardware Architecture
 
 Chiranjeevi communicates with all connected sensors through a centralized **HardwareManager**, which acts as the orchestration layer for device initialization, synchronization, calibration, and data acquisition.
@@ -576,6 +590,7 @@ The backend continuously evaluates camera alignment, signal quality, and sensor 
 
 ---
 
+<a id="physiological-screening-pipeline"></a>
 # 🧬 Physiological Screening Pipeline
 
 The screening engine converts raw multimodal sensor data into validated physiological insights through a deterministic processing pipeline.
@@ -662,6 +677,7 @@ Each physiological system contributes independently before an overall composite 
 
 ---
 
+<a id="clinical-validation-layer"></a>
 # 🔒 Clinical Validation Layer
 
 Before AI interpretation begins, Chiranjeevi validates every screening using multiple safety mechanisms.
@@ -742,6 +758,7 @@ This validation-first approach prevents language models from generating confiden
 
 ---
 
+<a id="adaptive-multi-llm-interpretation-2"></a>
 # 🤖 Adaptive Multi-LLM Interpretation
 
 After deterministic analysis is complete, Chiranjeevi generates a patient-friendly interpretation using an adaptive two-stage AI pipeline.
@@ -806,6 +823,7 @@ This adaptive execution strategy reduces latency and inference cost while preser
 
 ---
 
+<a id="langgraph-medical-ai-agent"></a>
 # 🧠 LangGraph Medical AI Agent
 
 Beyond automated screening, Chiranjeevi provides a conversational medical assistant powered by LangGraph.
@@ -914,6 +932,7 @@ Responses are streamed to the frontend, allowing users to receive answers progre
 
 ---
 
+<a id="report-generation"></a>
 # 📄 Report Generation
 
 Following successful interpretation, Chiranjeevi generates structured medical reports.
@@ -930,6 +949,7 @@ Reports are generated using **ReportLab** and persisted for later retrieval thro
 
 ---
 
+<a id="persistence-layer"></a>
 # 🗄️ Persistence Layer
 
 The backend stores screening information using SQLite with optional Redis caching.
@@ -946,6 +966,7 @@ This separation enables reliable long-term storage while maintaining fast respon
 
 ---
 
+<a id="performance-optimizations-1"></a>
 # ⚡ Performance Optimizations
 
 Several architectural decisions reduce latency without compromising safety.
@@ -959,6 +980,7 @@ Several architectural decisions reduce latency without compromising safety.
 
 These optimizations allow the platform to deliver responsive interactions while maintaining deterministic validation before AI-assisted interpretation.
 
+<a id="privacy-security"></a>
 # 🔐 Privacy & Security
 
 Privacy is a core design principle of Chiranjeevi. The platform is designed to minimize unnecessary data retention while ensuring that AI-assisted screening remains reliable and explainable.
@@ -1001,6 +1023,7 @@ These safeguards ensure language models interpret validated physiological inform
 
 ---
 
+<a id="external-integrations"></a>
 # 🔌 External Integrations
 
 Chiranjeevi integrates several external services to extend its capabilities while keeping the core screening pipeline independent.
@@ -1019,6 +1042,7 @@ Each integration is modular and can be replaced or extended without affecting th
 
 ---
 
+<a id="performance-optimizations-2"></a>
 # ⚙️ Performance Optimizations
 
 The backend includes several optimizations to reduce inference latency while maintaining screening quality.
@@ -1053,6 +1077,7 @@ Redis and semantic caching reduce repeated computation and accelerate patient-co
 
 ---
 
+<a id="scientific-foundation"></a>
 # 🧪 Scientific Foundation
 
 Chiranjeevi combines established physiological principles with modern AI systems.
@@ -1072,6 +1097,7 @@ This project should be viewed as an engineering platform inspired by these resea
 
 ---
 
+<a id="references"></a>
 # 📚 References
 
 Selected foundational research:
@@ -1085,6 +1111,7 @@ Additional medical evidence used during conversations is retrieved dynamically t
 
 ---
 
+<a id="contributing"></a>
 # 🤝 Contributing
 
 Contributions are welcome.
@@ -1133,6 +1160,7 @@ Current areas of development include:
 
 ---
 
+<a id="roadmap"></a>
 # 🛣️ Roadmap
 
 ## Phase 1 — Core Platform ✅
@@ -1176,6 +1204,7 @@ Current areas of development include:
 
 ---
 
+<a id="faq"></a>
 # ❓ Frequently Asked Questions
 
 ### Is Chiranjeevi a medical diagnosis system?
@@ -1218,6 +1247,7 @@ The hardware architecture is modular, allowing new sensing modalities and biomar
 
 ---
 
+<a id="license"></a>
 # 📝 License
 
 This project is licensed under the **MIT License**.
@@ -1226,6 +1256,7 @@ See the `LICENSE` file for the complete license text.
 
 ---
 
+<a id="vision"></a>
 # 🌟 Vision
 
 Healthcare should become increasingly proactive rather than reactive.
